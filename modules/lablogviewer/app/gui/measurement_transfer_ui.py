@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 from uuid import uuid4
 
-from PySide6.QtCore import QObject, QThread, Qt, Signal
+from PySide6.QtCore import QObject, QThread, Qt, QUrl, Signal
 from PySide6.QtGui import QDrag
 from PySide6.QtWidgets import QLabel, QTreeWidget
 from PySide6.QtCore import QMimeData
@@ -38,6 +38,9 @@ class MeasurementList(QTreeWidget):
         self.active_drag_token = token
         mime = QMimeData()
         mime.setData(MIME_TYPE, token.encode("ascii"))
+        path = getattr(item.data(0, Qt.UserRole), "absolute_path", None)
+        if path:   # 也帶檔案網址：可以拖到 QEL Lab 量測模塊（套用設置）或其他程式
+            mime.setUrls([QUrl.fromLocalFile(str(path))])
         drag = QDrag(self)
         drag.setMimeData(mime)
         drag.exec(Qt.CopyAction)

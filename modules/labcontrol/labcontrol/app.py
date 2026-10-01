@@ -43,7 +43,7 @@ def _setup_logging() -> None:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
     ap = argparse.ArgumentParser(prog="Lab Control", description=f"{APP_NAME} {__version__}")
-    ap.add_argument("scheme", nargs="?", help="要開啟的方案檔（.scheme.yaml）")
+    ap.add_argument("scheme", nargs="?", help="要開啟的方案檔（.scheme.yaml），或數據檔（.hdf5，套用它的量測設置）")
     ap.add_argument("--lab", help="儀器清單（預設 LAB/instruments.yaml）")
     ap.add_argument("--sim", action="store_true", help="模擬模式（覆寫 settings.yaml app.simulate）")
     ap.add_argument("--root", help="覆寫資料根目錄（預設 settings.yaml data.root）")
@@ -98,10 +98,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     else:
         from .apps.qt.workbench import LabControlWindow
 
-        scheme = Scheme.load(a.scheme) if a.scheme else None
+        from .integrations import qel
+
+        scheme = None
+        if a.scheme and qel.is_data_file(a.scheme):     # 數據檔：讀回當時的量測設置（QEL Lab）
+            try:
+                scheme = Scheme.from_dict(qel.scheme_from_file(a.scheme))
+            except Exception as e:  # noqa: BLE001
+                QtWidgets.QMessageBox.warning(None, APP_NAME, str(e))
+        elif a.scheme:
+            scheme = Scheme.load(a.scheme)
         w = LabControlWindow(st, scheme, root=a.root)
-        if a.scheme:
+        if a.scheme and not qel.is_data_file(a.scheme):
             w.doc.path = str(Path(a.scheme))
+        qel.attach_window(w, st, __version__)            # QEL Lab 大程式：拖數據檔套用設置、登錄數據、共用標籤
         w.show()
         if a.node or setting("remote.node_enabled", False):
             w.act_node.setChecked(True)

@@ -158,9 +158,14 @@ class Experiment:
             name = unique_filename(output.folder, name, output.collision)
             path = writer.export(dataset, output.folder / name)
             self.station.bus.log(f"✅ 已存檔：{path}")
-            self.station.bus.publish("data.exported", path=str(path), writer=cls.registered_name)
+            self.station.bus.publish("data.exported", path=str(path), writer=cls.registered_name,
+                                     **self._export_info(e))
             paths.append(path)
         return paths
+
+    def _export_info(self, exporter: Dict[str, Any]) -> Dict[str, Any]:
+        """data.exported 事件附帶的資訊：方案（寫進數據檔，之後可以拖回來套用）與標籤（QEL Lab 共用標籤）。"""
+        return {"name": self.name, "scheme": self.config.get("scheme"), "tags": list(exporter.get("tags") or [])}
 
     def export_segment(self, seg: Dataset, output: OutputPlan, key: tuple) -> List[Path]:
         """匯出一個段落（外圈某個值）。已匯出過的段落覆寫同一個檔名。"""
@@ -178,7 +183,8 @@ class Experiment:
                 output.folder, base + writer.extension, output.collision)
             writer.export(seg, path)
             self.station.bus.log(f"✅ 已存檔（{label}）：{path.name}")
-            self.station.bus.publish("data.exported", path=str(path), writer=cls.registered_name, segment=key)
+            self.station.bus.publish("data.exported", path=str(path), writer=cls.registered_name, segment=key,
+                                     **self._export_info(e))
             paths.append(path)
         output.exported[key] = paths
         output.dirty.discard(key)

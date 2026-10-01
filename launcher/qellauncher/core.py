@@ -317,6 +317,9 @@ class Launcher:
         lc = self.store.path("labcomm")
         if lc is not None:
             paths.append(str(lc))                   # 模塊 zip 根目錄就是 labcomm/ 的上一層
+        else:                                       # 還沒安裝通信模塊：用大程式自己帶的這份
+            import labcomm
+            paths.append(str(Path(labcomm.__file__).resolve().parent.parent))
         if env.get("PYTHONPATH"):
             paths.append(env["PYTHONPATH"])
         env.update(QEL_HOME=str(self.store.home), QEL_PORTAL_URL=", ".join(self.client.urls),
@@ -326,6 +329,11 @@ class Launcher:
                 "env": env}
 
     def launch(self, mid: str, extra: Optional[List[str]] = None) -> subprocess.Popen:
+        if self.store.installed("labcomm") is None and self.user is not None:
+            try:
+                self.ensure_labcomm()               # 第一次：先裝通信模塊（裝不到就用大程式自己帶的）
+            except CommError:
+                pass
         with self._lock:
             if self.running(mid):
                 return self.procs[mid]

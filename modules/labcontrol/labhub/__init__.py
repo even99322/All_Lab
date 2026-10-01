@@ -8,5 +8,5 @@
 只用 Python 標準函式庫（3.8 以上），Docker 直接用官方 python 映像，不需要安裝套件。
 所有連線都是各電腦「主動連到 Hub」（HTTP），Hub 不需要能連回各電腦，VPN / 不同網段都能用。
 """
-__version__ = "0.0.12"
+__version__ = "0.0.13"
 DEFAULT_PORT = 8765

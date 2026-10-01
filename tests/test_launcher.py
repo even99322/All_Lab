@@ -152,8 +152,9 @@ def test_window_launch_request_from_other_module(portal, published, qel_home, tm
     assert not w.cards["labcontrol"].isEnabled()                      # 站長沒開放
     assert local.deliver("lablogviewer", "open_file", {"path": "/d/a.hdf5"}) == "launching"
     t0 = time.time()
-    while not out.exists() and time.time() - t0 < 60:
+    while not out.exists() and not w.errors and time.time() - t0 < 60:
         QTest.qWait(200)
+    assert not w.errors, w.errors
     assert json.loads(out.read_text().splitlines()[0])["payload"] == {"path": "/d/a.hdf5"}
     L.procs["lablogviewer"].terminate()
     w.close()

@@ -139,3 +139,9 @@ web:
   poll_interval_s: 1.5
 logview:
   command: []                  # 例：["C:/.../python.exe", "C:/.../logview.py", "{path}"]
+
+# ---- QEL Lab 大程式（通信模塊 labcomm；從 QEL Lab 大程式開啟時才有作用） ---------------------
+qel:
+  embed_scheme: true           # 存檔時把量測方案與標籤寫進數據檔（讀檔模塊拖回來就能套用設置）
+  register_datasets: true      # 存檔後登錄到大程式（網頁、讀檔模塊、論文對應都查得到）
+  open_in_viewer: running      # 存檔後交給讀檔模塊開啟：running（讀檔模塊開著才送）| always（沒開就請大程式開啟）| never

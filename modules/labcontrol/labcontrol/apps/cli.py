@@ -115,6 +115,9 @@ def cmd_node(args) -> int:
     done = threading.Event()
     node = NodeService(st, hub, name=args.name, on_restart=done.set)
     _console(st.bus, quiet_progress=False)
+    from .. import __version__
+    from ..integrations.qel import QelBridge
+    bridge = QelBridge(st, __version__).start(endpoint=False)   # QEL Lab：量測檔登錄到大程式
     node.start()
     print(f"🛰 節點 {node.name} 上線：{hub.url}（Ctrl+C 結束）", flush=True)
     try:
@@ -125,6 +128,7 @@ def cmd_node(args) -> int:
     from ..measure.runner import Runner
     Runner.stop_all()
     node.stop()
+    bridge.close()
     st.close()
     return 0
 

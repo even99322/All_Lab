@@ -1,7 +1,7 @@
 {
   "id": "labcontrol",
   "name": "量測模塊",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "kind": "desktop",
   "entry": "main.py",
   "python": "3.12",

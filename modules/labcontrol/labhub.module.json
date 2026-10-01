@@ -1,7 +1,7 @@
 {
   "id": "labhub",
   "name": "量測中繼站（Lab Control Hub）",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "kind": "service",
   "service": {
     "container": "labcontrol-hub",

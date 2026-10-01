@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "labcontrol"
-version = "0.0.12"
+version = "0.0.13"
 description = "Lab Control：CCU QEL 實驗室儀器控制與量測框架"
 requires-python = ">=3.10"
 dependencies = ["numpy", "h5py", "pyyaml"]

@@ -333,6 +333,10 @@ class BrowserWindow(QMainWindow):
         self._launch_interface(self.time_domain_interface, "interfaces.time_domain_unconfigured")
 
     def _launch_online_paper_library(self, _checked: bool = False) -> None:
+        from app.interfaces import qel
+
+        if qel.show_related_papers(self):       # QEL Lab：依選取數據的標籤列出論文
+            return
         if not open_online_paper_library():
             QMessageBox.warning(
                 self, self.localizer.text("menu.interfaces"),

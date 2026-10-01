@@ -1,0 +1,98 @@
+# QEL Lab 大程式：NAS 上的全部服務（Synology Container Manager / QNAP Container Station）
+#
+# 資料夾（tools/make_nas_bundle.py 會產生，整包放到 NAS，例如 /volume1/docker/qel/）：
+#   docker-compose.yml   這個檔
+#   portal/    大程式網站（qelportal/ 程式、data/ 資料）
+#   paperlib/  論文庫（app/ 程式、data/ 主資料庫、import/）—— 沿用原本論文庫的 data/
+#   labhub/    量測中繼站 Lab Control Hub（labhub/ 程式、data/ 量測檔）—— 沿用原本 Hub 的 data/
+#   agent/     更新代理（qelagent/ 程式）
+#   backups/   更新前的自動備份
+#
+# 程式都用唯讀掛載進容器：更新代理換掉程式資料夾後重建容器就生效，不需要重新 build 映像。
+# 只有論文庫需要 build（OCR 等系統套件）；論文庫 requirements.txt 改變時才要在 Container Manager 重新建置。
+#
+# 第一次：
+#   1. 改下面的 LABHUB_TOKEN（與各量測電腦相同）、QEL_AGENT_TOKEN（緊急用，隨便一長串）。
+#   2. 數據共用資料夾：QEL_DATA_ROOTS 與 portal 的 volumes（讓網頁、手機可以下載數據檔）。
+#   3. Container Manager →「專案」→「新增」→ 選這個資料夾 → 使用現有的 docker-compose.yml。
+#   4. 防火牆允許 TCP 8090（大程式）、8080（論文庫）、8765（Hub）、8767（更新代理，只在內網 / VPN）。
+services:
+  portal:
+    image: python:3.12-slim
+    container_name: qel-portal
+    restart: unless-stopped
+    working_dir: /app
+    command: ["python", "-m", "qelportal"]
+    ports:
+      - "8090:8090"                    # 大程式網站：http://NAS:8090/（電腦、手機、平板）
+    environment:
+      QEL_PORTAL_DATA: /data
+      QEL_SITE_NAME: "QEL Lab"
+      PAPERLIB_URL: http://paperlib:8080
+      PAPERLIB_PUBLIC_URL: ""          # 空白＝論文庫「網站網址」設定或同主機 :8080；外網用 Cloudflare 時填 https://papers.你的網域
+      LABHUB_URL: http://labcontrol-hub:8765
+      LABHUB_TOKEN: "Labqel330"        # 與 labhub 相同；使用者不需要知道
+      QEL_AGENT_URL: http://qel-agent:8767
+      QEL_DATA_ROOTS: "//100.114.33.20/ccuqel=/shares/ccuqel;//192.168.50.2/ccuqel=/shares/ccuqel"
+      QEL_COOKIE_DOMAIN: ""            # 外網用不同子網域時填 .你的網域（論文庫與大程式共用登入）
+      TZ: Asia/Taipei
+    volumes:
+      - ./portal/qelportal:/app/qelportal:ro
+      - ./portal/data:/data
+      # ↓ 數據共用資料夾（唯讀）：網頁與手機下載數據檔用。路徑改成 NAS 的實際位置，確認存在後拿掉 #
+      # - /volume1/ccuqel:/shares/ccuqel:ro
+    depends_on:
+      - paperlib
+
+  paperlib:
+    build: ./paperlib
+    image: paperlib:local
+    container_name: paperlib
+    restart: unless-stopped
+    ports:
+      - "8080:8080"                    # 論文庫：http://NAS:8080/
+    environment:
+      PAPERLIB_SITE_NAME: "LAB-QEL論文庫"
+      PAPERLIB_MAX_UPLOAD_MB: "300"
+      PAPERLIB_CROSSREF_MAILTO: ""
+      TZ: Asia/Taipei
+    volumes:
+      - ./paperlib/data:/data
+      - ./paperlib/app:/app/app:ro     # 更新代理換程式後重建容器即生效
+      - ./paperlib/import:/import:ro
+
+  labhub:
+    image: python:3.12-slim
+    container_name: labcontrol-hub
+    restart: unless-stopped
+    working_dir: /app
+    command: ["python", "-m", "labhub"]
+    ports:
+      - "8765:8765"                    # 量測中繼站：各量測電腦連這裡（不要開到外網）
+    environment:
+      LABHUB_DATA: /data
+      LABHUB_RELEASES: /releases
+      LABHUB_TOKEN: "Labqel330"
+      TZ: Asia/Taipei
+    volumes:
+      - ./labhub/labhub:/app/labhub:ro
+      - ./labhub/data:/data
+      # - /volume1/ccuqel/Releases:/releases:ro
+
+  agent:
+    image: python:3.12-slim
+    container_name: qel-agent
+    restart: unless-stopped
+    working_dir: /stack/agent
+    command: ["python", "-m", "qelagent"]
+    ports:
+      - "8767:8767"                    # 更新代理：只給監控程式用，不要開到外網
+    environment:
+      QEL_STACK_DIR: /stack
+      QEL_PORTAL_URL: http://qel-portal:8090
+      QEL_AGENT_TOKEN: "請改成一長串隨機字"   # 緊急 token：大程式網站壞掉時，監控程式用它登入代理把網站救回來
+      DOCKER_HOST: unix:///var/run/docker.sock
+      TZ: Asia/Taipei
+    volumes:
+      - ./:/stack                      # 整個資料夾（換程式、備份）
+      - /var/run/docker.sock:/var/run/docker.sock

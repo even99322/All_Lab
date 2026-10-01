@@ -8,7 +8,7 @@ r"""Lab Control（labcontrol 套件）— 實驗室儀器控制與量測框架�
 版本規則：X.Y.Z 為功能版本；字尾 a、b、c… 為同一版本的 bug 修正（0.0.1 → 0.0.1a → 0.0.1b）。
 """
 APP_NAME = "Lab Control"
-__version__ = "0.0.12"
+__version__ = "0.0.13"
 
 import logging as _logging
 

@@ -448,6 +448,7 @@ class NodeService:
             try:
                 info = self.hub.upload(self.name, rel, p)
                 done.append({"rel": info.get("rel", rel), "url": info.get("url"), "size": info.get("size")})
+                self.station.bus.publish("data.uploaded", path=str(p), node=self.name, rel=info.get("rel", rel))
             except HubError as e:
                 self.station.bus.log(f"⚠ 上傳 {p.name} 到 Hub 失敗：{e}（檔案仍在節點上）", "warning")
         if done:

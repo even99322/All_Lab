@@ -5,6 +5,19 @@
 
 ---
 
+## 0.0.13 — 2026-10-01
+
+接上 QEL Lab 大程式（通信模塊 labcomm）。從大程式開啟時才有作用；單獨執行（Lab APP）時行為與 0.0.12 相同。詳見 [docs/releases/v0.0.13.md](docs/releases/v0.0.13.md)。
+
+**新增**
+- 存檔時把量測方案與標籤寫進數據檔（`qel/scheme`、`qel/meta`），並登錄到大程式（網頁、讀檔模塊、論文對應都查得到）。
+- 讀檔模塊（LabLogViewer）的數據拖到主視窗 → 套用那次的量測設置；`python main.py 數據檔.hdf5` 也可以。
+- 存檔後交給開著的讀檔模塊開啟（`settings.yaml qel.open_in_viewer`）。
+- 量測節點上傳到 Hub 後更新登錄，網頁與其他電腦可以下載。
+- 檔案設置的 Tags 欄位提示 QEL Lab 共用標籤。
+
+---
+
 ## 0.0.12 — 2026-10-01
 
 量測方案範本（單張 / 2D / 2D 電流異步 / N 層）、多個 Data 方塊、即時監控精簡＋獨立視窗疊圖（雙 Y 軸、拖曲線、軸縮放、marker）。詳見 [docs/releases/v0.0.12.md](docs/releases/v0.0.12.md)。

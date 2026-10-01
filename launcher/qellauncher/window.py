@@ -318,6 +318,7 @@ class MainWindow(QtWidgets.QMainWindow):
         mv.addWidget(scroll, 1)
         self.stack.addWidget(self.main_page)
         self.cards: Dict[str, ModuleCard] = {}
+        self.errors: List[str] = []
         self.remote_action.connect(self._remote)
         self.events_changed.connect(lambda _t: self.reload())
         self._endpoint: Optional[local.LocalEndpoint] = None
@@ -453,8 +454,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.statusBar().showMessage(msg, 6000)
 
     def error(self, msg: str) -> None:
+        """背景工作的錯誤：狀態列＋不擋住畫面的提示視窗。"""
+        self.errors.append(msg)
         self.statusBar().showMessage(msg, 12000)
-        QtWidgets.QMessageBox.warning(self, "QEL Lab", msg)
+        box = QtWidgets.QMessageBox(QtWidgets.QMessageBox.Warning, "QEL Lab", msg, QtWidgets.QMessageBox.Ok, self)
+        box.setAttribute(Qt.WA_DeleteOnClose)
+        box.open()
 
     def logout(self) -> None:
         self.launcher.logout()

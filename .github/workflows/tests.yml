@@ -1,0 +1,42 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  platform:
+    name: 大程式（labcomm、portal、agent、monitor、launcher）
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Qt 需要的系統套件
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - name: 套件
+        run: pip install -r modules/paperlib/requirements.txt PySide6 h5py numpy pyyaml pytest
+      - name: 模塊版本一致
+        run: python tools/package.py --check
+      - name: 測試
+        run: python -m pytest -q tests comm/tests
+
+  labcontrol:
+    name: 量測模塊（Lab Control）
+    runs-on: ubuntu-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    defaults:
+      run:
+        working-directory: modules/labcontrol
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q

@@ -124,6 +124,9 @@ def main() -> int:
             startup_recovery=startup_recovery,
         )
         window.show()
+        from app.interfaces.qel import attach_browser
+
+        attach_browser(window)          # QEL Lab 大程式：收量測模塊的數據、論文、共用標籤
         if arg and Path(arg).is_dir():
             window.open_database(arg)
             if startup_recovery.safe_recovery:
