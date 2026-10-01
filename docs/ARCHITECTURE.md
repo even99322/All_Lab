@@ -37,7 +37,7 @@
 
 ```
 Lab Control 存檔 ──(data.exported 事件)──▶ integrations/qel.py
-   ├─ 寫進數據檔：qel/scheme（量測方案）、qel/meta（標籤、來源、數據編號）
+   ├─ 寫進數據檔：qel/scheme（量測方案）、qel/meta（標籤、來源）——之後不再改檔，內容指紋才會一致
    ├─ 登錄到大程式 POST /api/v1/datasets（名稱、路徑、內容指紋、標籤、方案）→ 事件 dataset.created
    └─ 讀檔模塊開著 → 本機傳遞 open_file → LabLogViewer 開一個 Viewer
 量測節點上傳到 Hub ──(data.uploaded)──▶ 更新登錄（hub_file）→ 網頁、手機、其他電腦都能下載

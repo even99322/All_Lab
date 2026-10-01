@@ -190,8 +190,7 @@ class QelBridge:
             ds = self.client.register_dataset(Path(path).name, path=str(Path(path).resolve()), tags=tags,
                                               scheme=scheme, source=source, fingerprint=fp,
                                               meta={"segment": p.get("segment"), "experiment": p.get("name")})
-            self.datasets[str(Path(path).resolve())] = ds["id"]
-            handoff.embed(path, None, {"dataset_id": ds["id"]})
+            self.datasets[str(Path(path).resolve())] = ds["id"]     # 不再寫回檔案：寫了內容指紋就變了
             self.station.bus.log(f"🗂 已登錄到 QEL Lab（數據 #{ds['id']}）")
         mode = setting("qel.open_in_viewer", "running")
         if mode != "never":

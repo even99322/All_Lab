@@ -92,7 +92,7 @@ local.deliver("labcontrol", actions.APPLY_SCHEME, {"path": "D:/data/x.hdf5"})   
 | 屬性 | 內容 |
 |---|---|
 | `qel/scheme` | 量測方案 JSON（與 Lab Control 的 `*.scheme.yaml` 相同結構） |
-| `qel/meta` | `{"tags": [...], "source": {"module","version","host","user","writer"}, "dataset_id": n, "labcomm": 版本}` |
+| `qel/meta` | `{"tags": [...], "source": {"module","version","host","user","writer"}, "labcomm": 版本}`（存檔時寫一次；登錄後不再改檔，內容指紋才會一致） |
 
 Labber 原本的 `/Tags`（Project、Tags、User）照舊；讀檔模塊兩邊都讀。
 

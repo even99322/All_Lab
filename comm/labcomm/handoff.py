@@ -3,7 +3,7 @@
 量測模塊存檔時把「量測方案」和「標籤、來源」寫進數據檔的根屬性：
 
     qel/scheme   量測方案（JSON，與 Lab Control 的 *.scheme.yaml 內容相同）
-    qel/meta     {"tags": [...], "source": {...}, "dataset_id": ..., "labcomm": 版本}
+    qel/meta     {"tags": [...], "source": {...}, "labcomm": 版本}
 
 讀檔模塊把數據檔拖到量測模塊時，量測模塊用 ``extract_scheme`` 讀回方案並套用。
 舊的數據檔沒有 ``qel/scheme`` 時，依序嘗試：

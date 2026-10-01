@@ -59,9 +59,11 @@ def test_export_embeds_and_registers(station, tmp_path):
     p = paths[0]
     assert handoff.extract_scheme(p) == SCHEME                      # 方案寫進數據檔
     meta = handoff.read_meta(p)
-    assert meta["source"]["module"] == "labcontrol" and meta["dataset_id"] == 42
+    assert meta["source"]["module"] == "labcontrol"
     c = client.calls[0]
-    assert c["name"] == p.name and c["scheme"] == SCHEME and c["fingerprint"].startswith("qfp1:")
+    assert c["name"] == p.name and c["scheme"] == SCHEME
+    assert c["fingerprint"] == handoff.fingerprint(p)               # 登錄後檔案沒有再被改動
+    assert b.datasets[str(p.resolve())] == 42
     assert c["source"]["version"] == "9.9.9" and c["meta"]["experiment"] == "test"
 
 
