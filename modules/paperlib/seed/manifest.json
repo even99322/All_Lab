@@ -1,0 +1,4536 @@
+{
+ "version": 1,
+ "categories": [
+  {
+   "key": "cm",
+   "name": "腔 magnon",
+   "group": "架設類型",
+   "description": "Cavity magnonics：共振腔、反共振、開放腔中的 magnon–光子耦合",
+   "color": "#2f6f9f",
+   "sort": 0
+  },
+  {
+   "key": "wg",
+   "name": "波導 magnon・多顆 YIG",
+   "group": "架設類型",
+   "description": "開放波導、行波媒介耦合、多顆 YIG 陣列、巨自旋系綜（GSE）",
+   "color": "#2e8b57",
+   "sort": 1
+  },
+  {
+   "key": "mirror",
+   "name": "1D 半開放波導・Mirror",
+   "group": "架設類型",
+   "description": "終端反射／鏡前發射體、反射零點、CPA、集體 Lamb shift",
+   "color": "#b5522b",
+   "sort": 2
+  },
+  {
+   "key": "bg",
+   "name": "光子能隙與晶格",
+   "group": "架設類型",
+   "description": "光子晶體、能隙、束縛態、電路晶格",
+   "color": "#7a4fb0",
+   "sort": 3
+  },
+  {
+   "key": "pim",
+   "name": "Pump-induced magnon・非線性",
+   "group": "架設類型",
+   "description": "雙音驅動、PIM、頻率梳、時變耦合",
+   "color": "#c0392b",
+   "sort": 4
+  },
+  {
+   "key": "sc",
+   "name": "超導人工原子・波導 QED",
+   "group": "架設類型",
+   "description": "transmon 與傳輸線、集體輻射、遠距交互作用",
+   "color": "#1f7a8c",
+   "sort": 5
+  },
+  {
+   "key": "nh",
+   "name": "非厄米物理與 EP",
+   "group": "理論與基礎",
+   "description": "PT／anti-PT、例外點、反射零點理論、非厄米拓撲",
+   "color": "#8e6c1f",
+   "sort": 6
+  },
+  {
+   "key": "yig",
+   "name": "YIG 與 magnon 基礎",
+   "group": "理論與基礎",
+   "description": "YIG 材料、Walker 模、自旋波、量子 magnonics 回顧",
+   "color": "#5d6d7e",
+   "sort": 7
+  },
+  {
+   "key": "oqs",
+   "name": "開放量子系統與動力學",
+   "group": "理論與基礎",
+   "description": "Lindblad、輸入輸出、弛豫與 Mpemba 效應",
+   "color": "#6c5ce7",
+   "sort": 8
+  },
+  {
+   "key": "method",
+   "name": "方法與工具",
+   "group": "理論與基礎",
+   "description": "擬合方法、散射矩陣、教學講義",
+   "color": "#7f8c8d",
+   "sort": 9
+  }
+ ],
+ "papers": [
+  {
+   "citekey": "Ali2010Decoherencefree",
+   "title": "Decoherence-free subspace and disentanglement dynamics for two qubits in a common non-Markovian squeezed reservoir",
+   "authors": [
+    "Md. Manirul Ali"
+   ],
+   "authors_complete": false,
+   "year": 2010,
+   "venue": "Phys. Rev. A 82, 022103",
+   "doi": "10.1103/PhysRevA.82.022103",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "oqs",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "0603be7558d745c62f840f7e1617151e73cc2f1a382c90e5db0018f9275bb914",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "PhysRevA.82.022103.pdf"
+     ],
+     "size": 468024,
+     "pages": 8
+    }
+   ]
+  },
+  {
+   "citekey": "Ares2023Entanglement",
+   "title": "Entanglement asymmetry as a probe of symmetry breaking",
+   "authors": [
+    "Filiberto Ares",
+    "Sara Murciano",
+    "Pasquale Calabrese"
+   ],
+   "authors_complete": true,
+   "year": 2023,
+   "venue": "Nat. Commun. 14, 2036",
+   "doi": "10.1038/s41467-023-37747-8",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "oqs"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "糾纏不對稱、量子 Mpemba",
+    "架設／平台": "理論；量子多體",
+    "備註": "檔名截斷"
+   },
+   "files": [
+    {
+     "sha256": "9d32ddb2a733d66d6a6053964917cdbeca1f08b8c00fe02dde4a8062ba9c3586",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Entanglement asymmetry as a probe.pdf"
+     ],
+     "size": 956766,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Ares2025Quantum",
+   "title": "The quantum Mpemba effects",
+   "authors": [
+    "Filiberto Ares",
+    "Pasquale Calabrese",
+    "Sara Murciano"
+   ],
+   "authors_complete": true,
+   "year": 2025,
+   "venue": "",
+   "doi": "",
+   "arxiv": "2502.08087",
+   "kind": "review",
+   "status": null,
+   "categories": [
+    "oqs"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "量子 Mpemba 效應回顧",
+    "架設／平台": "回顧；量子多體",
+    "備註": "預印本，正式版待查"
+   },
+   "files": [
+    {
+     "sha256": "cd3fe8b39ca90495d2805702cbe89e65d2a5d0a742d1a143ab7164280fdc4661",
+     "role": "main",
+     "label": "預印本",
+     "original_names": [
+      "The quantum Mpemba effects.pdf"
+     ],
+     "size": 2723538,
+     "pages": 14
+    }
+   ]
+  },
+  {
+   "citekey": "Ashida2020NonHermitian",
+   "title": "Non-Hermitian physics",
+   "authors": [
+    "Yuto Ashida"
+   ],
+   "authors_complete": false,
+   "year": 2020,
+   "venue": "Adv. Phys. 69, 249",
+   "doi": "10.1080/00018732.2021.1876991",
+   "arxiv": "2006.01837",
+   "kind": "review",
+   "status": "閱讀中",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [
+    "研究中"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "91e97fdffc656f1b4960ed953d4d1e377117cc2cec303f2710a0d4f3364858c4",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Non-Hermitian physics.pdf"
+     ],
+     "size": 4109542,
+     "pages": 188
+    },
+    {
+     "sha256": "54b65208a17f0f4842fbb482d879e9576a9ecb827457b6cb3f158a82354e318b",
+     "role": "version",
+     "label": "arXiv 版",
+     "original_names": [
+      "Non-Hermitian Physics.pdf"
+     ],
+     "size": 7175255,
+     "pages": 191
+    }
+   ]
+  },
+  {
+   "citekey": "Astafiev2010Resonance",
+   "title": "Resonance Fluorescence of a Single Artificial Atom",
+   "authors": [
+    "O. Astafiev"
+   ],
+   "authors_complete": false,
+   "year": 2010,
+   "venue": "Science 327, 840",
+   "doi": "10.1126/science.1181918",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [
+    "推甄 Ref"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "b11f66109ee0b35c02118887533a82895dbfab52917c93fa5bc43a33c850ebef",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Resonance Fluorescence of a Single Artificial Atom.pdf"
+     ],
+     "size": 918190,
+     "pages": 4
+    },
+    {
+     "sha256": "bde653a02aba27adfaacbf2a2935446fa13efb9c959daa8856aab09bc6deee90",
+     "role": "sm",
+     "label": "",
+     "original_names": [
+      "SM, Resonance Fluorescence of a Single Artificial Atom.pdf",
+      "astafiev-som (1).pdf"
+     ],
+     "size": 107337,
+     "pages": 4
+    }
+   ]
+  },
+  {
+   "citekey": "Bao2024Level",
+   "title": "Level splitting induced by collective interaction in a waveguide QED system",
+   "authors": [
+    "Daqiang Bao"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "Phys. Rev. Research 6, 043121",
+   "doi": "10.1103/PhysRevResearch.6.043121",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [
+    "推甄 Ref"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "15cbf343182fbee8193788a630d486c7fac25e4952c054ee04d8554df0c7c724",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Level splitting induced by collective interaction in a waveguide QED system.pdf"
+     ],
+     "size": 851936,
+     "pages": 8
+    }
+   ]
+  },
+  {
+   "citekey": "Barker2016Thermal",
+   "title": "Thermal Spin Dynamics of Yttrium Iron Garnet",
+   "authors": [
+    "Joseph Barker"
+   ],
+   "authors_complete": false,
+   "year": 2016,
+   "venue": "Phys. Rev. Lett. 117, 217201",
+   "doi": "10.1103/PhysRevLett.117.217201",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "yig"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "bd5b1408c0262758f0917ac7e0d854d81705703dc27208e7fdc046c53ab99b5f",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Thermal Spin Dynamics of Yttrium Iron Garnet.pdf"
+     ],
+     "size": 569494,
+     "pages": 5
+    }
+   ]
+  },
+  {
+   "citekey": "Barman2021Magnonics",
+   "title": "The 2021 Magnonics Roadmap",
+   "authors": [
+    "Anjan Barman"
+   ],
+   "authors_complete": false,
+   "year": 2021,
+   "venue": "J. Phys.: Condens. Matter 33, 413001",
+   "doi": "10.1088/1361-648X/abec1a",
+   "arxiv": "",
+   "kind": "review",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "yig",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "466e40e48e9b09fbc4e6acbe0dee0540a3999617a83af2e95168b58144e9fd21",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "The 2021 Magnonics Roadmap.pdf"
+     ],
+     "size": 20184365,
+     "pages": 73
+    }
+   ]
+  },
+  {
+   "citekey": "Beder2024Quantum",
+   "title": "Quantum theory of loss-induced transparency in coupled waveguides",
+   "authors": [
+    "I. Beder"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "Phys. Rev. A 110, 033503",
+   "doi": "10.1103/PhysRevA.110.033503",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "d6bf84b554aa0f4beb7e8f6873eefea19267251ec981029f5fb1d4121dee4110",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Quantum theory of loss-induced transparency in coupled waveguides.pdf"
+     ],
+     "size": 612769,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Bender2007Making",
+   "title": "Making sense of non-Hermitian Hamiltonians",
+   "authors": [
+    "Carl M. Bender"
+   ],
+   "authors_complete": false,
+   "year": 2007,
+   "venue": "Rep. Prog. Phys. 70, 947",
+   "doi": "10.1088/0034-4885/70/6/R03",
+   "arxiv": "",
+   "kind": "review",
+   "status": null,
+   "categories": [
+    "nh"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "1e28f7d38090cf4be8bcb46030f6d0fe759a73e4385b4b8fc272ebf424a22914",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Making sense of non-Hermitian Hamiltonians.pdf"
+     ],
+     "size": 2429044,
+     "pages": 73
+    }
+   ]
+  },
+  {
+   "citekey": "Bender2015PTsymmetric",
+   "title": "PT-symmetric quantum theory",
+   "authors": [
+    "Carl M. Bender"
+   ],
+   "authors_complete": false,
+   "year": 2015,
+   "venue": "J. Phys.: Conf. Ser. 631, 012002",
+   "doi": "10.1088/1742-6596/631/1/012002",
+   "arxiv": "",
+   "kind": "review",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "994b76f9cf043d4eceb2660cb14fa02ba0668f91e1cf091f9455ba4e611009ca",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "PT-symmetric quantum theory.pdf"
+     ],
+     "size": 1407109,
+     "pages": 13
+    }
+   ]
+  },
+  {
+   "citekey": "Calajo2016AtomField",
+   "title": "Atom-field dressed states in slow-light waveguide QED",
+   "authors": [
+    "G. Calajó",
+    "F. Ciccarello",
+    "D. Chang",
+    "P. Rabl"
+   ],
+   "authors_complete": true,
+   "year": 2016,
+   "venue": "Phys. Rev. A 93, 033833",
+   "doi": "10.1103/PhysRevA.93.033833",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg",
+    "wg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "原子-光子束縛態、帶邊 dressed states",
+    "架設／平台": "理論；波導 QED（有限頻寬）",
+    "對應面向": "photonic_lattice／n=1,N／small"
+   },
+   "files": [
+    {
+     "sha256": "45498b3372ec51305930cbe264b3a78c3e40d411b26f0ec1f71414385d9b26ba",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Atom-field dressed states in slow-light waveguide QED.pdf"
+     ],
+     "size": 1322685,
+     "pages": 16
+    }
+   ]
+  },
+  {
+   "citekey": "Carollo2021Exponentially",
+   "title": "Exponentially Accelerated Approach to Stationarity in Markovian Open Quantum Systems through the Mpemba Effect",
+   "authors": [
+    "Federico Carollo",
+    "Antonio Lasanta",
+    "Igor Lesanovsky"
+   ],
+   "authors_complete": true,
+   "year": 2021,
+   "venue": "Phys. Rev. Lett. 127, 060401",
+   "doi": "10.1103/PhysRevLett.127.060401",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "oqs"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "趨近穩態的加速（慢模態消除）",
+    "架設／平台": "理論；馬可夫開放量子系統",
+    "對應面向": "time_domain",
+    "備註": "檔名截斷；與 magnon 弛豫最相關的一篇"
+   },
+   "files": [
+    {
+     "sha256": "bf5fe4809c677dbd1f2efa8893d01832aa316f386cd5370f7b17d5594de2256c",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Exponentially Accelerated Approach.pdf"
+     ],
+     "size": 582392,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Chang2012Cavity",
+   "title": "Cavity QED with atomic mirrors",
+   "authors": [
+    "D. E. Chang",
+    "L. Jiang",
+    "A. V. Gorshkov",
+    "H. J. Kimble"
+   ],
+   "authors_complete": true,
+   "year": 2012,
+   "venue": "New J. Phys. 14, 063003",
+   "doi": "10.1088/1367-2630/14/6/063003",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "wg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "原子鏡形成的腔、N_gap = √(ω_A/Γ_1D) 準則",
+    "架設／平台": "理論；奈米光纖上的原子陣列（原子 Bragg 鏡）",
+    "對應面向": "waveguide／n=N／small",
+    "備註": "筆記（相關性.txt）：qubit 數量要超過 sqrt(Omega/Gamma)；可轉成 N-YIG 陣列的設計檢查 N/N_gap",
+    "實驗室筆記": "qubit 數量要超過 sqrt(Omega/Gamma)（原 N-YIG/相關性.txt）"
+   },
+   "files": [
+    {
+     "sha256": "cf9d04ca300df924cf4c879c92bb531f62a05d14cc65be3448460c1d96faa7fd",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Cavity QED with atomic mirrors.pdf"
+     ],
+     "size": 1063373,
+     "pages": 15
+    }
+   ]
+  },
+  {
+   "citekey": "Chatterjee2023Quantum",
+   "title": "Quantum Mpemba Effect in a Quantum Dot with Reservoirs",
+   "authors": [
+    "Amit Kumar Chatterjee",
+    "Satoshi Takada",
+    "Hisao Hayakawa"
+   ],
+   "authors_complete": true,
+   "year": 2023,
+   "venue": "Phys. Rev. Lett. 131, 080402",
+   "doi": "10.1103/PhysRevLett.131.080402",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "oqs"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "開放系統的量子 Mpemba",
+    "架設／平台": "理論；量子點 + 熱庫"
+   },
+   "files": [
+    {
+     "sha256": "4302fdb7e14713919cda262aa1388538ff40eb65210f5a8413dbd52a71507f6f",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Quantum Mpemba Effect in a Quantum Dot with Reservoirs.pdf"
+     ],
+     "size": 614982,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Chen2020Revealing",
+   "title": "Revealing the missing dimension at an exceptional point",
+   "authors": [
+    "Hua-Zhou Chen"
+   ],
+   "authors_complete": false,
+   "year": 2020,
+   "venue": "Nat. Phys.",
+   "doi": "10.1038/s41567-020-0807-y",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "019efa9b64e8f812aff886d634c280f4a27da80babb12191bc64d0b2ed9f6399",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Revealing the missing dimension at an exceptional point.pdf"
+     ],
+     "size": 2442397,
+     "pages": 10
+    }
+   ]
+  },
+  {
+   "citekey": "Chiao2023Energylevel",
+   "title": "Energy-level shift of quantum systems via the scalar electric Aharonov-Bohm effect",
+   "authors": [
+    "R. Y. Chiao"
+   ],
+   "authors_complete": false,
+   "year": 2023,
+   "venue": "Phys. Rev. A 107, 042209",
+   "doi": "10.1103/PhysRevA.107.042209",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "edf2d8ad4abd7be6b9750f721d668ee0d45e0b3f1efe4db4807570c80ba4dfac",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Energy-level shift of quantum systems via the scalar electric Aharonov-Bohm effect.pdf"
+     ],
+     "size": 609833,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Dong2025Exceptional",
+   "title": "Exceptional-point optics with loss engineering",
+   "authors": [
+    "Shaohua Dong"
+   ],
+   "authors_complete": false,
+   "year": 2025,
+   "venue": "Photonics Insights",
+   "doi": "10.3788/PI.2025.R02",
+   "arxiv": "",
+   "kind": "review",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [
+    "P1"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "5f4177c6a7450958961fdcafb3289a4a81fa4fe36bdbf7a651d31e6a8b16b4c8",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Exceptional-point optics with loss engineering.pdf"
+     ],
+     "size": 4329351,
+     "pages": 16
+    }
+   ]
+  },
+  {
+   "citekey": "Dong2025Waveguide",
+   "title": "Waveguide QED with dissipative light-matter couplings",
+   "authors": [
+    "Xing-Liang Dong"
+   ],
+   "authors_complete": false,
+   "year": 2025,
+   "venue": "",
+   "doi": "",
+   "arxiv": "2503.14874",
+   "kind": "preprint",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "sc",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "cb5148aaadf8445fdab407842841ca0e670357e1ff362b857b76ecad60388816",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Waveguide QED with dissipative light-matter couplings.pdf"
+     ],
+     "size": 792614,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Ebrahimi2026Coherent",
+   "title": "Coherent perfect absorption: Zero reflection without linewidth suppression",
+   "authors": [
+    "M. Ebrahimi"
+   ],
+   "authors_complete": false,
+   "year": 2026,
+   "venue": "Phys. Rev. Research 8, 013261",
+   "doi": "10.1103/zrmm-6ps2",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "b255885316c6f1a567b131b8034759cddaf4e7bc73ce56a15051102ae165a310",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Coherent perfect absorption Zero reflection without linewidth suppression.pdf"
+     ],
+     "size": 2398790,
+     "pages": 10
+    }
+   ]
+  },
+  {
+   "citekey": "ElGanainy2018NonHermitian",
+   "title": "Non-Hermitian physics and PT symmetry",
+   "authors": [
+    "Ramy El-Ganainy"
+   ],
+   "authors_complete": false,
+   "year": 2018,
+   "venue": "Nat. Phys. 14, 11",
+   "doi": "10.1038/NPHYS4323",
+   "arxiv": "",
+   "kind": "review",
+   "status": null,
+   "categories": [
+    "nh"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "bfa315f88db20c26cc9a869df9d6a526854aca59c3f56d7cb42282adbf76c3f3",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Non-Hermitian physics and PT symmetry.pdf"
+     ],
+     "size": 2263786,
+     "pages": 9
+    }
+   ]
+  },
+  {
+   "citekey": "Fano1961Effects",
+   "title": "Effects of Configuration Interaction on Intensities and Phase Shifts",
+   "authors": [
+    "U. Fano"
+   ],
+   "authors_complete": false,
+   "year": 1961,
+   "venue": "Phys. Rev. 124, 1866",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "898116b3dfb5595d671e71bd036438086ff6ac7937dc3e0645343983adb12b66",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Effects of Configuration Interaction on Intensities and Phase Shifts.pdf"
+     ],
+     "size": 1054639,
+     "pages": 13
+    }
+   ]
+  },
+  {
+   "citekey": "Farhi2024Efficient",
+   "title": "Efficient general waveform catching by a cavity at an absorbing exceptional point",
+   "authors": [
+    "Asaf Farhi"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "Phys. Rev. A 109, L041502",
+   "doi": "10.1103/PhysRevA.109.L041502",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "535f6355c5595d541e6d33dac8a9219e22abfbf59f9abb98e983ecdf927fff78",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Efficient general waveform catching by a cavity at an absorbing exceptional point.pdf"
+     ],
+     "size": 1085682,
+     "pages": 7
+    },
+    {
+     "sha256": "672f7b23a5e49e1badd8c7d565d43852f028effc965aa454e599ddcd7b9d6f1a",
+     "role": "sm",
+     "label": "",
+     "original_names": [
+      "Supplementary Efficient general waveform catching by a cavity at an absorbing exceptional po.pdf"
+     ],
+     "size": 439492,
+     "pages": 5
+    }
+   ]
+  },
+  {
+   "citekey": "Ferise2022Exceptional",
+   "title": "Exceptional Points of PT-Symmetric Reflectionless States in Complex Scattering Systems",
+   "authors": [
+    "Clément Ferise"
+   ],
+   "authors_complete": false,
+   "year": 2022,
+   "venue": "Phys. Rev. Lett. 128, 203904",
+   "doi": "10.1103/PhysRevLett.128.203904",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "978f58b4497f0f7375371be3105370337540d0c7a571ce51cee9fe709141b74f",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Exceptional Points of PT-Symmetric Reflectionless States in Complex Scattering Systems.pdf"
+     ],
+     "size": 703478,
+     "pages": 6
+    },
+    {
+     "sha256": "82ca04c243bbaa892cf3686b3cceed1dd6cb30d064fb91c235f8281c7846150d",
+     "role": "sm",
+     "label": "",
+     "original_names": [
+      "Supplementary Material for ’Exceptional points of PT-symmetric reflectionless states.pdf"
+     ],
+     "size": 3659812,
+     "pages": 4
+    }
+   ]
+  },
+  {
+   "citekey": "Fernandez2017Exceptional",
+   "title": "Exceptional points in two simple textbook examples",
+   "authors": [
+    "Francisco M. Fernández"
+   ],
+   "authors_complete": false,
+   "year": 2017,
+   "venue": "",
+   "doi": "",
+   "arxiv": "1710.00067",
+   "kind": "preprint",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "f48a71b9bea61e873698fecf0e0ae9640f7ae33b50ed8b927ec4abcba847c32d",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Exceptional points in two simple textbook.pdf"
+     ],
+     "size": 112980,
+     "pages": 10
+    }
+   ]
+  },
+  {
+   "citekey": "Gardiner1985Input",
+   "title": "Input and output in damped quantum systems: Quantum stochastic differential equations and the master equation",
+   "authors": [
+    "C. W. Gardiner"
+   ],
+   "authors_complete": false,
+   "year": 1985,
+   "venue": "Phys. Rev. A 31, 3761",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "method",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "7f3d189463e1b348925a39c62fcdb12d69e3364357f1fd2c7aeb010922f2fbab",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Input and output in damped quantum systems Quantum stochastic differential equations.pdf"
+     ],
+     "size": 748555,
+     "pages": 14
+    }
+   ]
+  },
+  {
+   "citekey": "Girich2023Enhancement",
+   "title": "Enhancement of the microwave photon-magnon coupling strength for a planar fabricated resonator",
+   "authors": [
+    "Aleksey Girich"
+   ],
+   "authors_complete": false,
+   "year": 2023,
+   "venue": "Sci. Rep. 13, 924",
+   "doi": "10.1038/s41598-022-27285-6",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "cm",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "27c2dd402e744c2e60331903b33feeb3f892527f57e291d259803590651b0caf",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "s41598-022-27285-6.pdf"
+     ],
+     "size": 8434983,
+     "pages": 8
+    }
+   ]
+  },
+  {
+   "citekey": "Glicenstein2022From",
+   "title": "From superradiance to subradiance: exploring the many-body Dicke ladder",
+   "authors": [
+    "Antoine Glicenstein"
+   ],
+   "authors_complete": false,
+   "year": 2022,
+   "venue": "Opt. Lett. 47, 1541",
+   "doi": "10.1364/OL.451903",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "57f086784a9475eafb1dcd681e3e4495e6bf3b19ca22f34b73f8f619aa4f3c30",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "From superradiance to subradiance exploring the many-body Dicke ladder.pdf"
+     ],
+     "size": 3652971,
+     "pages": 4
+    }
+   ]
+  },
+  {
+   "citekey": "Greenberg2021Waveguide",
+   "title": "Waveguide band-gap N-qubit array with a tunable transparency resonance",
+   "authors": [
+    "Ya. S. Greenberg",
+    "A. A. Shtygashev",
+    "A. G. Moiseev"
+   ],
+   "authors_complete": true,
+   "year": 2021,
+   "venue": "Phys. Rev. A 103, 023508",
+   "doi": "10.1103/PhysRevA.103.023508",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "wg",
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "轉移矩陣（Chebyshev）、能隙、可調透明共振",
+    "架設／平台": "理論；波導中的 N-qubit 鏈",
+    "對應面向": "waveguide／n=N／small／S11,S21",
+    "備註": "檔名前綴 Main,"
+   },
+   "files": [
+    {
+     "sha256": "2ea36cd15480e50eb2c7b863f2fbe742392bd2c270f10ce69405544e37636b7c",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Main, Waveguide band-gap N-qubit array with a tunable transparency resonance.pdf"
+     ],
+     "size": 1959326,
+     "pages": 10
+    }
+   ]
+  },
+  {
+   "citekey": "Guanzon2020Controllable",
+   "title": "Controllable quantum interference from two-photon scattershot sources",
+   "authors": [
+    "Joshua J. Guanzon"
+   ],
+   "authors_complete": false,
+   "year": 2020,
+   "venue": "Phys. Rev. A 102, 032606",
+   "doi": "10.1103/PhysRevA.102.032606",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "bc986953c2a37c452076ef5a4bed4975f0da98a4a42387e3535c06d37ee532e1",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Controllable quantum interference from two-photon scattershot sources.pdf"
+     ],
+     "size": 1367747,
+     "pages": 11
+    }
+   ]
+  },
+  {
+   "citekey": "Harder2018Level",
+   "title": "Level Attraction Due to Dissipative Magnon-Photon Coupling",
+   "authors": [
+    "M. Harder",
+    "Y. Yang",
+    "B. M. Yao",
+    "C. H. Yu",
+    "J. W. Rao",
+    "Y. S. Gui",
+    "R. L. Stamps",
+    "C.-M. Hu"
+   ],
+   "authors_complete": true,
+   "year": 2018,
+   "venue": "Phys. Rev. Lett. 121, 137203",
+   "doi": "10.1103/PhysRevLett.121.137203",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "cm"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "耗散耦合、level attraction（腔 Lenz 效應）",
+    "架設／平台": "實驗；開放腔 + YIG",
+    "對應面向": "cavity_antiresonance／n=1／small／vna／S21"
+   },
+   "files": [
+    {
+     "sha256": "d115a56bed394749de718d1c9f238df121d2558e2d0942c57b6eb98ffb1704d2",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Level Attraction Due to Dissipative Magnon-Photon Coupling.pdf"
+     ],
+     "size": 2050560,
+     "pages": 5
+    }
+   ]
+  },
+  {
+   "citekey": "Hatano2021What",
+   "title": "What is the resonant state in open quantum systems?",
+   "authors": [
+    "Naomichi Hatano"
+   ],
+   "authors_complete": false,
+   "year": 2021,
+   "venue": "J. Phys.: Conf. Ser. 2038, 012013",
+   "doi": "10.1088/1742-6596/2038/1/012013",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "1584ad4825d4b4555926ea860ee57d4174cb8239995d7fae5377549c61503942",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Hatano_2021_J._Phys.__Conf._Ser._2038_012013.pdf"
+     ],
+     "size": 1389274,
+     "pages": 17
+    }
+   ]
+  },
+  {
+   "citekey": "Heiss2000Repulsion",
+   "title": "Repulsion of resonance states and exceptional points",
+   "authors": [
+    "W. D. Heiss"
+   ],
+   "authors_complete": false,
+   "year": 2000,
+   "venue": "Phys. Rev. E",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "77e13d49d9b22832e86807a254baaca101d673917767e336e9b4b80bae997dbb",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Repulsion of resonance states and exceptional points.pdf"
+     ],
+     "size": 60014,
+     "pages": 4
+    }
+   ]
+  },
+  {
+   "citekey": "Heiss2010Time",
+   "title": "Time behaviour near to spectral singularities",
+   "authors": [
+    "W. D. Heiss"
+   ],
+   "authors_complete": false,
+   "year": 2010,
+   "venue": "",
+   "doi": "",
+   "arxiv": "1009.5780",
+   "kind": "preprint",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [
+    "Others"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "3273424177d3cb6974193ecfaeb9da0dad52692424dd1a62d4b37cd38c498e47",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Time Behaviour near to spectral singularities.pdf"
+     ],
+     "size": 240654,
+     "pages": 5
+    }
+   ]
+  },
+  {
+   "citekey": "Heiss2012Physics",
+   "title": "The physics of exceptional points",
+   "authors": [
+    "W. D. Heiss"
+   ],
+   "authors_complete": false,
+   "year": 2012,
+   "venue": "J. Phys. A 45, 444016",
+   "doi": "10.1088/1751-8113/45/44/444016",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "f803208ea6115f73ba92773b3383992f4bb193cfec4688c2f0a043fed1f5d560",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "The physics of exceptional points.pdf"
+     ],
+     "size": 448026,
+     "pages": 12
+    }
+   ]
+  },
+  {
+   "citekey": "Hernandez2011Exceptional",
+   "title": "Exceptional points and non-Hermitian degeneracy of resonances in a two-channel model",
+   "authors": [
+    "E. Hernández"
+   ],
+   "authors_complete": false,
+   "year": 2011,
+   "venue": "Phys. Rev. E 84, 046209",
+   "doi": "10.1103/PhysRevE.84.046209",
+   "arxiv": "",
+   "kind": "article",
+   "status": "閱讀中",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [
+    "研究中"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "3a4f8600b50e2924b29183c9a28568f3459c07f25353655a8ee0cc5d2cdf95ef",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Exceptional points and non-Hermitian degeneracy of resonances in a two-channel model.pdf"
+     ],
+     "size": 591481,
+     "pages": 12
+    }
+   ]
+  },
+  {
+   "citekey": "Herring1951Theory",
+   "title": "On the Theory of Spin Waves in Ferromagnetic Media",
+   "authors": [
+    "C. Herring"
+   ],
+   "authors_complete": false,
+   "year": 1951,
+   "venue": "Phys. Rev. 81, 869",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "yig",
+   "tags": [
+    "推甄 Ref"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "df9ff2bd7e8c57617272778e8a2a6f7c7b29a236769d9e5f0911e0e01beb34e6",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "On the theory of spin wave in ferromagnetic media.pdf"
+     ],
+     "size": 1828950,
+     "pages": 12
+    }
+   ]
+  },
+  {
+   "citekey": "Hoi2015Probing",
+   "title": "Probing the quantum vacuum with an artificial atom in front of a mirror",
+   "authors": [
+    "I.-C. Hoi"
+   ],
+   "authors_complete": false,
+   "year": 2015,
+   "venue": "Nat. Phys. 11, 1045",
+   "doi": "10.1038/NPHYS3484",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "c3264d24033ddd09345bdb931d44a0643d1f2cf3458bf5f1d3c2c95a6b668e8c",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Probing the quantum vacuum with an artificial atom in front of a mirror.pdf"
+     ],
+     "size": 778266,
+     "pages": 5
+    }
+   ]
+  },
+  {
+   "citekey": "Hong2024Synchronization",
+   "title": "Synchronization and asynchronization in non-Hermitian systems",
+   "authors": [
+    "Qi Hong"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "Phys. Rev. A 110, 052201",
+   "doi": "10.1103/PhysRevA.110.052201",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [
+    "推甄 Ref"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "11d6ce0bf28af28abd45fd69e0ab300789d23333a5534e966be7091be0ccf073",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Synchronization and asynchronization in non-Hermitian systems.pdf"
+     ],
+     "size": 1156952,
+     "pages": 10
+    }
+   ]
+  },
+  {
+   "citekey": "Jeng2006Mpemba",
+   "title": "The Mpemba effect: When can hot water freeze faster than cold?",
+   "authors": [
+    "Monwhea Jeng"
+   ],
+   "authors_complete": true,
+   "year": 2006,
+   "venue": "Am. J. Phys. 74, 514",
+   "doi": "10.1119/1.2186331",
+   "arxiv": "",
+   "kind": "review",
+   "status": null,
+   "categories": [
+    "oqs"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "古典 Mpemba 效應回顧",
+    "架設／平台": "回顧；水（古典）"
+   },
+   "files": [
+    {
+     "sha256": "45bd6a97e227674e48f7e7b022f15b28ffda0dad61a57cf40273c9621ac5f4e1",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "The Mpemba effect When can hot water freeze faster than cold.pdf"
+     ],
+     "size": 725870,
+     "pages": 10
+    }
+   ]
+  },
+  {
+   "citekey": "John1984Electromagnetic",
+   "title": "Electromagnetic Absorption in a Disordered Medium near a Photon Mobility Edge",
+   "authors": [
+    "Sajeev John"
+   ],
+   "authors_complete": true,
+   "year": 1984,
+   "venue": "Phys. Rev. Lett. 53, 2169",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "光子遷移率邊、吸收係數",
+    "架設／平台": "理論；無序介質",
+    "對應面向": "photonic_lattice"
+   },
+   "files": [
+    {
+     "sha256": "6c59204df121f565ea545b5e6055e40ddd5b25d32c4628c67d1d2e0f17bf448a",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Electromagnetic Absorption in a Disordered Medium near a Photon Mobility Edge.pdf"
+     ],
+     "size": 145860,
+     "pages": 4
+    }
+   ]
+  },
+  {
+   "citekey": "John1987Strong",
+   "title": "Strong Localization of Photons in Certain Disordered Dielectric Superlattices",
+   "authors": [
+    "Sajeev John"
+   ],
+   "authors_complete": true,
+   "year": 1987,
+   "venue": "Phys. Rev. Lett. 58, 2486",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "光子 Anderson 局域化、遷移率邊",
+    "架設／平台": "理論；無序介電超晶格",
+    "對應面向": "photonic_lattice"
+   },
+   "files": [
+    {
+     "sha256": "77fd0fec9efac3fa446ad7d3e521ad55a42b7363a26375aef3fae84273905e0d",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Strong localization of photons in certain disordered dielectric superlattices.pdf"
+     ],
+     "size": 235151,
+     "pages": 4
+    }
+   ]
+  },
+  {
+   "citekey": "John1990Quantum",
+   "title": "Quantum Electrodynamics near a Photonic Band Gap: Photon Bound States and Dressed Atoms",
+   "authors": [
+    "Sajeev John",
+    "Jian Wang"
+   ],
+   "authors_complete": true,
+   "year": 1990,
+   "venue": "Phys. Rev. Lett. 64, 2418",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "光子束縛態、帶邊反常 Lamb shift 與分裂",
+    "架設／平台": "理論；光子能隙中的原子",
+    "對應面向": "photonic_lattice／n=1／small",
+    "備註": "新論文群內有可搜尋的文字版；掃描版保留為舊版本"
+   },
+   "files": [
+    {
+     "sha256": "b3a070c95b3f6cc95159954dfe0afe81efc7f466e593347f3a1a5b7ae4392184",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Quantum electrodynamics near a photonic band gap Photon bound states and dressed atoms.pdf"
+     ],
+     "size": 194284,
+     "pages": 4
+    },
+    {
+     "sha256": "e930599cff3c4641dd47162dba42a63e4e1234b3e278cf2671aab412a5f527f6",
+     "role": "version",
+     "label": "掃描版（無文字層）",
+     "original_names": [
+      "p2418_1.pdf"
+     ],
+     "size": 393663,
+     "pages": 4
+    }
+   ]
+  },
+  {
+   "citekey": "John1994Spontaneous",
+   "title": "Spontaneous emission near the edge of a photonic band gap",
+   "authors": [
+    "Sajeev John",
+    "Tran Quang"
+   ],
+   "authors_complete": true,
+   "year": 1994,
+   "venue": "Phys. Rev. A 50, 1764",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "帶邊自發輻射、分數穩態布居、束縛態",
+    "架設／平台": "理論；光子能隙帶邊",
+    "對應面向": "photonic_lattice／n=1,N／small",
+    "備註": "檔名為期刊編號"
+   },
+   "files": [
+    {
+     "sha256": "886d4cda063f2309c6d1c4c48f194f288260473ebe275273e8282943831a87a5",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "PhysRevA.50.1764.pdf"
+     ],
+     "size": 412915,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "John1996Localization",
+   "title": "Localization of Light: Theory of Photonic Band Gap Materials",
+   "authors": [
+    "Sajeev John"
+   ],
+   "authors_complete": true,
+   "year": 1996,
+   "venue": "書章（1996），出處待補",
+   "doi": "",
+   "arxiv": "",
+   "kind": "book",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "光子能隙理論總論",
+    "架設／平台": "回顧；光子能隙材料",
+    "對應面向": "photonic_lattice",
+    "備註": "103 頁講義／書章，出處待補"
+   },
+   "files": [
+    {
+     "sha256": "734afcf20a0990648690e4af8862f7d86c5f57dafcf9dc0e26b28a727d808560",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "john1996.pdf",
+      "localization of light.pdf"
+     ],
+     "size": 11006518,
+     "pages": 103
+    }
+   ]
+  },
+  {
+   "citekey": "John1997Collective",
+   "title": "Collective Switching and Inversion without Fluctuation of Two-Level Atoms in Confined Photonic Systems",
+   "authors": [
+    "Sajeev John",
+    "Tran Quang"
+   ],
+   "authors_complete": true,
+   "year": 1997,
+   "venue": "Phys. Rev. Lett. 78, 1888",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "集體切換、布居反轉",
+    "架設／平台": "理論；光子能隙中的二能階原子",
+    "對應面向": "photonic_lattice／n=N／small",
+    "備註": "檔名截斷"
+   },
+   "files": [
+    {
+     "sha256": "4566513aecce67897f76a8040f4a6411c2d96f35085ba6d645c4131ba5edb843",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Collective Switching and Inversion without Fluctuation of Two-Level Atoms.pdf"
+     ],
+     "size": 132458,
+     "pages": 4
+    }
+   ]
+  },
+  {
+   "citekey": "Joshi2024Observing",
+   "title": "Observing the Quantum Mpemba Effect in Quantum Simulations",
+   "authors": [
+    "Lata Kh. Joshi",
+    "Johannes Franke",
+    "Aniket Rath"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "Phys. Rev. Lett. 133, 010402",
+   "doi": "10.1103/PhysRevLett.133.010402",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "oqs"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "量子 Mpemba 效應觀測",
+    "架設／平台": "實驗；離子阱量子模擬器",
+    "對應面向": "time_domain"
+   },
+   "files": [
+    {
+     "sha256": "a5b3d1ecd51c03ff5f4a1c74f242c597cb7fa588a918f1799f22e4b0568bb4c6",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Observing the Quantum Mpemba Effect in Quantum Simulations.pdf"
+     ],
+     "size": 959345,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Ju2019NonHermitian",
+   "title": "Non-Hermitian Hamiltonians and no-go theorems in quantum information",
+   "authors": [
+    "Chia-Yi Ju"
+   ],
+   "authors_complete": false,
+   "year": 2019,
+   "venue": "Phys. Rev. A 100, 062118",
+   "doi": "10.1103/PhysRevA.100.062118",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "3ca0775af31910271902de70437541cce6aa4b2dad1e6d9cf51d219268469e1b",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Non-Hermitian Hamiltonians and no-go theorems in quantum information.pdf"
+     ],
+     "size": 416719,
+     "pages": 16
+    }
+   ]
+  },
+  {
+   "citekey": "Kollar2019Hyperbolic",
+   "title": "Hyperbolic lattices in circuit quantum electrodynamics",
+   "authors": [
+    "Alicia J. Kollár",
+    "Mattias Fitzpatrick",
+    "Andrew A. Houck"
+   ],
+   "authors_complete": true,
+   "year": 2019,
+   "venue": "Nature 571, 45",
+   "doi": "10.1038/s41586-019-1348-3",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "雙曲晶格態密度、平帶",
+    "架設／平台": "實驗；CPW 共振器晶格（電路 QED）",
+    "對應面向": "photonic_lattice／vna／S21",
+    "備註": "檔名為 DOI 片段"
+   },
+   "files": [
+    {
+     "sha256": "0445c5b85c00ccb519a08c2ec193d1810d228b3365bff22ec17e7f607aac09ac",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "s41586-019-1348-3.pdf"
+     ],
+     "size": 9376331,
+     "pages": 12
+    }
+   ]
+  },
+  {
+   "citekey": "Kumar2020Exponentially",
+   "title": "Exponentially faster cooling in a colloidal system",
+   "authors": [
+    "Avinash Kumar",
+    "John Bechhoefer"
+   ],
+   "authors_complete": true,
+   "year": 2020,
+   "venue": "Nature 584",
+   "doi": "10.1038/s41586-020-2560-x",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "oqs"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "強 Mpemba 效應",
+    "架設／平台": "實驗；膠體粒子",
+    "對應面向": "time_domain",
+    "備註": "檔名截斷"
+   },
+   "files": [
+    {
+     "sha256": "a93dc8912bdbe956dd129ae9e2dc2cdc36424e6e9c831c9b976e7c5eea5b3cfe",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Exponentially faster cooling in a colloidal.pdf"
+     ],
+     "size": 3336810,
+     "pages": 20
+    }
+   ]
+  },
+  {
+   "citekey": "LachanceQuirion2019Hybrid",
+   "title": "Hybrid quantum systems based on magnonics",
+   "authors": [
+    "Dany Lachance-Quirion"
+   ],
+   "authors_complete": false,
+   "year": 2019,
+   "venue": "Appl. Phys. Express 12, 070101",
+   "doi": "10.7567/1882-0786/ab248d",
+   "arxiv": "",
+   "kind": "review",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "yig",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "3eff221caca21939722dd7c01ff8964804e5c4611623fc9071ba2f37cbecc4b6",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Hybrid quantum systems based on magnonics.pdf"
+     ],
+     "size": 2095038,
+     "pages": 18
+    }
+   ]
+  },
+  {
+   "citekey": "Lalumiere2013Inputoutput",
+   "title": "Input-output theory for waveguide QED with an ensemble of inhomogeneous atoms",
+   "authors": [
+    "Kevin Lalumière"
+   ],
+   "authors_complete": false,
+   "year": 2013,
+   "venue": "Phys. Rev. A 88, 043806",
+   "doi": "10.1103/PhysRevA.88.043806",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "bce36ce99d850fd2d2475c889e63504b48632cf159c6c26631a26d004e326573",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Input-output theory for waveguide QED with an ensemble of inhomogeneous atoms.pdf"
+     ],
+     "size": 1243619,
+     "pages": 15
+    }
+   ]
+  },
+  {
+   "citekey": "Lehmberg1970Radiation",
+   "title": "Radiation from an N-Atom System. I. General Formalism",
+   "authors": [
+    "R. H. Lehmberg"
+   ],
+   "authors_complete": false,
+   "year": 1970,
+   "venue": "Phys. Rev. A 2, 883",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "sc",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "687bf05f9d4c5f1e647ba97ed0b4a5ccfcf34db20ce6d1965e82c111863ae8ab",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Radiation from an N-Atom System. I. General Formalism.pdf"
+     ],
+     "size": 444878,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Li2022Coherent",
+   "title": "Coherent Coupling of Two Remote Magnonic Resonators Mediated by Superconducting Circuits",
+   "authors": [
+    "Yi Li",
+    "Volodymyr G. Yefremenko",
+    "Marharyta Lisovenko"
+   ],
+   "authors_complete": false,
+   "year": 2022,
+   "venue": "Phys. Rev. Lett. 128, 047701",
+   "doi": "10.1103/PhysRevLett.128.047701",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "cm"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "遠端 magnon-magnon 耦合（腔光子 vs 行波光子媒介）",
+    "架設／平台": "實驗；兩顆 YIG + 超導共振器／CPW（低溫）",
+    "對應面向": "cavity_resonance+waveguide／n=2／small／vna／S21,S12",
+    "備註": "檔名截斷"
+   },
+   "files": [
+    {
+     "sha256": "ad4cd6f28cbeb5ae671bdda409c3674f8138f51ae5f3d77bda81e30fa3e84b94",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Coherent Coupling of Two Remote Magnonic Resonators Mediated.pdf"
+     ],
+     "size": 1263395,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Li2023Approximations",
+   "title": "Approximations of the Green's Function in Multiple Scattering Theory for Crystalline Systems",
+   "authors": [
+    "Xiaoxu Li",
+    "Huajie Chen"
+   ],
+   "authors_complete": true,
+   "year": 2023,
+   "venue": "",
+   "doi": "",
+   "arxiv": "2310.05713",
+   "kind": "preprint",
+   "status": null,
+   "categories": [
+    "bg",
+    "method"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "散射路徑矩陣近似、Green 函數收斂",
+    "架設／平台": "理論/數值；通用（晶體多重散射）",
+    "備註": "與 magnon 陣列的關聯待確認（可能是多重散射／轉移矩陣方法參考）"
+   },
+   "files": [
+    {
+     "sha256": "094c0d5a19eb77cb7d71c81136b06d34ea289bcdb5a2f1dfe2ab7a4df272e4b1",
+     "role": "main",
+     "label": "預印本",
+     "original_names": [
+      "2310.05713v2.pdf"
+     ],
+     "size": 1170200,
+     "pages": 25
+    }
+   ]
+  },
+  {
+   "citekey": "Li2024Experimental",
+   "title": "Experimental Demonstration of Controllable PT and Anti-PT Coupling in a Non-Hermitian Metamaterial",
+   "authors": [
+    "Chang Li"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "Phys. Rev. Lett. 132, 156601",
+   "doi": "10.1103/PhysRevLett.132.156601",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "nh"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "c3b78ae88c64e9d571cb96f1382914564c39ed8f32e247ea74d67cfa8b1fb8ce",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Experimental Demonstration of Controllable PT and Anti-PT Coupling in a Non-Hermitian Metamaterial.pdf"
+     ],
+     "size": 3156398,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Lin2019Scalable",
+   "title": "Scalable collective Lamb shift of a 1D superconducting qubit array in front of a mirror",
+   "authors": [
+    "Kuan-Ting Lin"
+   ],
+   "authors_complete": false,
+   "year": 2019,
+   "venue": "Sci. Rep. 9, 19175",
+   "doi": "10.1038/s41598-019-55545-5",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "f0d2119af2469cdbfa45a6fb780369fa2a9b6debc1ddb33eaefe5e404382c92b",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Scalable collective Lamb shift of a 1D superconducting qubit array in front of a mirror.pdf"
+     ],
+     "size": 1681856,
+     "pages": 10
+    }
+   ]
+  },
+  {
+   "citekey": "Liu2017Quantum",
+   "title": "Quantum electrodynamics near a photonic bandgap",
+   "authors": [
+    "Yanbing Liu"
+   ],
+   "authors_complete": false,
+   "year": 2017,
+   "venue": "Nat. Phys. 13, 48",
+   "doi": "10.1038/NPHYS3834",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "1281ed12d2d38181805c97f09da45510c537cc9350bbf154712c3ed0ea0f44ee",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Quantum electrodynamics near a photonic bandgap.pdf"
+     ],
+     "size": 1240797,
+     "pages": 6
+    },
+    {
+     "sha256": "0acc6823e1c7a2f1b9217eacdfa54f461101a3298489433d1eff8ba402cb524a",
+     "role": "version",
+     "label": "另一次下載",
+     "original_names": [
+      "Quantum electrodynamics near a photonic bandgap.pdf"
+     ],
+     "size": 1207354,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Liu2025Thirdorder",
+   "title": "Third-order exceptional point in non-Hermitian spin-orbit-coupled cold atoms",
+   "authors": [
+    "Yu-Jun Liu"
+   ],
+   "authors_complete": false,
+   "year": 2025,
+   "venue": "Phys. Rev. A 112, 023305",
+   "doi": "10.1103/w93l-s2dd",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "5e0e253571d0a664901653831dcab393676c3a7f9df3b36d91dd97ef9f72dfb6",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Third order EP.pdf"
+     ],
+     "size": 1890787,
+     "pages": 9
+    }
+   ]
+  },
+  {
+   "citekey": "Lu2023Experimental",
+   "title": "An experimental demonstration of level attraction with coupled pendulums",
+   "authors": [
+    "Chenyang Lu"
+   ],
+   "authors_complete": false,
+   "year": 2023,
+   "venue": "Am. J. Phys. 91, 585",
+   "doi": "10.1119/5.0081906",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "cm",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "5812f58ddba7c6baea27ff465a3577ffcc9da0e63dbc0b9974bf019fd03bcb78",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "An experimental demonstration of level attraction with coupled.pdf"
+     ],
+     "size": 5842580,
+     "pages": 11
+    },
+    {
+     "sha256": "bcf3dfe5c1a974d8a131681b834df5bb9a54a821a37da978f840158f036e0bab",
+     "role": "version",
+     "label": "另一次下載",
+     "original_names": [
+      "An experimental demonstration of level attraction with.pdf"
+     ],
+     "size": 5841992,
+     "pages": 11
+    }
+   ]
+  },
+  {
+   "citekey": "MaierFlaig2017Temperature",
+   "title": "Temperature-dependent magnetic damping of yttrium iron garnet spheres",
+   "authors": [
+    "H. Maier-Flaig"
+   ],
+   "authors_complete": false,
+   "year": 2017,
+   "venue": "Phys. Rev. B 95, 214423",
+   "doi": "10.1103/PhysRevB.95.214423",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "yig"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "b24ca92ec1cfed8568bd89f17baa94da3ae7c1214befc487159c0758410c60fd",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Temperature-dependent magnetic damping of yttrium iron garnet spheres.pdf"
+     ],
+     "size": 1295569,
+     "pages": 8
+    }
+   ]
+  },
+  {
+   "citekey": "Manzano2020Short",
+   "title": "A short introduction to the Lindblad master equation",
+   "authors": [
+    "Daniel Manzano"
+   ],
+   "authors_complete": false,
+   "year": 2020,
+   "venue": "AIP Advances 10, 025106",
+   "doi": "10.1063/1.5115323",
+   "arxiv": "",
+   "kind": "review",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "oqs",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "4603776ef50b0d0aff51d507ba8eb12b37be1f42ba0c3bbe8ee3965de1247447",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "A short introduction to the Lindblad master equation.pdf"
+     ],
+     "size": 1866420,
+     "pages": 16
+    }
+   ]
+  },
+  {
+   "citekey": "Martinez2023Flatband",
+   "title": "Flat-band localization and interaction-induced delocalization of photons",
+   "authors": [
+    "Jeronimo G. C. Martinez",
+    "Christie S. Chiu",
+    "Basil M. Smitham",
+    "Andrew A. Houck"
+   ],
+   "authors_complete": true,
+   "year": 2023,
+   "venue": "Sci. Adv. 9, eadj7195",
+   "doi": "10.1126/sciadv.adj7195",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "平帶局域化、交互作用誘發去局域化（動力學）",
+    "架設／平台": "實驗；超導電路晶格",
+    "對應面向": "photonic_lattice／time_domain",
+    "備註": "檔名為期刊編號"
+   },
+   "files": [
+    {
+     "sha256": "4e467e2ce84ce01f9f528573648b7a1da9b1b3807fa6062b0cf1f0ee8ccf127b",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "sciadv.adj7195.pdf"
+     ],
+     "size": 1300995,
+     "pages": 9
+    }
+   ]
+  },
+  {
+   "citekey": "Moiseyev2011NonHermitian",
+   "title": "Non-Hermitian Quantum Mechanics",
+   "authors": [
+    "Nimrod Moiseyev"
+   ],
+   "authors_complete": false,
+   "year": 2011,
+   "venue": "Cambridge University Press",
+   "doi": "",
+   "arxiv": "",
+   "kind": "book",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "bd1e1c58a0c13fd99be0e5fb6db289202da9e2ca8ab8710e5d480d6ac0bdc7d8",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Moiseyev N. Non-Hermitian Quantum Mechanics (CUP, 2011)(ISBN 0521889723)(O)(410s)_PQm_.pdf"
+     ],
+     "size": 2401808,
+     "pages": 410
+    }
+   ]
+  },
+  {
+   "citekey": "Moreno2024Synchronized",
+   "title": "Synchronized states in a ring of dissipatively coupled harmonic oscillators",
+   "authors": [
+    "Juan N. Moreno"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "Phys. Rev. E 109, 014308",
+   "doi": "10.1103/PhysRevE.109.014308",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "cd99c4ba708aed28719328596ef32fed56d0b992a9e533412df8cf03b514452c",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Synchronized states in a ring of dissipatively coupled harmonic oscillators.pdf"
+     ],
+     "size": 2210499,
+     "pages": 13
+    }
+   ]
+  },
+  {
+   "citekey": "Mortimer2025Certifying",
+   "title": "Certifying steady-state properties of open quantum systems",
+   "authors": [
+    "Luke Mortimer"
+   ],
+   "authors_complete": false,
+   "year": 2025,
+   "venue": "Phys. Rev. Research 7, 033237",
+   "doi": "10.1103/hbrt-cn8q",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "oqs",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "bb0b5fd4162ea2e77150aefa910ff15c643423fd72ed2878baf80aaef9a10391",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Certifying steady-state properties of open quantum systems.pdf"
+     ],
+     "size": 376428,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Nasari2022Observation",
+   "title": "Observation of chiral state transfer without encircling an exceptional point",
+   "authors": [
+    "Hadiseh Nasari"
+   ],
+   "authors_complete": false,
+   "year": 2022,
+   "venue": "Nature 605, 256",
+   "doi": "10.1038/s41586-022-04542-2",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "b32e68837aa3945d359fb14af55275f2c58b799f223f9a5ab6411a5de0efab27",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "s41586-022-04542-2.pdf"
+     ],
+     "size": 5030206,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Nie2023NonHermitian",
+   "title": "Non-Hermitian Waveguide Cavity QED with Tunable Atomic Mirrors",
+   "authors": [
+    "Wei Nie"
+   ],
+   "authors_complete": false,
+   "year": 2023,
+   "venue": "Phys. Rev. Lett. 131, 103602",
+   "doi": "10.1103/PhysRevLett.131.103602",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "01dc16f2b5e2bafa68bf7ceabe17e7fc116745993bb462a4169ea62c172eeb32",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Non-Hermitian Waveguide Cavity QED with Tunable Atomic Mirrors.pdf"
+     ],
+     "size": 1037323,
+     "pages": 8
+    }
+   ]
+  },
+  {
+   "citekey": "Okuma2020Topological",
+   "title": "Topological Origin of Non-Hermitian Skin Effects",
+   "authors": [
+    "Nobuyuki Okuma"
+   ],
+   "authors_complete": false,
+   "year": 2020,
+   "venue": "Phys. Rev. Lett. 124, 086801",
+   "doi": "10.1103/PhysRevLett.124.086801",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "nh"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "dce3ea3307ffd1819db43b79f0903ff990c3a45216fd1cf1c0ef4e4c508ea934",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Topological Origin of Non-Hermitian Skin Effects.pdf"
+     ],
+     "size": 321106,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Peng2024Estimation",
+   "title": "Estimation theory of photon-magnon coupling strength in a driven-dissipative double-cavity-magnon system",
+   "authors": [
+    "Jia-Xin Peng"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "Phys. Rev. A 109, 022601",
+   "doi": "10.1103/PhysRevA.109.022601",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "cm",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "da31804e66b4da486b383b16db35f384b72bff93b26d75c013709f9d8e9980a8",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Estimation theory of photon-magnon coupling strength in a driven-dissipative.pdf"
+     ],
+     "size": 951904,
+     "pages": 14
+    }
+   ]
+  },
+  {
+   "citekey": "Probst2015Efficient",
+   "title": "Efficient and robust analysis of complex scattering data under noise in microwave resonators",
+   "authors": [
+    "S. Probst",
+    "F. B. Song",
+    "P. A. Bushev",
+    "A. V. Ustinov",
+    "M. Weides"
+   ],
+   "authors_complete": true,
+   "year": 2015,
+   "venue": "Rev. Sci. Instrum. 86, 024706",
+   "doi": "10.1063/1.4907935",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "method"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "複數圓擬合：Q_i、Q_c、阻抗不匹配、電纜延遲",
+    "架設／平台": "方法；微波共振器",
+    "對應面向": "vna／S21",
+    "備註": "新論文群內有正式版（RSI），預印本保留為舊版本"
+   },
+   "files": [
+    {
+     "sha256": "9efe88063e795ec2e303d4c52eabb6d752dfe93237d9f228bb6b9d04237f748f",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Efficient and robust analysis of complex scattering data.pdf"
+     ],
+     "size": 1303972,
+     "pages": 7
+    },
+    {
+     "sha256": "59f7c514052446c8da2612860808310456de589daeaa647710e4abad67496e1a",
+     "role": "version",
+     "label": "arXiv 預印本",
+     "original_names": [
+      "Efficient_and_robust_analysis_of_complex_scatterin.pdf"
+     ],
+     "size": 498160,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Qian2023NonHermitian",
+   "title": "Non-Hermitian control between absorption and transparency in perfect zero-reflection magnonics",
+   "authors": [
+    "Jie Qian",
+    "C. H. Meng",
+    "J. W. Rao",
+    "Z. J. Rao",
+    "Zhenghua An",
+    "Yongsheng Gui",
+    "C.-M. Hu"
+   ],
+   "authors_complete": true,
+   "year": 2023,
+   "venue": "Nat. Commun. 14, 3437",
+   "doi": "10.1038/s41467-023-39102-3",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror",
+    "wg"
+   ],
+   "suggested": null,
+   "tags": [
+    "推甄 Ref"
+   ],
+   "keyinfo": {
+    "重點": "完美零反射、吸收／透明切換",
+    "架設／平台": "實驗；兩顆 YIG + 傳輸線",
+    "對應面向": "waveguide／n=2／small／vna／S11,S21,S12,S22",
+    "備註": "檔案只有補充資料，正文缺；放在根目錄未分類"
+   },
+   "files": [
+    {
+     "sha256": "8bf2f04cc02d93bc31ed84396c1f896cf98dc167f9f07d73593bdb53a90a4451",
+     "role": "sm",
+     "label": "補充資料（正文缺）",
+     "original_names": [
+      "Non-Hermitian Control between Absorption and Transparency in Perfect.pdf"
+     ],
+     "size": 1747389,
+     "pages": 10
+    }
+   ]
+  },
+  {
+   "citekey": "Qian2024Probing",
+   "title": "Probing PT-Symmetry Breaking of Non-Hermitian Topological Photonic States via Strong Photon-Magnon Coupling",
+   "authors": [
+    "Jie Qian",
+    "Jie Li",
+    "Shi-Yao Zhu",
+    "J. Q. You",
+    "Yi-Pu Wang"
+   ],
+   "authors_complete": true,
+   "year": 2024,
+   "venue": "Phys. Rev. Lett. 132, 156901",
+   "doi": "10.1103/PhysRevLett.132.156901",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg",
+    "cm"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "邊緣態 PT 對稱破缺、以強耦合探測態密度",
+    "架設／平台": "實驗；YIG + PT 對稱二聚化光子晶格（SSH）",
+    "對應面向": "photonic_lattice／n=1／small／vna／S21,S11",
+    "備註": "檔名拼字 symetry"
+   },
+   "files": [
+    {
+     "sha256": "df7a1584e9fc7611717885b87ba549c847b2d3afde8b81a0e75de8168aaa1a32",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "PT symetry photon bandgap.pdf",
+      "Probing #L01d443⁢#L01d447-Symmetry Breaking of Non-Hermitian Topological Photonic States via Strong Photon-Magnon Coupling.pdf"
+     ],
+     "size": 4484177,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Qian2025Unidirectional",
+   "title": "Unidirectional perfect absorption induced by chiral coupling in spin-momentum locked waveguide magnonics",
+   "authors": [
+    "Jie Qian"
+   ],
+   "authors_complete": false,
+   "year": 2025,
+   "venue": "Nat. Commun. 16",
+   "doi": "10.1038/s41467-025-63305-5",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "wg",
+   "tags": [
+    "P1",
+    "Others"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "8e098718cc201d4a877485470bcc4b8266b41761f1d88d7e93157dc7960addc7",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Unidirectional perfect absorption iduced by chrial coupling in spin-momentum locked waveguide magnonics.pdf",
+      "Unidirectional perfect absorption induced by chiral coupling in spin-momentum locked waveguide magnonics.pdf"
+     ],
+     "size": 2326198,
+     "pages": 8
+    },
+    {
+     "sha256": "127e73682c56a107c39ffe04ad458f2fc7cb400ed20762e1abbf07803623652b",
+     "role": "sm",
+     "label": "",
+     "original_names": [
+      "Supplementary Information.pdf"
+     ],
+     "size": 2028034,
+     "pages": 8
+    },
+    {
+     "sha256": "9f33260d91d7c7eb3971580aaaf2e8259cffe84743917fc4dfba2491c042d9d0",
+     "role": "peer_review",
+     "label": "審稿意見",
+     "original_names": [
+      "Peer Review.pdf"
+     ],
+     "size": 3445772,
+     "pages": 24
+    }
+   ]
+  },
+  {
+   "citekey": "Rao2020Interactions",
+   "title": "Interactions between a magnon mode and a cavity photon mode mediated by traveling photons",
+   "authors": [
+    "J. W. Rao"
+   ],
+   "authors_complete": false,
+   "year": 2020,
+   "venue": "Phys. Rev. B 101, 064404",
+   "doi": "10.1103/PhysRevB.101.064404",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "wg",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "a8d1eec6131060e678f7556ede1c00183bfbbe5fc126ab07593d59d31106b44c",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Interactions between a magnon mode and a cavity photon mode mediated by traveling photons.pdf"
+     ],
+     "size": 878263,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Rao2021Design",
+   "title": "Design of Cavity Magnonic Devices Based on the Dynamics of Cavity Magnon Polaritons",
+   "authors": [
+    "Jinwei Rao"
+   ],
+   "authors_complete": true,
+   "year": 2021,
+   "venue": "PhD thesis, University of Manitoba",
+   "doi": "",
+   "arxiv": "",
+   "kind": "thesis",
+   "status": null,
+   "categories": [
+    "cm"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "CMP 輸入輸出理論（Eq. 2.34–2.35）、level repulsion／attraction、完美吸收、五重態",
+    "架設／平台": "回顧；腔 magnon：共振／反共振／回饋增益／多模十字腔／行波媒介",
+    "對應面向": "cavity_resonance+cavity_antiresonance+feedback_gain+multimode_cavity+waveguide／n=1／small／vna／S11,S21",
+    "備註": "不在 paper.zip 內，另外上傳；模型庫的基礎公式來源"
+   },
+   "files": [
+    {
+     "sha256": "53bd050fd5ee504be60311091002c9249127218b1ed34194f3e012e8a38e69fe",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Rao_Jinwei.pdf"
+     ],
+     "size": 37548923,
+     "pages": 162
+    }
+   ]
+  },
+  {
+   "citekey": "Rao2023Unveiling",
+   "title": "Unveiling a Pump-Induced Magnon Mode via Its Strong Interaction with Walker Modes",
+   "authors": [
+    "J. W. Rao"
+   ],
+   "authors_complete": false,
+   "year": 2023,
+   "venue": "Phys. Rev. Lett. 130, 046705",
+   "doi": "10.1103/PhysRevLett.130.046705",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "pim",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "09ec09c513995ff1edbf2074d8b844eca1ed61b19c9eea3d885d3b21a0ea510c",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Unveiling a Pump-Induced Magnon Mode via Its Strong Interaction with Walker Modes.pdf"
+     ],
+     "size": 1685810,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Rao2024Braiding",
+   "title": "Braiding reflectionless states in non-Hermitian magnonics",
+   "authors": [
+    "Zejin Rao",
+    "Changhao Meng",
+    "Youcai Han",
+    "Liping Zhu",
+    "Kun Ding",
+    "Zhenghua An"
+   ],
+   "authors_complete": true,
+   "year": 2024,
+   "venue": "Nat. Phys. 20, 1904",
+   "doi": "10.1038/s41567-024-02667-x",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [
+    "P1"
+   ],
+   "keyinfo": {
+    "重點": "反射零點（R-zero）纏繞、RL EP、PT 對稱 RL 模",
+    "架設／平台": "實驗；單埠 CPW + 兩顆 YIG（間距 d），手動相移器 + 反射負載，YIG2 下方小線圈",
+    "對應面向": "waveguide_terminated／n=2／small／vna／S11",
+    "備註": "SM 有背景校準做法（纜線直接接反射端／加傳輸線／加相移器）"
+   },
+   "files": [
+    {
+     "sha256": "88bbf8151d3bf49806c32b93a1fba36c8247d73c629ee3c35ba3755981a82dd8",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Braiding reflectionless states in non-Hermitian magnonics.pdf"
+     ],
+     "size": 7017204,
+     "pages": 9
+    },
+    {
+     "sha256": "d7f6bbc6492a9148c24719136836ecbb1d864623550c11fa00e63c00d32b3a03",
+     "role": "sm",
+     "label": "",
+     "original_names": [
+      "Supplementary Braiding reflectionless states in non-Hermitian magnonics.pdf"
+     ],
+     "size": 6072678,
+     "pages": 30
+    }
+   ]
+  },
+  {
+   "citekey": "Rao2025TimeVarying",
+   "title": "Time-Varying Strong Coupling and the Induced Time Diffraction of Magnon Modes",
+   "authors": [
+    "Jinwei Rao"
+   ],
+   "authors_complete": false,
+   "year": 2025,
+   "venue": "Phys. Rev.（期刊待補）",
+   "doi": "10.1103/jc1c-k3ll",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "pim",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "7520877079c573f0693ababc83e2bad123489d8f0363e39fdc18cfb211a5893e",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Time-Varying Strong Coupling and the Induced Time Diffraction of Magnon Modes.pdf"
+     ],
+     "size": 1494847,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Run2025Realizing",
+   "title": "Realizing on-demand all-to-all selective interactions between distant spin ensembles",
+   "authors": [
+    "C.-X. Run"
+   ],
+   "authors_complete": false,
+   "year": 2025,
+   "venue": "",
+   "doi": "",
+   "arxiv": "2512.07326",
+   "kind": "preprint",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "6f8559b9e1ffc6f3748e9effa8f733db9c4122d835d3a75f1e3068d6d92ada22",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Realizing on-demand all-to-all selective interactions between distant spin ensembles.pdf"
+     ],
+     "size": 2367525,
+     "pages": 19
+    }
+   ]
+  },
+  {
+   "citekey": "Rylands2024Microscopic",
+   "title": "Microscopic Origin of the Quantum Mpemba Effect in Integrable Systems",
+   "authors": [
+    "Colin Rylands",
+    "Katja Klobas",
+    "Filiberto Ares",
+    "Pasquale Calabrese",
+    "Sara Murciano",
+    "Bruno Bertini"
+   ],
+   "authors_complete": true,
+   "year": 2024,
+   "venue": "Phys. Rev. Lett. 133, 010401",
+   "doi": "10.1103/PhysRevLett.133.010401",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "oqs"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "量子 Mpemba 微觀機制",
+    "架設／平台": "理論；可積系統",
+    "備註": "檔名截斷"
+   },
+   "files": [
+    {
+     "sha256": "bb3f45de687525df2b1c421564edb760ec4cea43d583d914121928a4d8909070",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Microscopic Origin of the Quantum Mpemba Effect in Integrable.pdf"
+     ],
+     "size": 263286,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Sadovnikov2022Exceptional",
+   "title": "Exceptional-Point Phase Transition in Coupled Magnonic Waveguides",
+   "authors": [
+    "Alexander V. Sadovnikov"
+   ],
+   "authors_complete": false,
+   "year": 2022,
+   "venue": "Phys. Rev. Applied 18, 024073",
+   "doi": "10.1103/PhysRevApplied.18.024073",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "0a988de24377247f14cfe88585f2a187815d04e9163c1d8abcc419361a88fff3",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "PhysRevApplied.18.024073.pdf"
+     ],
+     "size": 3658151,
+     "pages": 8
+    }
+   ]
+  },
+  {
+   "citekey": "Serga2010YIG",
+   "title": "YIG magnonics",
+   "authors": [
+    "A. A. Serga"
+   ],
+   "authors_complete": false,
+   "year": 2010,
+   "venue": "J. Phys. D 43, 264002",
+   "doi": "10.1088/0022-3727/43/26/264002",
+   "arxiv": "",
+   "kind": "review",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "yig",
+   "tags": [
+    "推甄 Ref"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "badc4bc1d10a79bac6f32a3025d0fb363bf447fbcebabb0ab303631d36397252",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "YIG magnonics.pdf"
+     ],
+     "size": 1489436,
+     "pages": 17
+    }
+   ]
+  },
+  {
+   "citekey": "Shah2024Stabilizing",
+   "title": "Stabilizing Remote Entanglement via Waveguide Dissipation",
+   "authors": [
+    "Parth S. Shah"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "PRX Quantum 5, 030346",
+   "doi": "10.1103/PRXQuantum.5.030346",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "sc",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "c895e392fd1b1ae71fe8aae87590f5f83a4e63ad8b8bfdb5b71ef1ffc948dd81",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Stabilizing Remote Entanglement via Waveguide Dissipation.pdf"
+     ],
+     "size": 2711824,
+     "pages": 23
+    }
+   ]
+  },
+  {
+   "citekey": "Shapira2024Inverse",
+   "title": "Inverse Mpemba Effect Demonstrated on a Single Trapped Ion Qubit",
+   "authors": [
+    "Shahaf Aharony Shapira",
+    "Yotam Shapira",
+    "Jovan Markov",
+    "Gianluca Teza",
+    "Nitzan Akerman",
+    "Oren Raz",
+    "Roee Ozeri"
+   ],
+   "authors_complete": true,
+   "year": 2024,
+   "venue": "Phys. Rev. Lett. 133, 010403",
+   "doi": "10.1103/PhysRevLett.133.010403",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "oqs"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "逆 Mpemba 效應",
+    "架設／平台": "實驗；單一離子阱 qubit",
+    "對應面向": "time_domain"
+   },
+   "files": [
+    {
+     "sha256": "8b30fde14b02796436be5f4e7161edae6f65cf806b3ec42f43b404e379f5e57d",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Inverse Mpemba Effect Demonstrated on a Single Trapped Ion Qubit.pdf"
+     ],
+     "size": 923063,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Shi2016Bound",
+   "title": "Bound States in Boson Impurity Models",
+   "authors": [
+    "Tao Shi",
+    "Ying-Hai Wu",
+    "A. González-Tudela",
+    "J. I. Cirac"
+   ],
+   "authors_complete": true,
+   "year": 2016,
+   "venue": "Phys. Rev. X 6, 021027",
+   "doi": "10.1103/PhysRevX.6.021027",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "多粒子束縛態、局域長度",
+    "架設／平台": "理論；玻色雜質模型（緊束縛）",
+    "對應面向": "photonic_lattice／n=1／small",
+    "備註": "檔名為期刊編號"
+   },
+   "files": [
+    {
+     "sha256": "d4cc9ca5d13a31747d539bee2fbbcdccd68d5f01133bbb578f2f95b449282d8e",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "PhysRevX.6.021027.pdf"
+     ],
+     "size": 554580,
+     "pages": 13
+    }
+   ]
+  },
+  {
+   "citekey": "Shou2025Resonant",
+   "title": "Resonant and scattering exceptional points in non-Hermitian metasurfaces",
+   "authors": [
+    "Yifan Shou"
+   ],
+   "authors_complete": false,
+   "year": 2025,
+   "venue": "npj Nanophotonics",
+   "doi": "10.1038/s44310-025-00073-6",
+   "arxiv": "",
+   "kind": "review",
+   "status": "閱讀中",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [
+    "研究中"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "f6d429b4e4498aaef7798cee08f8dab066e285debf2b3c1c5743e919150e3e48",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Resonant and scattering exceptional points in non-Hermitian metasurfaces.pdf"
+     ],
+     "size": 1723382,
+     "pages": 13
+    }
+   ]
+  },
+  {
+   "citekey": "Shrivastava2024Emergence",
+   "title": "Emergence of coupling induced transparency by tuning purely dissipative couplings",
+   "authors": [
+    "Kuldeep Kumar Shrivastava"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "",
+   "doi": "",
+   "arxiv": "2409.12577",
+   "kind": "preprint",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "cm",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "13d6cd5c9b625438ba5a5eb012f5e6946aa35c2cf905cc9e8e3cdc85f5ae861d",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Emergence of coupling induced transparency by tuning purely dissipative couplings.pdf"
+     ],
+     "size": 4153728,
+     "pages": 14
+    }
+   ]
+  },
+  {
+   "citekey": "Solano2023Dissimilar",
+   "title": "Dissimilar collective decay and directional emission from two quantum emitters",
+   "authors": [
+    "P. Solano"
+   ],
+   "authors_complete": false,
+   "year": 2023,
+   "venue": "Phys. Rev. A 107, 023723",
+   "doi": "10.1103/PhysRevA.107.023723",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "sc",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "b6b2f8861d8c201aa1e254e187c7425574ec62561ec1c64b117dbb5b20d58623",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Dissimilar collective decay and directional emission from two quantum emitters.pdf"
+     ],
+     "size": 2169630,
+     "pages": 14
+    }
+   ]
+  },
+  {
+   "citekey": "Sun2021Remote",
+   "title": "Remote Generation of Magnon Schrödinger Cat State via Magnon-Photon Entanglement",
+   "authors": [
+    "Feng-Xiao Sun"
+   ],
+   "authors_complete": false,
+   "year": 2021,
+   "venue": "Phys. Rev. Lett. 127, 087203",
+   "doi": "10.1103/PhysRevLett.127.087203",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "yig",
+   "tags": [
+    "Others"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "774c7827daab7bf257318124fc6fd902f3d58b0dee9894bdeb6e71d20e40c4eb",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Remote Generation of Magnon Schrödinger Cat State via Magnon-Photon Entanglement.pdf"
+     ],
+     "size": 665929,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Sundaresan2019Interacting",
+   "title": "Interacting Qubit-Photon Bound States with Superconducting Circuits",
+   "authors": [
+    "Neereja M. Sundaresan",
+    "Rex Lundgren",
+    "Guanyu Zhu",
+    "Alexey V. Gorshkov",
+    "Andrew A. Houck"
+   ],
+   "authors_complete": true,
+   "year": 2019,
+   "venue": "Phys. Rev. X 9, 011021",
+   "doi": "10.1103/PhysRevX.9.011021",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "bg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "qubit-光子束縛態、束縛態間交互作用",
+    "架設／平台": "實驗；超導量子位元 + 光子晶體",
+    "對應面向": "photonic_lattice／n=2／small／vna／S21",
+    "備註": "檔名為期刊編號"
+   },
+   "files": [
+    {
+     "sha256": "00a89a816b5da3b30760051bd8d7bf3ff80d664e8c631ba543d1ea961d0a2003",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Interacting Qubit-Photon Bound States with Superconducting Circuits.pdf",
+      "PhysRevX.9.011021.pdf"
+     ],
+     "size": 3096871,
+     "pages": 23
+    }
+   ]
+  },
+  {
+   "citekey": "Sweeney2019Perfectly",
+   "title": "Perfectly Absorbing Exceptional Points and Chiral Absorbers",
+   "authors": [
+    "William R. Sweeney"
+   ],
+   "authors_complete": false,
+   "year": 2019,
+   "venue": "Phys. Rev. Lett. 122, 093901",
+   "doi": "10.1103/PhysRevLett.122.093901",
+   "arxiv": "",
+   "kind": "article",
+   "status": "閱讀中",
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [
+    "P1",
+    "研究中"
+   ],
+   "keyinfo": {
+    "備註": "P1 與研究中資料夾的「(Noted)」版本與原檔內容完全相同，註記可能沒有存進 PDF"
+   },
+   "files": [
+    {
+     "sha256": "e028205e906ab3143300ff312d4ed3204d6e547459e5525d10e91aa6aaf9e92f",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "(Noted) Perfectly Absorbing Exceptional Points and Chiral Absorbers.pdf",
+      "Perfectly Absorbing Exceptional Points and Chiral Absorbers.pdf"
+     ],
+     "size": 658745,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Sweeney2020Theory",
+   "title": "Theory of reflectionless scattering modes",
+   "authors": [
+    "William R. Sweeney"
+   ],
+   "authors_complete": false,
+   "year": 2020,
+   "venue": "Phys. Rev. A 102, 063511",
+   "doi": "10.1103/PhysRevA.102.063511",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "ce06b02f2a7577993301e4a0a95f7c9625345fa3a7568fb0fa33e3bb684704fc",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Theory of reflectionless scattering modes.pdf"
+     ],
+     "size": 2671220,
+     "pages": 20
+    }
+   ]
+  },
+  {
+   "citekey": "Tabuchi2016Quantum",
+   "title": "Quantum magnonics: The magnon meets the superconducting qubit",
+   "authors": [
+    "Y. Tabuchi"
+   ],
+   "authors_complete": false,
+   "year": 2016,
+   "venue": "C. R. Physique 17, 729",
+   "doi": "10.1016/j.crhy.2016.07.009",
+   "arxiv": "",
+   "kind": "review",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "yig",
+   "tags": [
+    "推甄 Ref"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "524ad49cfe38b799e4df041105e053339039c165bcd317539793eeabdc28fc24",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Quantum magnonics_The magnon meets the superconducting.pdf"
+     ],
+     "size": 2733901,
+     "pages": 11
+    }
+   ]
+  },
+  {
+   "citekey": "Tang2021Direct",
+   "title": "Direct Measurement of Topological Properties of an Exceptional Parabola",
+   "authors": [
+    "Weiyuan Tang"
+   ],
+   "authors_complete": false,
+   "year": 2021,
+   "venue": "Phys. Rev. Lett. 127, 034301",
+   "doi": "10.1103/PhysRevLett.127.034301",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "nh"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "deffca7fc16a3e3e6b9e3cae95a32538ae0115a547e576fba7418491dd06bc70",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Direct Measurement of Topological Properties of an Exceptional Parabola.pdf"
+     ],
+     "size": 979468,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Tanimura2025Slow",
+   "title": "Slow light waveguides based on bound states in the continuum",
+   "authors": [
+    "Yuta Tanimura"
+   ],
+   "authors_complete": false,
+   "year": 2025,
+   "venue": "Opt. Lett. 50, 2013",
+   "doi": "10.1364/OL.558273",
+   "arxiv": "",
+   "kind": "article",
+   "status": "閱讀中",
+   "categories": [],
+   "suggested": "bg",
+   "tags": [
+    "研究中"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "a7596c1aae7f202d56c94cfc53574cf6ce6fb74e6d7dfa7607e33d0f4b00fc4a",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Slow light waveguides based on bound states in the continuum.pdf"
+     ],
+     "size": 4327809,
+     "pages": 4
+    }
+   ]
+  },
+  {
+   "citekey": "Tufarelli2013Dynamics",
+   "title": "Dynamics of spontaneous emission in a single-end photonic waveguide",
+   "authors": [
+    "Tommaso Tufarelli"
+   ],
+   "authors_complete": false,
+   "year": 2013,
+   "venue": "Phys. Rev. A 87, 013820",
+   "doi": "10.1103/PhysRevA.87.013820",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "a4080c1a1a8a7442d508670bcf810b6c420722e78caf90758f980c8492a54425",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Dynamics of spontaneous emission in a single-end photonic waveguide.pdf"
+     ],
+     "size": 489253,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Walker1958Resonant",
+   "title": "Resonant Modes of Ferromagnetic Spheroids",
+   "authors": [
+    "L. R. Walker"
+   ],
+   "authors_complete": false,
+   "year": 1958,
+   "venue": "J. Appl. Phys. 29, 318",
+   "doi": "10.1063/1.1723117",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "yig",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "7d62e743bd44d7579db7d5bd678a6569d1ec1e218525de4c08b7c872d4d3d053",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Resonant Modes of Ferromagnetic Spheroids.pdf"
+     ],
+     "size": 902276,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Wang2019Nonreciprocity",
+   "title": "Nonreciprocity and Unidirectional Invisibility in Cavity Magnonics",
+   "authors": [
+    "Yi-Pu Wang",
+    "J. W. Rao",
+    "Y. Yang",
+    "Peng-Chao Xu",
+    "Y. S. Gui",
+    "B. M. Yao",
+    "J. Q. You",
+    "C.-M. Hu"
+   ],
+   "authors_complete": true,
+   "year": 2019,
+   "venue": "Phys. Rev. Lett. 123, 127202",
+   "doi": "10.1103/PhysRevLett.123.127202",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "cm"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "非互易、隔離比、零阻尼條件下的單向隱形",
+    "架設／平台": "實驗；十字線開放腔 + YIG（懸臂 3D 定位）",
+    "對應面向": "cavity_antiresonance／n=1／small／vna／S21,S12"
+   },
+   "files": [
+    {
+     "sha256": "fa3fffe56f976b96b54de3cce6562589470db6e4cafb4eff3ff4d2092725c773",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Nonreciprocity and Unidirectional Invisibility in Cavity Magnonics.pdf"
+     ],
+     "size": 1998788,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Wang2021Coherent",
+   "title": "Coherent perfect absorption at an exceptional point",
+   "authors": [
+    "Changqing Wang",
+    "William R. Sweeney",
+    "A. Douglas Stone",
+    "Lan Yang"
+   ],
+   "authors_complete": true,
+   "year": 2021,
+   "venue": "Science 373, 1261",
+   "doi": "10.1126/science.abj1028",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [
+    "P1"
+   ],
+   "keyinfo": {
+    "重點": "EP 上的相干完美吸收（CPA）、四次方譜形",
+    "架設／平台": "實驗；兩個耦合光學微環（光學）"
+   },
+   "files": [
+    {
+     "sha256": "f04a66e0136c23ee5b3dd957e1adf1a9e95e9b926ebee56e12dfd02fd4056d7e",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Coherent perfect absorption at an exceptional point.pdf"
+     ],
+     "size": 1019473,
+     "pages": 5
+    },
+    {
+     "sha256": "c85bf0112ec5b1100aa9a8522a97c967f4fba6b9ac8033ade266b98e262bf685",
+     "role": "sm",
+     "label": "",
+     "original_names": [
+      "SM, Coherent perfect absorption at an exceptional point.pdf"
+     ],
+     "size": 1301563,
+     "pages": 29
+    }
+   ]
+  },
+  {
+   "citekey": "Wang2022Giant",
+   "title": "Giant spin ensembles in waveguide magnonics",
+   "authors": [
+    "Zi-Qi Wang",
+    "Yi-Pu Wang",
+    "Jiguang Yao",
+    "Rui-Chang Shen",
+    "Wei-Jiang Wu",
+    "Jie Qian",
+    "Jie Li",
+    "Shi-Yao Zhu",
+    "J. Q. You"
+   ],
+   "authors_complete": true,
+   "year": 2022,
+   "venue": "Nat. Commun. 13, 7580",
+   "doi": "10.1038/s41467-022-35174-9",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "wg"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "頻率相依耦合（可調到去耦）、巢狀／交錯 GSE 的集體行為",
+    "架設／平台": "實驗；YIG + 蛇形微帶波導（兩個耦合點，室溫）",
+    "對應面向": "waveguide／n=1,2／giant／vna／S21"
+   },
+   "files": [
+    {
+     "sha256": "52b66b553b83f4865915ce84824ac58327eca734e8a3101cb638dd1a9ca08978",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Giant spin ensembles in waveguide magnonics.pdf",
+      "Giant spin ensembles in waveguide.pdf"
+     ],
+     "size": 1356246,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Wang2024Enhancement",
+   "title": "Enhancement of magnonic frequency combs by exceptional points",
+   "authors": [
+    "Congyi Wang",
+    "Jinwei Rao",
+    "Zhijian Chen",
+    "Kaixin Zhao",
+    "Liaoxin Sun",
+    "Bimu Yao",
+    "Tao Yu",
+    "Yi-Pu Wang",
+    "Wei Lu"
+   ],
+   "authors_complete": true,
+   "year": 2024,
+   "venue": "Nat. Phys. (2024)",
+   "doi": "10.1038/s41567-024-02478-0",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "pim"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "頻率梳（梳齒數、間距）、PIM–Kittel 模 EP、例外線 vs pump 功率",
+    "架設／平台": "實驗；十字 CPW + YIG，雙音驅動（pump + probe），相移器控制 pump 極化",
+    "對應面向": "waveguide／n=1／small／pump_probe+spectrum／S21",
+    "備註": "正文是接受稿（出版日期 xx xx xxxx），換成正式版；SM Eq. (S11) 為動力學起點"
+   },
+   "files": [
+    {
+     "sha256": "da8f384c404850d0c735c9150bed8a02cb6bdf5e95e795ed64eb67a38c57196f",
+     "role": "main",
+     "label": "接受稿",
+     "original_names": [
+      "Enhancement of magnonic frequency combs by exceptional points.pdf"
+     ],
+     "size": 1831924,
+     "pages": 7
+    },
+    {
+     "sha256": "a26c2e94ef512152ba5b50f8c7209d1ec6ce37781ca5bef5a172217b95a364a9",
+     "role": "sm",
+     "label": "",
+     "original_names": [
+      "SM, Enhancement of magnonic frequency combs by exceptional points.pdf"
+     ],
+     "size": 8074050,
+     "pages": 14
+    }
+   ]
+  },
+  {
+   "citekey": "Wang2026Unidirectional",
+   "title": "Unidirectional exceptional point of reflectionless states in a magnonic mirror array",
+   "authors": [
+    "Zi-Qi Wang",
+    "Yuan-Peng Peng",
+    "Yi-Pu Wang",
+    "J. Q. You"
+   ],
+   "authors_complete": true,
+   "year": 2026,
+   "venue": "Sci. Adv. 12, eaea6000",
+   "doi": "10.1126/sciadv.aea6000",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "wg",
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "單向反射零點、RL EP（四次方譜形）、暗態",
+    "架設／平台": "實驗；3 顆 YIG + 蛇形波導（1 顆巨原子三點耦合），anti-Bragg d=λ/4；局部線圈、旋轉台、懸臂",
+    "對應面向": "waveguide／n=3／giant／vna／S11,S22,S21,S12",
+    "備註": "同時屬於 GSE 與 mirror 主題；N×N 有效哈密頓量見正文 Eq. (2)、SM Eq. (S36)(S40)"
+   },
+   "files": [
+    {
+     "sha256": "7f8b1b151d348561b61667e5285e3e85732fefae78d57a5977eb1e73954a5c18",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Unidirectional exceptional point of reflectionless states in a magnonic mirror array.pdf"
+     ],
+     "size": 2426628,
+     "pages": 8
+    },
+    {
+     "sha256": "eea1b052a008c286f308c6441a5a06aecde57d1523f34404166a4490c43ed62e",
+     "role": "sm",
+     "label": "",
+     "original_names": [
+      "sm,Unidirectional exceptional point of reflectionless states in a magnonic mirror array.pdf"
+     ],
+     "size": 1938729,
+     "pages": 29
+    }
+   ]
+  },
+  {
+   "citekey": "Weber2014Mapping",
+   "title": "Mapping the optimal route between two quantum states",
+   "authors": [
+    "S. J. Weber"
+   ],
+   "authors_complete": false,
+   "year": 2014,
+   "venue": "Nature 511, 570",
+   "doi": "10.1038/nature13559",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "oqs",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "4293405c96182cdcd080158d9c863a8edd1209c16d5e3c8ecee3aed25662998b",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Mapping the optimal route between two quantum states.pdf"
+     ],
+     "size": 1124280,
+     "pages": 10
+    }
+   ]
+  },
+  {
+   "citekey": "Wen2019Large",
+   "title": "Large Collective Lamb Shift of Two Distant Superconducting Artificial Atoms",
+   "authors": [
+    "P. Y. Wen",
+    "K.-T. Lin",
+    "A. F. Kockum",
+    "B. Suri",
+    "H. Ian",
+    "J. C. Chen",
+    "S. Y. Mao",
+    "C. C. Chiu",
+    "P. Delsing",
+    "F. Nori",
+    "G.-D. Lin",
+    "I.-C. Hoi"
+   ],
+   "authors_complete": true,
+   "year": 2019,
+   "venue": "Phys. Rev. Lett. 123, 233602",
+   "doi": "10.1103/PhysRevLett.123.233602",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "sc",
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [
+    "推甄 Ref"
+   ],
+   "keyinfo": {
+    "重點": "集體 Lamb shift 隨間距、鏡面抑制衰減",
+    "架設／平台": "實驗；兩顆 transmon + 末端鏡面傳輸線（mK）",
+    "對應面向": "waveguide_terminated／n=2／small／vna+pump_probe／S11",
+    "備註": "與你們 YIG + mirror 架設同構（鏡前發射體）"
+   },
+   "files": [
+    {
+     "sha256": "0449e3b6f0972d91fbde14c0d61dfeb4df7c9e4d5f3f12351984eb1aca093b00",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Large Collective Lamb Shift of Two Distant Superconducting Artificial Atoms.pdf"
+     ],
+     "size": 1043197,
+     "pages": 7
+    },
+    {
+     "sha256": "bc6367857c80bf44609a6753c8054a4cc6f6aeb2fd6169bcdec025f808b5ccd8",
+     "role": "sm",
+     "label": "",
+     "original_names": [
+      "Supplementary.pdf",
+      "Supplementary_Large Collective Lamb Shift of Two Distant Superconducting Artificial Atoms.pdf"
+     ],
+     "size": 3079983,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Wikipedia2025Smatrix",
+   "title": "S-matrix（Wikipedia 條目）",
+   "authors": [
+    "Wikipedia"
+   ],
+   "authors_complete": false,
+   "year": null,
+   "venue": "Wikipedia",
+   "doi": "",
+   "arxiv": "",
+   "kind": "web",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "method",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "ebba16ac6d6b9825b9fc23243eac3df7003c2882f978ae13795d822f60f47f2b",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "S-matrix - Wikipedia.pdf"
+     ],
+     "size": 1597010,
+     "pages": 11
+    }
+   ]
+  },
+  {
+   "citekey": "Wu2024Microwave",
+   "title": "Microwave interference from a spin ensemble and its mirror image in waveguide magnonics",
+   "authors": [
+    "B.-Y. Wu"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "",
+   "doi": "",
+   "arxiv": "2409.17867",
+   "kind": "preprint",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "e418fcca17b99e76ce52015f866c4e4794618f73d998e02ee25f2d51377f90b0",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Microwave interference from a spin ensemble and its mirror image in waveguide magnonics.pdf"
+     ],
+     "size": 5848195,
+     "pages": 16
+    }
+   ]
+  },
+  {
+   "citekey": "Xin2021Rapid",
+   "title": "Rapid Quantum Squeezing by Jumping the Harmonic Oscillator Frequency",
+   "authors": [
+    "Mingjie Xin"
+   ],
+   "authors_complete": false,
+   "year": 2021,
+   "venue": "Phys. Rev. Lett. 127, 183602",
+   "doi": "10.1103/PhysRevLett.127.183602",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "oqs",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "02a44184f188f9474c68840268dbf367ca4bca5ec677c32de3fbb39773ded7d7",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "PhysRevLett.127.183602.pdf"
+     ],
+     "size": 844199,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Xiong2022Tunable",
+   "title": "Tunable Magnetically Induced Transparency Spectra in Magnon-Magnon Coupled Y3Fe5O12/Permalloy Bilayers",
+   "authors": [
+    "Yuzan Xiong"
+   ],
+   "authors_complete": false,
+   "year": 2022,
+   "venue": "Phys. Rev. Applied 17, 044010",
+   "doi": "10.1103/PhysRevApplied.17.044010",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "3174aca7d8c8bfb1aed92391ea22356d83499cd6b2d3038d503f3906038d11c6",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Tunable Magnetically Induced Transparency Spectra in Magnon-Magnon Coupled Y3⁢Fe5⁢O12 Permalloy Bilayers.pdf"
+     ],
+     "size": 2235154,
+     "pages": 10
+    }
+   ]
+  },
+  {
+   "citekey": "Xu2019Cavity",
+   "title": "Cavity-mediated dissipative coupling of distant magnetic moments: Theory and experiment",
+   "authors": [
+    "Peng-Chao Xu"
+   ],
+   "authors_complete": false,
+   "year": 2019,
+   "venue": "Phys. Rev. B 100, 094415",
+   "doi": "10.1103/PhysRevB.100.094415",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "ccdb3075f6ff07d9a412683d23e943e9de524a7783163ecdc8e82cb0917c7985",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Cavity-mediated dissipative coupling of distant magnetic moments Theory and experiment.pdf"
+     ],
+     "size": 2427041,
+     "pages": 9
+    }
+   ]
+  },
+  {
+   "citekey": "Xu2023Magnonic",
+   "title": "Magnonic Frequency Comb in the Magnomechanical Resonator",
+   "authors": [
+    "Guan-Ting Xu",
+    "Mai Zhang",
+    "Yu Wang",
+    "Zhen Shen",
+    "Guang-Can Guo",
+    "Chun-Hua Dong"
+   ],
+   "authors_complete": true,
+   "year": 2023,
+   "venue": "Phys. Rev. Lett. 131, 243601",
+   "doi": "10.1103/PhysRevLett.131.243601",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "pim"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "頻率梳最多 20 條、間距 = 機械頻率、注入鎖定",
+    "架設／平台": "實驗；YIG 球磁機械共振器，強 pump",
+    "對應面向": "n=1／small／pump_probe+spectrum／S21"
+   },
+   "files": [
+    {
+     "sha256": "2e39170cdb5684d1fe7c5b44e2996f4dbb19868dec9b68e338c5f2259ae6fa5d",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Magnonic Frequency Comb in the Magnomechanical Resonator.pdf"
+     ],
+     "size": 4727098,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Xu2023Quantum",
+   "title": "Quantum Control of a Single Magnon in a Macroscopic Spin System",
+   "authors": [
+    "Da Xu"
+   ],
+   "authors_complete": false,
+   "year": 2023,
+   "venue": "Phys. Rev. Lett. 130, 193603",
+   "doi": "10.1103/PhysRevLett.130.193603",
+   "arxiv": "",
+   "kind": "article",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "yig",
+   "tags": [
+    "Others"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "6ee7d46e88660fe2a4dc1e47c0e03eab468000e955afe81e2f400efcbf5b97a4",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Quantum Control of a Single Magnon in a Macroscopic Spin System.pdf"
+     ],
+     "size": 1636694,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Yamashika2026Quantum",
+   "title": "Quantum Mpemba Effect in Long-Range Spin Systems",
+   "authors": [
+    "Shion Yamashika",
+    "Filiberto Ares"
+   ],
+   "authors_complete": true,
+   "year": 2026,
+   "venue": "Phys. Rev. Lett. 136, 090402",
+   "doi": "10.1103/52y5-8kl2",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "oqs"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "長程自旋系統的量子 Mpemba",
+    "架設／平台": "理論；長程交互自旋系統"
+   },
+   "files": [
+    {
+     "sha256": "00da957f952a94a6c0b13c3b7f294fac5371e3172df84289abd356a942ed483a",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Quantum Mpemba Effect in Long-Range Spin Systems.pdf"
+     ],
+     "size": 5903347,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Yang2019Control",
+   "title": "Control of the Magnon-Photon Level Attraction in a Planar Cavity",
+   "authors": [
+    "Y. Yang",
+    "J. W. Rao",
+    "Y. S. Gui",
+    "B. M. Yao",
+    "W. Lu",
+    "C.-M. Hu"
+   ],
+   "authors_complete": true,
+   "year": 2019,
+   "venue": "Phys. Rev. Applied 11, 054023",
+   "doi": "10.1103/PhysRevApplied.11.054023",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "cm"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "level attraction 與其控制（電阻性耦合電路模型）",
+    "架設／平台": "實驗；平面微帶腔 + YIG",
+    "對應面向": "cavity_antiresonance／n=1／small／vna／S21"
+   },
+   "files": [
+    {
+     "sha256": "b6be6444c896ba6c284fb09f5911b378b34a30c2350dd0944ee16f5a73fbd0d8",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Control of the Magnon-Photon Level Attraction in a Planar Cavity.pdf"
+     ],
+     "size": 3110314,
+     "pages": 8
+    }
+   ]
+  },
+  {
+   "citekey": "Yang2020Unconventional",
+   "title": "Unconventional Singularity in Anti-Parity-Time Symmetric Cavity Magnonics",
+   "authors": [
+    "Y. Yang",
+    "Yi-Pu Wang",
+    "J. W. Rao",
+    "Y. S. Gui",
+    "B. M. Yao",
+    "W. Lu",
+    "C.-M. Hu"
+   ],
+   "authors_complete": true,
+   "year": 2020,
+   "venue": "Phys. Rev. Lett. 125, 147202",
+   "doi": "10.1103/PhysRevLett.125.147202",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "cm"
+   ],
+   "suggested": null,
+   "tags": [
+    "P1"
+   ],
+   "keyinfo": {
+    "重點": "EP、BIC、群延遲發散",
+    "架設／平台": "實驗；anti-PT 腔 magnon 系統",
+    "對應面向": "cavity_antiresonance／n=1／small／vna／S21,S12"
+   },
+   "files": [
+    {
+     "sha256": "a727c25fe32008a3f44f3944e2b3d9e676f48572d9b442a89e805c07a04a203b",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Unconventional Singularity in Anti-Parity-Time Symmetric Cavity Magnonics.pdf"
+     ],
+     "size": 3128782,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Yang2024Anomalous",
+   "title": "Anomalous Long-Distance Coherence in Critically Driven Cavity Magnonics",
+   "authors": [
+    "Ying Yang",
+    "Jiguang Yao",
+    "Yang Xiao",
+    "Pak-Tik Fong",
+    "Hoi-Kwan Lau",
+    "C.-M. Hu"
+   ],
+   "authors_complete": true,
+   "year": 2024,
+   "venue": "Phys. Rev. Lett. 132, 206902",
+   "doi": "10.1103/PhysRevLett.132.206902",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "cm"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "遠距耦合強度隨相位振盪、腔線寬內的模分裂、臨界耦合",
+    "架設／平台": "實驗；介電圓柱腔 + YIG，經 2 m 行波相連；相移器",
+    "對應面向": "waveguide／n=1／small／vna／S21"
+   },
+   "files": [
+    {
+     "sha256": "a27fa7ad80f565350c62041f1e0150dbeef5c922631ec5f85549e66040ce68fb",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Anomalous Long-Distance Coherence in Critically Driven Cavity Magnonics.pdf"
+     ],
+     "size": 2488366,
+     "pages": 7
+    }
+   ]
+  },
+  {
+   "citekey": "Yao2018Edge",
+   "title": "Edge States and Topological Invariants of Non-Hermitian Systems",
+   "authors": [
+    "Shunyu Yao"
+   ],
+   "authors_complete": false,
+   "year": 2018,
+   "venue": "Phys. Rev. Lett. 121, 086803",
+   "doi": "10.1103/PhysRevLett.121.086803",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "nh"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "ca891dd73c9fde4a869f43c81959b4a151f1fed9d3350f45432a4a24b968294f",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Edge States and Topological Invariants of Non-Hermitian Systems.pdf"
+     ],
+     "size": 510795,
+     "pages": 8
+    }
+   ]
+  },
+  {
+   "citekey": "Yuan2022Quantum",
+   "title": "Quantum magnonics: When magnon spintronics meets quantum information science",
+   "authors": [
+    "H. Y. Yuan"
+   ],
+   "authors_complete": false,
+   "year": 2022,
+   "venue": "Phys. Rep. 965, 1",
+   "doi": "10.1016/j.physrep.2022.03.002",
+   "arxiv": "",
+   "kind": "review",
+   "status": "待讀",
+   "categories": [],
+   "suggested": "yig",
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "4950ddd98f637a24eec2009582949a93e3568e3d429057e2d49412d8854f37fc",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Quantum magnonics_When magnon spintronics meets.pdf"
+     ],
+     "size": 9861326,
+     "pages": 74
+    }
+   ]
+  },
+  {
+   "citekey": "Zhang2014Strongly",
+   "title": "Strongly Coupled Magnons and Cavity Microwave Photons",
+   "authors": [
+    "Xufeng Zhang",
+    "Chang-Ling Zou",
+    "Liang Jiang",
+    "Hong X. Tang"
+   ],
+   "authors_complete": true,
+   "year": 2014,
+   "venue": "Phys. Rev. Lett. 113, 156401",
+   "doi": "10.1103/PhysRevLett.113.156401",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "cm",
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {
+    "重點": "強耦合、合作度、模分裂",
+    "架設／平台": "實驗；3D 銅腔 + YIG 球（室溫）",
+    "對應面向": "cavity_resonance／n=1／small／vna／S11"
+   },
+   "files": [
+    {
+     "sha256": "6e2754cc7f476e116a9c84458a9c620fb59f26d6528cebe4dc545518fe7b3710",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "PhysRevLett.113.156401.pdf",
+      "Strongly Coupled Magnons and Cavity Microwave Photons.pdf"
+     ],
+     "size": 525556,
+     "pages": 5
+    }
+   ]
+  },
+  {
+   "citekey": "Zhang2017Observation",
+   "title": "Observation of the exceptional point in cavity magnon-polaritons",
+   "authors": [
+    "Dengke Zhang"
+   ],
+   "authors_complete": false,
+   "year": 2017,
+   "venue": "Nat. Commun. 8",
+   "doi": "10.1038/s41467-017-01634-w",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "6350fe4f4a7213c185eba3b73ec60355f58342039a6679aea5050812139028cb",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Observation of the exceptional point in cavity.pdf"
+     ],
+     "size": 767337,
+     "pages": 6
+    }
+   ]
+  },
+  {
+   "citekey": "Zhang2024Gainloss",
+   "title": "Gain-Loss Coupled Systems",
+   "authors": [
+    "Chunlei Zhang"
+   ],
+   "authors_complete": false,
+   "year": 2024,
+   "venue": "",
+   "doi": "",
+   "arxiv": "2410.20338",
+   "kind": "review",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "d670765cdec9b3a6d3e1a56a584dedd1639a2e462def205b8fbdf383fdaec038",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Gain-Loss Coupled Systems.pdf"
+     ],
+     "size": 15119326,
+     "pages": 20
+    }
+   ]
+  },
+  {
+   "citekey": "Zhang2025NonHermitian",
+   "title": "Non-Hermitian singularities in scattering spectra of Mie resonators",
+   "authors": [
+    "Zhang"
+   ],
+   "authors_complete": false,
+   "year": 2025,
+   "venue": "Sci. Adv. 11, eadr9183",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": "閱讀中",
+   "categories": [],
+   "suggested": "nh",
+   "tags": [
+    "研究中"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "9f88d8a8bf7daac09cdeb3c01f4d536035477dab397cf3db9718619ca2eda9bf",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Non-Hermitian singularities in scattering spectra of Mie resonators.pdf"
+     ],
+     "size": 7865997,
+     "pages": 9
+    }
+   ]
+  },
+  {
+   "citekey": "Zhang2026Coherent",
+   "title": "Coherent perfect photon absorption in a cavity-magnon optomechanical system",
+   "authors": [
+    "Yang Zhang"
+   ],
+   "authors_complete": false,
+   "year": 2026,
+   "venue": "Phys. Rev. A 113, 033520",
+   "doi": "10.1103/8k5s-y5fs",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "4b0295a82be3ee0f5b017b973128324ec533b244e875af0019d028618a5307d7",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Coherent perfect photon absorption in a cavity-magnon optomechanical system.pdf"
+     ],
+     "size": 950461,
+     "pages": 8
+    }
+   ]
+  },
+  {
+   "citekey": "vanLoo2013Photon",
+   "title": "Photon-Mediated Interactions Between Distant Artificial Atoms",
+   "authors": [
+    "Arjan F. van Loo"
+   ],
+   "authors_complete": false,
+   "year": 2013,
+   "venue": "Science 342, 1494",
+   "doi": "",
+   "arxiv": "",
+   "kind": "article",
+   "status": null,
+   "categories": [
+    "mirror"
+   ],
+   "suggested": null,
+   "tags": [
+    "推甄 Ref"
+   ],
+   "keyinfo": {},
+   "files": [
+    {
+     "sha256": "d4d3b7dd00834ed8f41c9ecda615aec5c6b52e103866a9edca4e46a1d6ff6e6c",
+     "role": "main",
+     "label": "",
+     "original_names": [
+      "Photon-mediated interaction between distant Artificial atoms.pdf"
+     ],
+     "size": 1805693,
+     "pages": 3
+    }
+   ]
+  }
+ ],
+ "excluded": [
+  {
+   "sha256": "0c5f45b40968b293cdfdb4fe3691a1638db1e38c07cd68653486fcb72dbda380",
+   "path": "推甄 Ref/Level Attraction.png",
+   "reason": "圖片（可在網站上以附件上傳）"
+  },
+  {
+   "sha256": "45edc5450edbb8b34ad03a484b43360fef94613b152111bd238fe862772ce9a0",
+   "path": "推甄 Ref/CTCI Physics Outstanding University Student Award.pdf",
+   "reason": "個人申請表，不屬於論文庫"
+  },
+  {
+   "sha256": "832c0956c91d60e3a88f5cfe8962222c98ae3ea33fdb972cd75ffb92b85c36b0",
+   "path": "推甄 Ref/Thumbs.db",
+   "reason": "Windows 縮圖快取"
+  },
+  {
+   "sha256": "4179bf19eda047d73fe53626c9dc83b27fc7f2ea1302524a99e6849f4269e448",
+   "path": "推甄 Ref/Level Repulsion.png",
+   "reason": "圖片（可在網站上以附件上傳）"
+  },
+  {
+   "sha256": "4dc90735cca6dfb5e5c29bebe01a6c4b331bd0e76f059b6e87da08011b09be4b",
+   "path": "N-YIG/相關性.txt",
+   "reason": "筆記，內容已併入 Chang2012Cavity 的重點欄"
+  }
+ ]
+}

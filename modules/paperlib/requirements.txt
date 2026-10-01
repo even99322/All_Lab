@@ -1,0 +1,7 @@
+fastapi==0.141.1
+uvicorn[standard]==0.46.0
+python-multipart==0.0.26
+pymupdf==1.28.2
+ocrmypdf==17.12.1
+segno==1.6.6
+python-pptx==1.0.2

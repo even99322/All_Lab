@@ -1,0 +1,19 @@
+# LabLogViewer dependency lock.
+# Node / Antinode peak detection follows the supplied SciPy reference algorithm.
+
+h5py>=3.10
+numpy>=1.26
+pytest>=7.4
+PySide6>=6.8            # Qt Graphs 3D (Q3DSurfaceWidgetItem) needs 6.8+
+pyqtgraph>=0.13
+matplotlib>=3.7        # Plot2DWidget colormaps
+imageio>=2.34          # GIF / MP4 animation encoding
+imageio-ffmpeg>=0.5    # H.264 backend
+scipy>=1.11            # Reference-compatible find_peaks analysis
+
+# pandas>=2.1             # optional, data table export
+# pyinstaller>=6.3        # packaging
+cryptography>=43         # v0.19B: Network Workspace encryption (X25519 + AES-GCM); wheels for Python 3.12
+ezdxf>=1.3               # v0.19D: Scientific Figure Builder reads AutoCAD 2013 DXF
+shapely>=2.0             # v0.19D: layer outlines, screw holes and vias (polygon operations)
+python-pptx>=1.0         # v0.19D: editable PowerPoint export (native 3-D shapes)

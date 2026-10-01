@@ -1,0 +1,613 @@
+{
+  "version": 2,
+  "groups": [
+    {
+      "id": "start",
+      "title": {
+        "en": "Getting started",
+        "zh": "開始使用"
+      },
+      "articles": [
+        {
+          "id": "getting-started",
+          "title": {
+            "en": "Five-minute start",
+            "zh": "五分鐘上手"
+          },
+          "subtitle": {
+            "en": "From a folder of measurements to a first figure.",
+            "zh": "從一個量測資料夾到第一張圖。"
+          },
+          "icon": "sparkles",
+          "tint": "#FF9F0A",
+          "keywords": "start first open database viewer quick"
+        },
+        {
+          "id": "windows",
+          "title": {
+            "en": "The windows and how they connect",
+            "zh": "各視窗的關係"
+          },
+          "subtitle": {
+            "en": "Browser, Viewer, 3D, YIG and where each opens.",
+            "zh": "瀏覽器、Viewer、3D、YIG 各自從哪裡開啟。"
+          },
+          "icon": "window",
+          "tint": "#5E5CE6",
+          "keywords": "window browser viewer 3d yig figure"
+        }
+      ]
+    },
+    {
+      "id": "browser",
+      "title": {
+        "en": "Database Browser",
+        "zh": "資料庫瀏覽器"
+      },
+      "articles": [
+        {
+          "id": "browser-database",
+          "title": {
+            "en": "Open and browse a database",
+            "zh": "開啟與瀏覽資料庫"
+          },
+          "subtitle": {
+            "en": "Scan a folder, sort, find and open measurements.",
+            "zh": "掃描資料夾、排序、找到並開啟量測。"
+          },
+          "icon": "folder",
+          "tint": "#0A84FF",
+          "keywords": "database open reload scan folder sort auto refresh new folder 2D first open 自動刷新 新增資料夾"
+        },
+        {
+          "id": "browser-stars-tags",
+          "title": {
+            "en": "Stars and Tags",
+            "zh": "星號與標籤"
+          },
+          "subtitle": {
+            "en": "Mark measurements and find them again by Tag.",
+            "zh": "標記量測，之後依標籤找回來。"
+          },
+          "icon": "star",
+          "tint": "#FFD60A",
+          "keywords": "star tag retrieve filter category auto tag"
+        },
+        {
+          "id": "tags-largest-folder",
+          "title": {
+            "en": "Search Tags in the largest folder",
+            "zh": "在最大資料夾依標籤搜尋"
+          },
+          "subtitle": {
+            "en": "One search across all your collected data.",
+            "zh": "一次搜尋所有集中的資料。"
+          },
+          "icon": "magnifier",
+          "tint": "#30B0C7",
+          "keywords": "largest folder tag search master"
+        },
+        {
+          "id": "browser-preview",
+          "title": {
+            "en": "Quick Preview, comments and receiving",
+            "zh": "快速預覽、註解與接收"
+          },
+          "subtitle": {
+            "en": "See a measurement without opening it; keep notes.",
+            "zh": "不開啟就看到量測內容；寫下註解。"
+          },
+          "icon": "eye",
+          "tint": "#64D2FF",
+          "keywords": "preview comment receive transfer drop"
+        },
+        {
+          "id": "browser-debackground",
+          "title": {
+            "en": "De-background",
+            "zh": "去背景"
+          },
+          "subtitle": {
+            "en": "Divide a measurement by a background trace.",
+            "zh": "把量測除以背景 trace。"
+          },
+          "icon": "layers",
+          "tint": "#BF5AF2",
+          "keywords": "debackground background division debg"
+        }
+      ]
+    },
+    {
+      "id": "viewer",
+      "title": {
+        "en": "Viewer",
+        "zh": "Viewer（第二視窗）"
+      },
+      "articles": [
+        {
+          "id": "viewer-1d",
+          "title": {
+            "en": "1D plots, traces and transforms",
+            "zh": "1D 圖、Trace 與轉換"
+          },
+          "subtitle": {
+            "en": "Choose axes, step through traces, Magnitude / Phase / dB.",
+            "zh": "選軸、切換 trace、Magnitude／Phase／dB。"
+          },
+          "icon": "chart",
+          "tint": "#0A84FF",
+          "keywords": "1d trace transform magnitude phase db unwrap axis preset"
+        },
+        {
+          "id": "viewer-2d",
+          "title": {
+            "en": "2D heatmaps and line cuts",
+            "zh": "2D 熱圖與線切"
+          },
+          "subtitle": {
+            "en": "Colour maps, colour range and X / Y cuts.",
+            "zh": "色彩圖、色彩範圍與 X／Y 切線。"
+          },
+          "icon": "grid",
+          "tint": "#FF375F",
+          "keywords": "2d heatmap colormap color range cut"
+        },
+        {
+          "id": "viewer-panes",
+          "title": {
+            "en": "Several plots side by side",
+            "zh": "多窗格並排"
+          },
+          "subtitle": {
+            "en": "Different traces, transforms or 1D / 2D of one measurement side by side.",
+            "zh": "同一筆資料的不同 trace、轉換或 1D／2D 並排。"
+          },
+          "icon": "panes",
+          "tint": "#5E5CE6",
+          "keywords": "pane layout sync multi"
+        },
+        {
+          "id": "viewer-marks",
+          "title": {
+            "en": "Marks and local analysis",
+            "zh": "標記與局部分析"
+          },
+          "subtitle": {
+            "en": "Read values, find peaks, dips and half-peak width.",
+            "zh": "讀值、找峰、谷與半峰寬。"
+          },
+          "icon": "pin",
+          "tint": "#FF9F0A",
+          "keywords": "mark point range crosshair peak trough half-peak local analysis"
+        },
+        {
+          "id": "viewer-formula",
+          "title": {
+            "en": "Formula",
+            "zh": "公式"
+          },
+          "subtitle": {
+            "en": "Rescale X / Y with an expression without touching the file.",
+            "zh": "用運算式換算 X／Y，不會改到檔案。"
+          },
+          "icon": "function",
+          "tint": "#32D74B",
+          "keywords": "formula expression latex x y"
+        },
+        {
+          "id": "viewer-zoom",
+          "title": {
+            "en": "Zoom, trackpad and Drag-to-Share",
+            "zh": "局部放大、觸控板與拖曳分享"
+          },
+          "subtitle": {
+            "en": "Zoom into a region; drag a plot into other apps.",
+            "zh": "放大一個區域；把圖拖到其他 App。"
+          },
+          "icon": "magnifier",
+          "tint": "#64D2FF",
+          "keywords": "zoom trackpad pinch drag share"
+        },
+        {
+          "id": "viewer-export",
+          "title": {
+            "en": "Copy, save and export",
+            "zh": "複製、儲存與匯出"
+          },
+          "subtitle": {
+            "en": "Figures, numbers (CSV / NPZ) and animations.",
+            "zh": "圖片、數值（CSV／NPZ）與動畫。"
+          },
+          "icon": "share",
+          "tint": "#30B0C7",
+          "keywords": "export copy save csv npz animation gif mp4"
+        }
+      ]
+    },
+    {
+      "id": "three_d",
+      "title": {
+        "en": "3D",
+        "zh": "3D"
+      },
+      "articles": [
+        {
+          "id": "three-d",
+          "title": {
+            "en": "3D Surface",
+            "zh": "3D 曲面"
+          },
+          "subtitle": {
+            "en": "Surfaces, waterfalls and point views of 2D data.",
+            "zh": "把 2D 資料畫成曲面、瀑布圖或點雲。"
+          },
+          "icon": "cube",
+          "tint": "#BF5AF2",
+          "keywords": "3d surface waterfall scatter trajectory lod camera"
+        },
+        {
+          "id": "three-d-export",
+          "title": {
+            "en": "3D export",
+            "zh": "3D 匯出"
+          },
+          "subtitle": {
+            "en": "Publication figures or screen captures.",
+            "zh": "論文樣式圖或螢幕畫面。"
+          },
+          "icon": "share",
+          "tint": "#AC8E68",
+          "keywords": "3d export publication screen"
+        }
+      ]
+    },
+    {
+      "id": "yig",
+      "title": {
+        "en": "YIG Analysis",
+        "zh": "YIG 分析"
+      },
+      "articles": [
+        {
+          "id": "yig-overview",
+          "title": {
+            "en": "Fit one trace",
+            "zh": "單條 trace 擬合"
+          },
+          "subtitle": {
+            "en": "Load a slice, guess, fit and judge the result.",
+            "zh": "載入切片、猜初值、擬合、判讀結果。"
+          },
+          "icon": "sphere",
+          "tint": "#FF453A",
+          "keywords": "yig fit single auto guess r2 residual"
+        },
+        {
+          "id": "yig-models",
+          "title": {
+            "en": "Models, Model Builder and Library",
+            "zh": "模型、建構器與模型庫"
+          },
+          "subtitle": {
+            "en": "What the bundled models assume; write your own.",
+            "zh": "內建模型的假設；自己寫模型。"
+          },
+          "icon": "function",
+          "tint": "#FF9F0A",
+          "keywords": "model builder library latex units"
+        },
+        {
+          "id": "yig-continuous",
+          "title": {
+            "en": "Continuous Fit",
+            "zh": "連續擬合"
+          },
+          "subtitle": {
+            "en": "Fit every slice of a 2D sweep, tracking the resonance.",
+            "zh": "逐片擬合整個 2D 掃描並追蹤共振。"
+          },
+          "icon": "wave",
+          "tint": "#32D74B",
+          "keywords": "continuous batch tracking window stride r2 threshold"
+        },
+        {
+          "id": "yig-phase-node",
+          "title": {
+            "en": "Phase / Node",
+            "zh": "相位／Node"
+          },
+          "subtitle": {
+            "en": "Phase line, physical Nodes / Antinodes and Global Linked Fit.",
+            "zh": "相位線、物理 Node／Antinode 與全域連結擬合。"
+          },
+          "icon": "nodes",
+          "tint": "#5E5CE6",
+          "keywords": "phase node antinode coarse global linked fit kappa T"
+        }
+      ]
+    },
+    {
+      "id": "tools",
+      "title": {
+        "en": "Drawing and figures",
+        "zh": "標註與示意圖"
+      },
+      "articles": [
+        {
+          "id": "annotation",
+          "title": {
+            "en": "Pen and laser pointer",
+            "zh": "畫筆與雷射筆"
+          },
+          "subtitle": {
+            "en": "Draw or point on any window while presenting.",
+            "zh": "報告時在任何視窗上畫線或指示。"
+          },
+          "icon": "pen",
+          "tint": "#FF375F",
+          "keywords": "annotation pen laser"
+        },
+        {
+          "id": "figure-builder",
+          "title": {
+            "en": "Scientific Figure Builder",
+            "zh": "科學示意圖建構器"
+          },
+          "subtitle": {
+            "en": "DXF → 3-D device figure with YIG, coils and waves.",
+            "zh": "DXF → 含 YIG、線圈、正弦波的 3D 裝置圖。"
+          },
+          "icon": "figure",
+          "tint": "#0A84FF",
+          "keywords": "figure dxf autocad yig coil sine wave microstrip cpw"
+        },
+        {
+          "id": "figure-export",
+          "title": {
+            "en": "PowerPoint and image export",
+            "zh": "PowerPoint 與圖片輸出"
+          },
+          "subtitle": {
+            "en": "Editable 3-D shapes in PowerPoint; PNG / SVG / PDF.",
+            "zh": "PowerPoint 中可編輯的 3D 圖形；PNG／SVG／PDF。"
+          },
+          "icon": "share",
+          "tint": "#30B0C7",
+          "keywords": "pptx powerpoint svg pdf png export"
+        }
+      ]
+    },
+    {
+      "id": "network",
+      "title": {
+        "en": "Network Workspace",
+        "zh": "網路工作區"
+      },
+      "articles": [
+        {
+          "id": "network-host",
+          "title": {
+            "en": "Host a session",
+            "zh": "主持連線"
+          },
+          "subtitle": {
+            "en": "Share your windows with up to 5 computers.",
+            "zh": "與最多 5 台電腦分享你的視窗。"
+          },
+          "icon": "network",
+          "tint": "#32D74B",
+          "keywords": "network host join code"
+        },
+        {
+          "id": "network-client",
+          "title": {
+            "en": "Join a Host",
+            "zh": "加入 Host"
+          },
+          "subtitle": {
+            "en": "Follow a Host's windows read-only.",
+            "zh": "唯讀跟隨 Host 的視窗。"
+          },
+          "icon": "network",
+          "tint": "#0A84FF",
+          "keywords": "network client join mirror"
+        },
+        {
+          "id": "network-quality",
+          "title": {
+            "en": "Quality, security and limits",
+            "zh": "品質、安全與限制"
+          },
+          "subtitle": {
+            "en": "What the quality levels mean; what is encrypted.",
+            "zh": "品質等級的意義；哪些有加密。"
+          },
+          "icon": "shield",
+          "tint": "#64D2FF",
+          "keywords": "quality latency encryption limits"
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "title": {
+        "en": "Settings and personalisation",
+        "zh": "設定與個人化"
+      },
+      "articles": [
+        {
+          "id": "settings-general",
+          "title": {
+            "en": "General, language and 3D settings",
+            "zh": "一般、語言與 3D 設定"
+          },
+          "subtitle": {
+            "en": "Language, data folders and 3D performance.",
+            "zh": "語言、資料夾與 3D 效能。"
+          },
+          "icon": "gear",
+          "tint": "#8E8E93",
+          "keywords": "settings language general 3d profile"
+        },
+        {
+          "id": "personal-colors",
+          "title": {
+            "en": "Personal colours",
+            "zh": "個人化配色"
+          },
+          "subtitle": {
+            "en": "Your own theme, plot and pen colours.",
+            "zh": "自訂主題、圖表與畫筆顏色。"
+          },
+          "icon": "palette",
+          "tint": "#FF9F0A",
+          "keywords": "personal colours color wheel unlock"
+        },
+        {
+          "id": "personal-icons",
+          "title": {
+            "en": "Custom icons (SVG)",
+            "zh": "自訂圖示（SVG）"
+          },
+          "subtitle": {
+            "en": "Replace any icon with your own SVG.",
+            "zh": "用自己的 SVG 替換任何圖示。"
+          },
+          "icon": "star",
+          "tint": "#FF375F",
+          "keywords": "icon svg replace"
+        },
+        {
+          "id": "interface-motion",
+          "title": {
+            "en": "Theme ripple, button spring, glass scroll bars",
+            "zh": "主題擴散、按鈕回彈、玻璃捲軸"
+          },
+          "subtitle": {
+            "en": "How the interface moves and why.",
+            "zh": "介面動態的行為與原因。"
+          },
+          "icon": "ripple",
+          "tint": "#5E5CE6",
+          "keywords": "theme ripple button spring glass scroll bar"
+        },
+        {
+          "id": "licenses",
+          "title": {
+            "en": "Licences",
+            "zh": "授權"
+          },
+          "subtitle": {
+            "en": "Machine code, installing and renewing a licence.",
+            "zh": "機器碼、安裝與更新授權。"
+          },
+          "icon": "key",
+          "tint": "#FFD60A",
+          "keywords": "licence license machine code llvkey relink"
+        }
+      ]
+    },
+    {
+      "id": "data",
+      "title": {
+        "en": "Your data",
+        "zh": "你的資料"
+      },
+      "articles": [
+        {
+          "id": "data-folder",
+          "title": {
+            "en": "Data folder (history records)",
+            "zh": "資料夾（歷史紀錄）"
+          },
+          "subtitle": {
+            "en": "Where stars, tags, marks and fits are kept.",
+            "zh": "星號、標籤、標記與擬合存在哪裡。"
+          },
+          "icon": "drive",
+          "tint": "#0A84FF",
+          "keywords": "data folder records move cloud migrate data transfer new version computer 轉移 資料轉移 搬移 新電腦"
+        },
+        {
+          "id": "data-safety",
+          "title": {
+            "en": "Data safety",
+            "zh": "資料安全"
+          },
+          "subtitle": {
+            "en": "Measurement files are only read — what that means.",
+            "zh": "量測檔只會被讀取——代表什麼。"
+          },
+          "icon": "shield",
+          "tint": "#32D74B",
+          "keywords": "safety read only backup"
+        }
+      ]
+    },
+    {
+      "id": "trouble",
+      "title": {
+        "en": "Troubleshooting",
+        "zh": "疑難排解"
+      },
+      "articles": [
+        {
+          "id": "trouble-general",
+          "title": {
+            "en": "General problems",
+            "zh": "一般問題"
+          },
+          "subtitle": {
+            "en": "Freezes, recovery and asking for help.",
+            "zh": "卡住、復原與求助。"
+          },
+          "icon": "lifebuoy",
+          "tint": "#FF453A",
+          "keywords": "freeze recovery watchdog report"
+        },
+        {
+          "id": "trouble-network",
+          "title": {
+            "en": "Network problems",
+            "zh": "網路問題"
+          },
+          "subtitle": {
+            "en": "Cannot find or join a Host.",
+            "zh": "找不到或加不進 Host。"
+          },
+          "icon": "network",
+          "tint": "#FF9F0A",
+          "keywords": "network firewall cannot join"
+        },
+        {
+          "id": "trouble-3d",
+          "title": {
+            "en": "3D problems",
+            "zh": "3D 問題"
+          },
+          "subtitle": {
+            "en": "Slow, blank or closed 3D windows.",
+            "zh": "3D 視窗很慢、空白或關閉。"
+          },
+          "icon": "cube",
+          "tint": "#BF5AF2",
+          "keywords": "3d slow blank crash"
+        },
+        {
+          "id": "shortcuts",
+          "title": {
+            "en": "Keyboard and mouse",
+            "zh": "鍵盤與滑鼠"
+          },
+          "subtitle": {
+            "en": "Every shortcut in one table.",
+            "zh": "所有快捷鍵一覽。"
+          },
+          "icon": "keyboard",
+          "tint": "#8E8E93",
+          "keywords": "shortcut keyboard mouse"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,371 @@
+"""Fit-model builder: compose an ideal model with optional Fano/environment terms."""
+from app.palette import STATUS
+import os
+import tempfile
+
+import numpy as np
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QDialog, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox, QLabel, QLineEdit,
+    QPlainTextEdit, QCheckBox, QComboBox, QPushButton, QTableWidget, QTableWidgetItem,
+    QHeaderView, QSplitter, QTabWidget, QFileDialog, QMessageBox,
+)
+
+from ..core import codegen as cg
+from ..core.formula import load_formula_module, param_names, guess_params, model_to_complex
+from .plots import LegacyFitPlotWidget as FitPlotWidget
+
+EXAMPLES = {
+    "Single mode (g = 0)": "S = 1 + kappa/(i(w - w_w) - (kappa + alpha))",
+    "Coupled modes": "S = 1 + kappa/(i(w - w_w) - (kappa + alpha) + g^2/(i(w - w_d) - xi))",
+    "Multiline (intermediate variables)": "D = w - w_r\nL = i*D - (kappa + gamma)/2\nS = 1 - kappa/2 / L",
+}
+
+C_NAME, C_UNIT, C_ROLE, C_P0, C_LO, C_HI = range(6)
+
+
+class FormulaBuilderDialog(QDialog):
+    saved = Signal(str, str, bool)   # (檔案路徑, 函式名稱, 是否在主視窗載入)
+
+    def __init__(self, parent=None, trace_provider=None, start_dir=""):
+        super().__init__(parent)
+        self.setWindowTitle("Fit Model Builder: Ideal Model + Fano + Environment")
+        self.resize(1300, 900)
+        self.trace_provider = trace_provider
+        self.start_dir = start_dir
+        self.code = ""
+        self._memory = {}          # 參數表設定（依名稱記憶，重新解析時保留）
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(400)
+        self._timer.timeout.connect(self.regenerate)
+        self._build()
+        self.txt_expr.setPlainText(EXAMPLES["Coupled modes"])
+        self.regenerate()
+
+    # ------------------------------------------------------------------ 介面
+    def _build(self):
+        from app.gui.fonts import mono_font
+
+        mono = mono_font()
+        mono.setStyleHint(QFont.StyleHint.Monospace)
+
+        left = QWidget()
+        lv = QVBoxLayout(left)
+
+        g1 = QGroupBox("1. Ideal Model")
+        gl = QGridLayout(g1)
+        self.txt_name = QLineEdit("S21_model")
+        self.txt_fvar = QLineEdit("w")
+        self.txt_fvar.setMaximumWidth(80)
+        self.cmb_example = QComboBox()
+        self.cmb_example.addItem("Insert Example")
+        self.cmb_example.addItems(list(EXAMPLES))
+        self.txt_expr = QPlainTextEdit()
+        self.txt_expr.setFont(mono)
+        self.txt_expr.setMinimumHeight(80)
+        self.txt_expr.setMaximumHeight(140)
+        self.chk_i = QCheckBox("i represents the imaginary unit")
+        self.chk_i.setChecked(True)
+        self.txt_bg = QLineEdit("1")
+        self.txt_bg.setToolTip("Fano phase rotates only S minus the background; a typical transmission/reflection background is 1.")
+        hint = QLabel("Python-style expression; ^ is converted to ** and i(...) means 1j*(...). "
+                      "Use multiple lines for intermediate variables, with S = ... on the last line. "
+                      "Supported functions include sqrt, exp, sin, cos, log, abs, conj, and pi. "
+                      "LaTeX is also accepted (\\frac{a}{b}, \\sqrt{x}, \\kappa_{e}, \\left|S\\right|). "
+                      "Only math is allowed: imports, file access and other Python code are rejected.")
+        hint.setWordWrap(True)
+        r = 0
+        gl.addWidget(QLabel("Function Name"), r, 0); gl.addWidget(self.txt_name, r, 1)
+        gl.addWidget(QLabel("Frequency Variable"), r, 2); gl.addWidget(self.txt_fvar, r, 3); r += 1
+        gl.addWidget(QLabel("S_ideal ="), r, 0); gl.addWidget(self.cmb_example, r, 1, 1, 3); r += 1
+        gl.addWidget(self.txt_expr, r, 0, 1, 4); r += 1
+        gl.addWidget(hint, r, 0, 1, 4); r += 1
+        gl.addWidget(self.chk_i, r, 0, 1, 2)
+        gl.addWidget(QLabel("Background B"), r, 2); gl.addWidget(self.txt_bg, r, 3)
+        lv.addWidget(g1)
+
+        g2 = QGroupBox("2. Parameters (blank initial values/bounds are estimated from data)")
+        pl = QVBoxLayout(g2)
+        self.tbl = QTableWidget(0, 6)
+        self.tbl.setHorizontalHeaderLabels(["Parameter", "Unit", "Role", "Initial", "Lower", "Upper"])
+        self.tbl.verticalHeader().setVisible(False)
+        self.tbl.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.tbl.setToolTip("Roles: resonance positions are initialized from the data dip and tracked-window center; "
+                            "linewidth/coupling values use the estimated half-width; other values use unit-based defaults.")
+        pl.addWidget(self.tbl)
+        lv.addWidget(g2, 1)
+
+        g3 = QGroupBox("3. Optional Model Terms")
+        ol = QGridLayout(g3)
+        self.chk_fano = QCheckBox("Fano phase: S = B + (S_ideal − B)·e^{iθ_F}")
+        self.chk_fano.setChecked(True)
+        self.chk_env = QCheckBox("Environment: A·exp{ i[φ₀ − 2π(w − w_c)τ] }")
+        self.chk_env.setChecked(True)
+        self.cmb_ref = QComboBox()
+        self.chk_conj = QCheckBox("Conjugate output (for reversed IQ rotation)")
+        self.chk_abs = QCheckBox("Also generate a |S| model")
+        self.chk_abs.setChecked(True)
+        self.chk_si = QCheckBox("Convert units to Hz / s / rad (write expressions in SI units)")
+        self.chk_si.setChecked(True)
+        ol.addWidget(self.chk_fano, 0, 0, 1, 2)
+        ol.addWidget(self.chk_env, 1, 0, 1, 2)
+        ol.addWidget(QLabel("Delay Reference w_c"), 2, 0); ol.addWidget(self.cmb_ref, 2, 1)
+        ol.addWidget(self.chk_conj, 3, 0, 1, 2)
+        ol.addWidget(self.chk_abs, 4, 0, 1, 2)
+        ol.addWidget(self.chk_si, 5, 0, 1, 2)
+        lv.addWidget(g3)
+
+        g4 = QGroupBox("4. Model Library")
+        ll = QGridLayout(g4)
+        self.chk_lib = QCheckBox("Add to Model Library when saving (equation and notes)")
+        self.chk_lib.setChecked(True)
+        self.txt_lib_title = QLineEdit()
+        self.txt_lib_title.setPlaceholderText("Title (blank uses the function name)")
+        self.txt_lib_notes = QPlainTextEdit()
+        self.txt_lib_notes.setPlaceholderText("Notes: intended use, parameter meanings, etc.")
+        self.txt_lib_notes.setMaximumHeight(60)
+        ll.addWidget(self.chk_lib, 0, 0, 1, 2)
+        ll.addWidget(QLabel("Title"), 1, 0); ll.addWidget(self.txt_lib_title, 1, 1)
+        ll.addWidget(QLabel("Notes"), 2, 0); ll.addWidget(self.txt_lib_notes, 2, 1)
+        self.chk_lib.toggled.connect(self.txt_lib_title.setEnabled)
+        self.chk_lib.toggled.connect(self.txt_lib_notes.setEnabled)
+        lv.addWidget(g4)
+
+        self.lbl_status = QLabel("")
+        self.lbl_status.setWordWrap(True)
+        lv.addWidget(self.lbl_status)
+
+        bl = QHBoxLayout()
+        self.btn_open = QPushButton("Open Existing Builder File...")
+        self.btn_preview = QPushButton("Preview with Current Data")
+        self.btn_save = QPushButton("Save .py...")
+        self.btn_save_load = QPushButton("Save and Load")
+        self.btn_save_load.setStyleSheet("font-weight: bold;")
+        for b in (self.btn_open, self.btn_preview, self.btn_save, self.btn_save_load):
+            bl.addWidget(b)
+        lv.addLayout(bl)
+
+        # 右側：程式碼 / 預覽
+        self.tabs = QTabWidget()
+        self.txt_code = QPlainTextEdit()
+        self.txt_code.setReadOnly(True)
+        self.txt_code.setFont(mono)
+        self.txt_code.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.plot = FitPlotWidget()
+        self.tabs.addTab(self.txt_code, "Generated Code")
+        self.tabs.addTab(self.plot, "Preview (Auto Guess)")
+
+        sp = QSplitter(Qt.Orientation.Horizontal)
+        sp.addWidget(left)
+        sp.addWidget(self.tabs)
+        sp.setSizes([560, 740])
+        QVBoxLayout(self).addWidget(sp)
+
+        # 事件
+        for x in (self.txt_name, self.txt_fvar, self.txt_bg):
+            x.textChanged.connect(lambda _: self._timer.start())
+        self.txt_expr.textChanged.connect(self._timer.start)
+        for x in (self.chk_i, self.chk_fano, self.chk_env, self.chk_conj, self.chk_abs, self.chk_si):
+            x.toggled.connect(lambda _: self._timer.start())
+        self.cmb_ref.currentIndexChanged.connect(lambda _: self._timer.start())
+        self.tbl.itemChanged.connect(lambda _: self._timer.start())
+        self.cmb_example.activated.connect(self._insert_example)
+        self.btn_open.clicked.connect(self.open_existing)
+        self.btn_preview.clicked.connect(self.preview)
+        self.btn_save.clicked.connect(lambda: self.save(load=False))
+        self.btn_save_load.clicked.connect(lambda: self.save(load=True))
+        self.btn_preview.setEnabled(self.trace_provider is not None)
+
+    def _insert_example(self, i):
+        if i > 0:
+            self.txt_expr.setPlainText(EXAMPLES[self.cmb_example.itemText(i)])
+        self.cmb_example.setCurrentIndex(0)
+
+    # ------------------------------------------------------------------ 參數表
+    def _table_state(self):
+        out = {}
+        for r in range(self.tbl.rowCount()):
+            n = self.tbl.item(r, C_NAME).text()
+            out[n] = dict(name=n,
+                          unit=self.tbl.cellWidget(r, C_UNIT).currentText().strip(),
+                          role=self.tbl.cellWidget(r, C_ROLE).currentData(),
+                          p0=self.tbl.item(r, C_P0).text().strip(),
+                          lo=self.tbl.item(r, C_LO).text().strip(),
+                          hi=self.tbl.item(r, C_HI).text().strip())
+        return out
+
+    def _sync_table(self, params):
+        self._memory.update(self._table_state())
+        if [self.tbl.item(r, C_NAME).text() for r in range(self.tbl.rowCount())] == params:
+            return
+        self.tbl.blockSignals(True)
+        self.tbl.setRowCount(len(params))
+        for r, n in enumerate(params):
+            u0, r0 = cg.default_param(n)
+            m = self._memory.get(n, {})
+            it = QTableWidgetItem(n)
+            it.setFlags(it.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self.tbl.setItem(r, C_NAME, it)
+            cu = QComboBox()
+            cu.setEditable(True)
+            cu.addItems(cg.UNIT_CHOICES)
+            cu.setCurrentText(m.get("unit", u0))
+            cu.currentTextChanged.connect(lambda _: self._timer.start())
+            self.tbl.setCellWidget(r, C_UNIT, cu)
+            cr = QComboBox()
+            for k, v in cg.ROLES.items():
+                cr.addItem(v, k)
+            cr.setCurrentIndex(max(0, cr.findData(m.get("role", r0))))
+            cr.currentIndexChanged.connect(lambda _: self._timer.start())
+            self.tbl.setCellWidget(r, C_ROLE, cr)
+            for c, key in ((C_P0, "p0"), (C_LO, "lo"), (C_HI, "hi")):
+                self.tbl.setItem(r, c, QTableWidgetItem(m.get(key, "")))
+        self.tbl.blockSignals(False)
+
+    def _sync_ref(self, params):
+        cur = self.cmb_ref.currentData()
+        self.cmb_ref.blockSignals(True)
+        self.cmb_ref.clear()
+        self.cmb_ref.addItem("Auto (mean resonance position, otherwise window center)", "auto")
+        self.cmb_ref.addItem("Fit-window center", "window")
+        self.cmb_ref.addItem("Mean of all resonance-position parameters", "mean_pos")
+        state = self._table_state()
+        for p in params:
+            if state.get(p, {}).get("unit") in cg.FREQ_UNITS:
+                self.cmb_ref.addItem(f"Parameter {p}", p)
+        i = self.cmb_ref.findData(cur)
+        self.cmb_ref.setCurrentIndex(max(0, i))
+        self.cmb_ref.blockSignals(False)
+
+    # ------------------------------------------------------------------ 產生
+    def spec(self):
+        return dict(
+            name=self.txt_name.text().strip(),
+            freq_var=self.txt_fvar.text().strip() or "w",
+            imag_i=self.chk_i.isChecked(),
+            background=self.txt_bg.text().strip() or "1",
+            expr=self.txt_expr.toPlainText(),
+            params=list(self._table_state().values()),
+            fano=self.chk_fano.isChecked(),
+            env=self.chk_env.isChecked(),
+            ref=self.cmb_ref.currentData() or "auto",
+            conj=self.chk_conj.isChecked(),
+            make_abs=self.chk_abs.isChecked(),
+            si=self.chk_si.isChecked(),
+        )
+
+    def regenerate(self):
+        self.code = ""
+        try:
+            parsed = cg.parse_model(self.txt_expr.toPlainText(),
+                                    self.txt_fvar.text().strip() or "w", self.chk_i.isChecked())
+            self._sync_table(parsed["params"])
+            self._sync_ref(parsed["params"])
+            spec = self.spec()
+            code = cg.generate_code(spec)
+            ok, msg = cg.validate(code, spec)
+        except Exception as e:
+            ok, msg, code = False, str(e), ""
+        self.code = code if ok else ""
+        self.txt_code.setPlainText(code or f"# {msg}")
+        env = cg.env_names([self.tbl.item(r, 0).text() for r in range(self.tbl.rowCount())])
+        extra = ""
+        if ok and any(v != k for k, v in env.items()):
+            extra = " (environment parameter names collided with model parameters and were renamed to " + \
+                    ", ".join(v for k, v in env.items() if v != k) + ")"
+        self.lbl_status.setText(msg + extra)
+        self.lbl_status.setStyleSheet("color: %s;" % (STATUS["formula_ok"] if ok else STATUS["tex_error"]))
+        for b in (self.btn_save, self.btn_save_load):
+            b.setEnabled(ok)
+        self.btn_preview.setEnabled(ok and self.trace_provider is not None)
+        return ok
+
+    def preview(self):
+        if not self.regenerate():
+            return
+        trace = self.trace_provider() if self.trace_provider else None
+        if trace is None:
+            QMessageBox.information(self, "No Data", "Load data and set a fit range in the main Analysis window first.")
+            return
+        f, s = trace
+        name = self.txt_name.text().strip()
+        tmp = os.path.join(tempfile.gettempdir(), f"_fb_preview_{os.getpid()}.py")
+        try:
+            with open(tmp, "w", encoding="utf-8") as fh:
+                fh.write(self.code)
+            mod, funcs = load_formula_module(tmp)
+            fn = funcs[name]
+            names = param_names(fn)
+            g, _, warn = guess_params(mod, name, names, f, s)
+            p0 = [g[n][0] for n in names]
+            c, mag = model_to_complex(fn(f, *p0), len(f))
+            self.plot.plot(f, s, c, mag, label="Initial Guess",
+                           title="Initial-Guess Preview: " + ", ".join(f"{n}={v:.4g}" for n, v in zip(names, p0)))
+            self.tabs.setCurrentWidget(self.plot)
+            if warn:
+                QMessageBox.warning(self, "Initial-Guess Warning", warn)
+        except Exception as e:
+            QMessageBox.critical(self, "Preview Failed", str(e))
+
+    def save(self, load=False):
+        if not self.regenerate():
+            return
+        name = self.txt_name.text().strip()
+        path, _ = QFileDialog.getSaveFileName(self, "Save Model File",
+                                              os.path.join(self.start_dir, f"formula_{name}.py"),
+                                              "Python (*.py)")
+        if not path:
+            return
+        if not path.endswith(".py"):
+            path += ".py"
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(self.code)
+        self.start_dir = os.path.dirname(path)
+        self.saved.emit(path, name, load)
+        msg = f"Generated:\n{path}"
+        if self.chk_lib.isChecked():
+            msg += "\n\nAdded to the Model Library."
+        if load:
+            msg += "\nLoaded in the main Analysis window."
+        QMessageBox.information(self, "Saved", msg)
+
+    def open_existing(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Open a Model Builder .py File", self.start_dir, "Python (*.py)")
+        if not path:
+            return
+        try:
+            spec = cg.load_spec(path)
+        except Exception as e:
+            QMessageBox.critical(self, "Read Failed", str(e))
+            return
+        if not spec:
+            QMessageBox.warning(self, "Cannot Load Model", "This file was not created by the Model Builder (saved specification not found).")
+            return
+        self.set_spec(spec)
+        self.start_dir = os.path.dirname(path)
+
+    def library_info(self):
+        return dict(enabled=self.chk_lib.isChecked(),
+                    title=self.txt_lib_title.text().strip(),
+                    notes=self.txt_lib_notes.toPlainText().strip())
+
+    def set_spec(self, spec):
+        self._memory = {p["name"]: p for p in spec.get("params", [])}
+        self.tbl.setRowCount(0)
+        for w_, v in ((self.txt_name, spec.get("name", "S21_model")),
+                      (self.txt_fvar, spec.get("freq_var", "w")),
+                      (self.txt_bg, spec.get("background", "1"))):
+            w_.setText(v)
+        self.chk_i.setChecked(spec.get("imag_i", True))
+        self.chk_fano.setChecked(spec.get("fano", True))
+        self.chk_env.setChecked(spec.get("env", True))
+        self.chk_conj.setChecked(spec.get("conj", False))
+        self.chk_abs.setChecked(spec.get("make_abs", True))
+        self.chk_si.setChecked(spec.get("si", True))
+        self.txt_expr.setPlainText(spec.get("expr", ""))
+        self.regenerate()
+        i = self.cmb_ref.findData(spec.get("ref", "auto"))
+        self.cmb_ref.setCurrentIndex(max(0, i))
+        self.regenerate()

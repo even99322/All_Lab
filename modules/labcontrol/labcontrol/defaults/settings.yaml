@@ -1,0 +1,141 @@
+# ============================================================================
+# Lab Control 設定檔（LAB/settings.yaml）
+# 程式裡所有「可以調的值」都在這裡；改完重新開啟 Lab Control 即生效。
+# 單位：數值若寫成字串可帶單位（例如 "0.5 mA/s"、"5.0198 GHz"）；純數字一律 SI。
+# 新版本加入的設定會自動帶預設值，不會覆寫你改過的值。
+# ============================================================================
+settings_version: 1
+
+app:
+  theme: dark                  # 外觀：light（淺色）| dark（深色）| system（跟隨 Windows 設定）；工具列 🌙 / ☀ 可切換
+  simulate: false              # true：開啟時使用模擬儀器（沒接硬體也能操作）
+  sim_time_scale: 0.02         # 模擬模式下斜坡等待時間倍率（0.02 = 快 50 倍）
+  instruments_file: instruments.yaml   # 儀器清單檔名（相對於 LAB 資料夾）
+  default_template: 02_2d  # 編輯器開啟時載入的範本（templates/ 內檔名，不含 .scheme.yaml）
+
+# ---- 存檔 --------------------------------------------------------------------
+data:
+  root: C:/Users/QEL/Desktop/VNA_data     # 資料根目錄
+  folder_pattern: "{yyyy}/{mm}/Data_{mmdd}"   # 可用 {yyyy} {mm} {dd} {mmdd} {yyyymmdd}
+  split_pattern: "{stem}_{index:03d}_{label}" # 分檔檔名：stem=檔名、index=外圈序號、label=外圈值（如 52mA）
+  collision: underscore        # 同名檔案：underscore（_2）| paren（(2)）| overwrite
+  raw: true                    # 逐點寫入原生 HDF5 到當日資料夾 _raw/
+  raw_folder: _raw
+  default_formats: [labber]    # 新 Data 方塊預設的存檔格式：labber | hdf5
+
+labber:
+  python38: 'C:\LocalEnvs\Labber環境_venv\Scripts\python.exe'   # 執行 Labber API 的 Python 3.8
+  user: QEL
+  project: auto                # auto = MM/MMDD
+  tags: [VNA Sweep]
+  timeout_s: 600
+
+# ---- 量測執行預設值（實驗 / 方案沒寫時使用） -----------------------------------
+run_defaults:
+  approach_rate: 0.5 mA/s      # 移動到起點的斜坡速率
+  park: start                  # 結束後：start（回起點）| none（停在原地）| 數值
+  park_rate: 1 mA/s
+  settle_first: 0 s
+  retries: 1                   # 量測失敗自動重試次數
+  on_error: pause              # 重試仍失敗：pause | stop
+  max_shots: 400               # 手動模式每點最多暫存幾筆
+  loop_interval: 0.01 s
+  stall_warn_s: 120            # 量測超過這麼久沒有任何進度 → 存程式狀態到 LAB/logs/stall_*.txt（0 = 關閉）
+
+# ---- 量測方案編輯器 -------------------------------------------------------------
+editor:
+  new_blocks:                  # 從方塊庫新增方塊時的初始值
+    dc_set: {mode: sweep, start: 100, stop: 150, step: 0.5, unit: mA, settle: 0.1}
+    param_set: {mode: fixed, value: 0}
+    wait: {seconds: 1}
+  channels:
+    only_connected: true       # 儀器參數列表預設只顯示已連線儀器的參數
+  dc_block_title: DC set       # 電源方塊標題（instruments.yaml 的 block_title 可逐台覆寫）
+  axis_name_suffix: {A: " 電流", V: " 電壓"}   # 預設資料軸名稱 = 目標短名 + 後綴（依單位，例如「磁鐵 A 電流」）
+  colors:                      # 流程圖方塊顏色；量測方塊依 driver 的 MEASURE_KIND（vna、shfqc…）
+    dc: "#1c6dd0"
+    param: "#0c8a7d"
+    save: "#2b8a3e"
+    wait: "#868e96"
+    measure: "#d9480f"         # 沒有個別設定的量測種類
+    vna: "#d9480f"
+    shfqc: "#7048e8"
+  units:
+    choices:                   # 單位下拉選單（依 SI 基本單位分組）
+      A: [mA, A, uA]
+      V: [V, mV]
+      Hz: [GHz, MHz, kHz, Hz]
+      dBm: [dBm]
+      s: [us, ms, s]
+    decimals: {GHz: 6, MHz: 4, kHz: 3, Hz: 0, mA: 4, A: 7, uA: 1, V: 6, mV: 3, dBm: 2, s: 3, ms: 2, us: 1}
+
+# ---- 即時監控 / 儀器參數列表 -----------------------------------------------------
+monitor:
+  auto_poll: true              # 儀器參數列表自動讀取已連線電源的目前值
+  poll_interval_s: 2
+  trace_display: db            # 即時曲線預設顯示：db | phase | real | imag
+  colormap: viridis            # 2D 影像色表（pyqtgraph colormap 名稱）
+
+# ---- 儀器伺服器 -------------------------------------------------------------------
+server:
+  visa_backend: ""             # 空白 = 系統 VISA（NI-VISA / Keysight IO）；"@py" = pyvisa-py
+  scan_include_serial: false   # 掃描 VISA 資源時是否對序列埠（ASRL）送 *IDN?
+  scan_timeout_ms: 1500
+  traffic_log_lines: 2000      # 儀器控制視窗保留的收發紀錄行數
+  auto_connect: []             # 開啟 Lab Control 時自動（唯讀）連線的儀器名稱
+  new_source:                  # 新增電源時預填的安全設定（SI）
+    limits: [-0.2, 0.2]
+    ramp_rate: 5.0e-4
+    max_jump: 5.0e-5
+  default_timeout_ms: 10000
+
+# ---- 遠端量測（Lab Control Hub）----------------------------------------------------------
+# NAS 上跑 Lab Control Hub（網站）：監控所有 Lab Control、轉送指令與資料。量測電腦開「量測節點」，
+# 其他電腦透過 Hub 在節點上量測。每台電腦只需要連得到 Hub 的網址（http://NAS:8765）。
+remote:
+  hub_urls: [192.168.50.2, 100.114.33.20]   # Lab Control Hub（NAS 上的網站）：實驗室內網、VPN，依序嘗試；可寫 http://主機:埠
+  port: 8765                   # 網址沒寫埠時用這個
+  token: "Labqel330"           # Hub 的存取 token（與 NAS docker-compose.yml 的 LABHUB_TOKEN 相同）
+  timeout_s: 15                # 一般 Hub 請求的逾時（VPN 較慢）
+  heartbeat_s: 2               # 回報狀態的間隔（節點與這台電腦）
+  live_interval_s: 0.5         # 節點上傳即時資料（進度、曲線）的間隔
+  command_wait_s: 20           # 節點等待指令的 long-poll 時間（有指令會立即收到）
+  reply_timeout_s: 20          # 等待節點回覆的上限
+  auto_update_nodes: true      # 這台版本比節點新時，自動請節點更新
+  node_enabled: false          # true：開啟 Lab Control 就以量測節點上線（量測電腦設 true；也可用 python main.py --node）
+  upload_results: true         # 節點：量測結束後把資料檔上傳到 Hub（數據中轉）
+  download_results: true       # 控制端：自己從遠端開始的量測，結束後自動從 Hub 下載資料檔
+  download_root: ""            # 下載到哪裡（空白 = data.root）；保留節點上的資料夾結構
+  update:
+    method: hub                # hub：從 Hub 下載新版並重新啟動（預設）| labapp：呼叫 Lab APP（命令列參數未驗證）| auto
+    app_name: LabControl       # Lab APP 上的程式名稱
+    labapp: ""                 # Lab APP 執行檔（空白 = 自動：%LOCALAPPDATA%\LabApps\LabApp\LabApp.exe）
+    command: ["{labapp}", "--app", "{app}", "--version", "v{version}"]   # 安裝並啟動指定版本
+  node:
+    name: ""                   # 節點名稱（空白 = 電腦名稱）
+    allow_remote_run: true     # 允許遠端開始量測
+    allow_remote_set: true     # 允許遠端設定儀器
+    allow_update: true         # 允許遠端要求更新（量測中會等量測結束）
+    allowed_users: []          # 空白 = 所有有 Hub token 的人；例：["alice@PC-01"]（停止 / 暫停不受限制）
+
+# ---- 規則與估時 ----------------------------------------------------------------
+rules:
+  exclusive_measure_kinds: [[vna, shfqc]]   # 同一個方案不能同時使用的量測種類
+  max_points_per_axis: 100000
+
+estimate:                      # 預估時間用（每點量測時間 = 點數 / IF BW × 平均 × overhead + fixed）
+  vna: {overhead: 1.1, fixed_s: 0.03}
+  shfqc: {overhead: 1.1, fixed_s: 0.05}
+  default_s: 0.1
+
+# ---- Hooks 預設參數 -------------------------------------------------------------
+hooks:
+  dip_shape_pause: {prominence_db: 3, transitions: [[1, 2]]}
+
+# ---- 其他前端 -------------------------------------------------------------------
+web:
+  host: 0.0.0.0
+  port: 5000
+  poll_interval_s: 1.5
+logview:
+  command: []                  # 例：["C:/.../python.exe", "C:/.../logview.py", "{path}"]

@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "labcontrol"
+version = "0.0.12"
+description = "Lab Control：CCU QEL 實驗室儀器控制與量測框架"
+requires-python = ">=3.10"
+dependencies = ["numpy", "h5py", "pyyaml"]
+
+[project.optional-dependencies]
+visa = ["pyvisa"]
+qt = ["PyQt6", "pyqtgraph"]
+web = ["flask"]
+analysis = ["scipy"]
+dev = ["pytest"]
+
+[project.scripts]
+labcontrol = "labcontrol.apps.cli:main"
+lab-control = "labcontrol.app:main"
+
+# 外掛套件可在自己的 pyproject 宣告：
+# [project.entry-points."labcontrol.plugins"]
+# my_lab = "my_lab_plugins"
+
+[tool.setuptools.packages.find]
+include = ["labcontrol*", "labhub*", "labmonitor*"]
+
+[tool.setuptools.package-data]
+"labcontrol.apps.web" = ["templates/*.html"]
+"labcontrol" = ["defaults/*.yaml", "defaults/*/*"]
+"labhub" = ["static/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

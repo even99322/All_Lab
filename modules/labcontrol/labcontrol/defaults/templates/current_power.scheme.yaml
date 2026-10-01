@@ -1,0 +1,42 @@
+# 範本方案：編輯器「範本」選單列出 LAB/templates/ 內所有 *.scheme.yaml。
+# 可直接修改或另存新檔；run: 沒寫的欄位使用 settings.yaml run_defaults。
+scheme: 1
+name: 電流 × VNA 功率
+blocks:
+- kind: set
+  id: 7433dc3f
+  target: magnet_A
+  mode: sweep
+  start: 50
+  stop: 100
+  step: 1
+  unit: mA
+  settle: 0.1
+  children:
+  - kind: set
+    id: 3671bad1
+    target: VNA1.power
+    mode: sweep
+    start: 10
+    stop: -20
+    step: 1
+    unit: dBm
+    children:
+    - kind: measure
+      id: 88ea3497
+      instrument: VNA1
+      traces:
+      - S21
+      settings:
+        start_freq: 5.0198 GHz
+        stop_freq: 5.0298 GHz
+        points: 501
+        power: -10 dBm
+        if_bw: 10 kHz
+        averages: 1
+  - kind: save
+    id: b1d0b3d9
+    file_name: I-P.hdf5
+    formats:
+    - labber
+    collision: underscore

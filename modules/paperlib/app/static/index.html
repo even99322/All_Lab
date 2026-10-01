@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>LAB-QEL論文庫</title>
+  <meta name="theme-color" content="#1f3a4d">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="QEL論文庫">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/static/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app"><div class="boot">載入中…</div></div>
+  <div id="toasts" aria-live="polite"></div>
+  <script>
+    // 在畫面出現前套用淺色／深色設定，避免閃一下
+    try { var t = localStorage.getItem('pl-theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      if (localStorage.getItem('pl-pdfdark') === '1') document.documentElement.dataset.pdf = 'dark'; } catch (e) {}
+  </script>
+  <script>
+    // 程式載入失敗時顯示原因，不要一直停在「載入中…」
+    (function () {
+      function show(msg) {
+        var b = document.querySelector('#app .boot'); if (!b) return;
+        b.innerHTML = '';
+        var t = document.createElement('div'); t.textContent = '網站程式載入失敗，請按 Ctrl+F5 重新整理；仍然不行請把下面的訊息傳給管理員。';
+        var m = document.createElement('pre'); m.textContent = msg; m.style.cssText = 'white-space:pre-wrap;font-size:12px;opacity:.8;margin:12px auto;max-width:640px;text-align:left';
+        var r = document.createElement('button'); r.textContent = '重新整理'; r.onclick = function () { location.reload(); };
+        b.append(t, m, r);
+      }
+      window.addEventListener('error', function (e) { show((e.message || '錯誤') + (e.filename ? '\n' + e.filename + ':' + e.lineno : '')); });
+      window.addEventListener('unhandledrejection', function (e) { if (document.querySelector('#app .boot')) show(String(e.reason && (e.reason.stack || e.reason.message) || e.reason)); });
+      setTimeout(function () { if (document.querySelector('#app .boot') && !document.querySelector('#app .boot pre')) show('等了 20 秒還沒載入完成（可能是網路或伺服器沒有回應）。'); }, 20000);
+    })();
+  </script>
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

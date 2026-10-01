@@ -1,0 +1,35 @@
+# 範本方案：編輯器「範本」選單列出 LAB/templates/ 內所有 *.scheme.yaml。
+# 可直接修改或另存新檔；run: 沒寫的欄位使用 settings.yaml run_defaults。
+# 2D：設定電流（兩台一起）→ 量測 VNA，掃完存一個檔。
+scheme: 1
+name: 2D（設定電流 → 量測 VNA）
+blocks:
+- kind: set
+  id: a2set001
+  target: magnet_A
+  mode: sweep
+  start: 100
+  stop: 150
+  step: 0.5
+  unit: mA
+  settle: 0.1
+  axis_name: Average Current
+  children:
+  - kind: measure
+    id: a2meas01
+    instrument: VNA1
+    traces:
+    - S21
+    settings:
+      start_freq: 5.0198 GHz
+      stop_freq: 5.0298 GHz
+      points: 501
+      power: -10 dBm
+      if_bw: 10 kHz
+      averages: 1
+- kind: save
+  id: a2save01
+  file_name: 2D.hdf5
+  formats:
+  - labber
+  collision: underscore

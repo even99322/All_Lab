@@ -1,0 +1,107 @@
+# ============================================================================
+# Lab Control 儀器清單（LAB/instruments.yaml）—— 全實驗室唯一的一份
+#
+#   * 單位一律 SI（A、V、Hz、s）；字串可帶單位（"5 GHz"、"0.5 mA/s"）。
+#   * 每台儀器的「安全限制、參數上下限、預設值、SCPI 指令」都可以在這裡改，不必改程式。
+#   * 可用的 driver：在命令列執行  python -m labcontrol list
+#   * 新增儀器：寫一個 driver 放到 LAB/plugins/（見 docs/DRIVER_GUIDE.md），再在這裡加一段。
+#   * 改完重新開啟 Lab Control 生效。
+# ============================================================================
+plugin_paths: []           # 額外的 plugin 資料夾（LAB/plugins 一定會載入）
+
+# ---- 共用的 Yokogawa 安全設定（YAML anchor，下面每台用 <<: *yoko 引用） ----------
+_yoko_defaults: &yoko
+  source:
+    limits: [-0.2, 0.2]      # A，軟體上下限
+    ramp_rate: 5.0e-4        # A/s，自動斜坡速率（0.5 mA/s）
+    max_jump: 5.0e-5         # A，單次直接跳動上限；超過自動走斜坡
+    resolution: 1.0e-6       # A，200 mA 檔最小步進（interleaved_pair 用）
+  # on_connect:              # 連線時要確保的狀態（只有和目前不同才會寫入；不寫 = 不動儀器）
+  #   function: CURR
+  #   range: 0.2             # A；輸出開啟時不會切換量程（感性負載保護）
+  #   limiter: 5             # V（電流源時為電壓限制器）
+  # verify_writes: false     # true：每次設定後讀 :SYST:ERR? 確認
+  # scpi: {level_w: ":SOUR:LEV:FIX {value}"}    # 逐條覆寫 SCPI（見 driver 的 SCPI 表）
+  sim:                       # 模擬模式才用
+    initial_level: 0.1586    # 模擬時的起始電流（A）
+
+instruments:
+  DC1:
+    driver: yokogawa.gs200
+    label: DC1 (90ZC38697)
+    address: USB0::0x0B21::0x0039::90ZC38697::0::INSTR
+    <<: *yoko
+  DC2:
+    driver: yokogawa.gs200
+    label: DC2 (90ZC38696)
+    address: USB0::0x0B21::0x0039::90ZC38696::0::INSTR
+    <<: *yoko
+  DC3:
+    driver: yokogawa.gs200
+    label: DC3 (9017D5818)
+    address: USB0::0x0B21::0x0039::9017D5818::0::INSTR
+    <<: *yoko
+  DC4:
+    driver: yokogawa.gs200
+    label: DC4 (9017D5816)
+    address: USB0::0x0B21::0x0039::9017D5816::0::INSTR
+    <<: *yoko
+
+  VNA1:
+    driver: rs.zna
+    label: VNA-1 (192.168.1.11)
+    address: TCPIP0::192.168.1.11::INSTR
+    timeout_ms: 10000
+    opc_timeout_s: 120         # 單次量測最長等待
+    channel: 1                 # ZNA 的 channel 號碼
+    clear_average_each_point: true   # 每一點重新平均（:SENS:AVER:CLE）
+    data_format: ascii         # ascii | real64（大量點數時較快）
+    labber_name: VNA           # Labber「Instrument config」群組名，維持與舊檔相同
+    # trace_map: {S21: Trc2}   # 量測參數 → ZNA 上的 trace 名稱（不寫 = 自動找）
+    # parameters:              # 覆寫任何參數欄位：label / limits / default / measure_setting / sweepable …
+    #   power: {limits: [-60, 0], default: -20 dBm}
+    #   if_bw: {default: 1 kHz}
+    sim:                       # 模擬：共振頻率隨兩組電磁鐵電流移動
+      coupling:
+        magnet_A: {I0: 0.075, df_dI: -8.0e7}   # Hz/A
+        magnet_B: {I0: 0.125, df_dI: 1.0e8}
+  VNA2:
+    driver: rs.zna
+    label: VNA-2 (192.168.1.12)
+    address: TCPIP0::192.168.1.12::INSTR
+    timeout_ms: 10000
+    labber_name: VNA
+
+  SHFQC1:
+    driver: zi.shfqc           # 實機 driver 尚未實作；模擬模式可用
+    label: SHFQC
+    labber_name: SHFQC
+    sim:
+      coupling:
+        magnet_A: {I0: 0.075, df_dI: -8.0e7}
+        magnet_B: {I0: 0.125, df_dI: 1.0e8}
+
+  # ---- 電磁鐵組：一對電供（交錯步進）控制一組電磁鐵 ----------------------------
+  # 量測方案編輯器的「DC set」方塊會列出 group: magnet 的項目
+  magnet_A:
+    driver: virtual.interleaved_pair
+    group: magnet
+    label: 磁鐵 A（DC3+DC4）
+    sources: [DC3, DC4]        # 第一台先前進
+    display_unit: mA
+    source:
+      limits: [-0.2, 0.2]
+      ramp_rate: 5.0e-4
+      max_jump: 5.0e-5
+      resolution: 1.0e-6
+  magnet_B:
+    driver: virtual.interleaved_pair
+    group: magnet
+    label: 磁鐵 B（DC1+DC2）
+    sources: [DC1, DC2]
+    display_unit: mA
+    source:
+      limits: [-0.2, 0.2]
+      ramp_rate: 5.0e-4
+      max_jump: 5.0e-5
+      resolution: 1.0e-6

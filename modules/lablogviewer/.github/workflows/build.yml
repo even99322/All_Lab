@@ -1,0 +1,138 @@
+# LabLogViewer release builds: universal macOS disk image + Windows installer.
+# Start by hand (Actions > Build LabLogViewer > Run workflow) or by pushing a tag "v*".
+# Every build checks itself with "LabLogViewer --self-test" on its own platform.
+name: Build LabLogViewer
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+env:
+  PYTHON_VERSION: "3.12"
+  QT_QPA_PLATFORM: offscreen          # build machines have no screen session for the self-test
+
+jobs:
+  mac:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install pinned packages
+        run: python -m pip install -r packaging/requirements-build.txt
+      - name: Build
+        run: |
+          python packaging/prepare_build.py
+          python packaging/make_icons.py
+          pyinstaller --noconfirm --log-level WARN packaging/lablogviewer.spec
+      - name: Self-test (${{ matrix.arch }})
+        run: |
+          export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME/Documents"
+          test "$(uname -m)" = "${{ matrix.arch }}"
+          dist/LabLogViewer.app/Contents/MacOS/LabLogViewer --self-test
+      - name: Pack
+        run: tar -czf LabLogViewer-${{ matrix.arch }}.tgz -C dist LabLogViewer.app
+      - uses: actions/upload-artifact@v5
+        with:
+          name: mac-${{ matrix.arch }}
+          path: LabLogViewer-${{ matrix.arch }}.tgz
+          retention-days: 3
+      - name: Disk image for this chip only
+        run: |
+          VERSION=$(python3 -c "import re;print(re.search(r'__version__ = \"(.+)\"', open('app/__init__.py').read()).group(1))")
+          NAME=$([ "${{ matrix.arch }}" = "arm64" ] && echo "Apple-silicon" || echo "Intel")
+          packaging/make_dmg.sh dist/LabLogViewer.app "LabLogViewer-macOS-$NAME.dmg"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: LabLogViewer-macOS-${{ matrix.arch }}-dmg
+          path: LabLogViewer-macOS-*.dmg
+          retention-days: 30
+
+  universal:
+    name: macOS universal disk image
+    needs: mac
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: mac-*
+          merge-multiple: true
+      - name: Merge Intel and Apple silicon
+        run: |
+          mkdir arm64 x86_64
+          tar -xzf LabLogViewer-arm64.tgz -C arm64
+          tar -xzf LabLogViewer-x86_64.tgz -C x86_64
+          python3 packaging/merge_universal.py arm64/LabLogViewer.app x86_64/LabLogViewer.app LabLogViewer.app
+      - name: Self-test (Apple silicon, and Intel through Rosetta when available)
+        run: |
+          export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME/Documents"
+          LabLogViewer.app/Contents/MacOS/LabLogViewer --self-test
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            arch -x86_64 LabLogViewer.app/Contents/MacOS/LabLogViewer --self-test
+          else
+            echo "Rosetta not installed on this machine: the Intel half was tested in the x86_64 job."
+          fi
+      - name: Disk image
+        run: |
+          VERSION=$(python3 -c "import re;print(re.search(r'__version__ = \"(.+)\"', open('app/__init__.py').read()).group(1))")
+          packaging/make_dmg.sh LabLogViewer.app "LabLogViewer-macOS-universal.dmg"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: LabLogViewer-macOS-universal
+          path: LabLogViewer-macOS-universal.dmg
+          retention-days: 30
+
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install pinned packages
+        run: python -m pip install -r packaging/requirements-build.txt
+      - name: Build
+        run: |
+          python packaging/prepare_build.py
+          python packaging/make_icons.py
+          pyinstaller --noconfirm --log-level WARN packaging/lablogviewer.spec
+      - name: Self-test (Windows)
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: windows          # the real Windows display, as users see it
+        run: |
+          export USERPROFILE="$RUNNER_TEMP\\home" HOME="$RUNNER_TEMP/home"
+          mkdir -p "$RUNNER_TEMP/home/Documents"
+          export APPDATA="$RUNNER_TEMP\\home\\AppData\\Roaming" LOCALAPPDATA="$RUNNER_TEMP\\home\\AppData\\Local"
+          export LABLOGVIEWER_SELF_TEST_REPORT="$RUNNER_TEMP/self_test.txt"
+          status=0
+          dist/LabLogViewer/LabLogViewer.exe --self-test || status=$?
+          cat "$RUNNER_TEMP/self_test.txt"
+          exit $status
+      - name: Installer
+        shell: pwsh
+        run: |
+          $version = (Select-String -Path app/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+            choco install innosetup -y --no-progress
+            $env:PATH += ";C:\Program Files (x86)\Inno Setup 6"
+          }
+          iscc "/DAppVersion=$version" packaging/installer.iss
+      - uses: actions/upload-artifact@v5
+        with:
+          name: LabLogViewer-Windows-installer
+          path: dist/LabLogViewer-Windows-setup.exe
+          retention-days: 30

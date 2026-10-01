@@ -1,0 +1,34 @@
+# 範本方案：編輯器「範本」選單列出 LAB/templates/ 內所有 *.scheme.yaml。
+# 可直接修改或另存新檔；run: 沒寫的欄位使用 settings.yaml run_defaults。
+scheme: 1
+name: 單磁鐵電流掃描
+blocks:
+- kind: set
+  id: e6f0fcd8
+  target: magnet_A
+  mode: sweep
+  start: 100
+  stop: 150
+  step: 0.5
+  unit: mA
+  settle: 0.1
+  axis_name: Average Current
+  children:
+  - kind: measure
+    id: ee7ce90d
+    instrument: VNA1
+    traces:
+    - S21
+    settings:
+      start_freq: 5.0198 GHz
+      stop_freq: 5.0298 GHz
+      points: 501
+      power: -10 dBm
+      if_bw: 10 kHz
+      averages: 1
+- kind: save
+  id: e7535bd5
+  file_name: single.hdf5
+  formats:
+  - labber
+  collision: underscore

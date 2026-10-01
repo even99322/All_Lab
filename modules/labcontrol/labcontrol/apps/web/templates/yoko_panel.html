@@ -1,0 +1,824 @@
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Yokogawa 控制面板</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+
+    <style>
+        body { background-color: #2b2b2b; color: #fff; user-select: none; -webkit-user-select: none; }
+        
+        #main-groups { min-height: 50vh; padding-bottom: 50px; }
+        
+        .dc-group {
+            padding: 12px; margin-bottom: 25px; 
+            border: 2px dashed rgba(255, 255, 255, 0.15);
+            border-radius: 16px; min-height: 80px; transition: all 0.3s ease;
+            display: flex; align-items: stretch; gap: 10px;
+        }
+        .panel-stack { flex: 1 1 auto; min-width: 0; }
+        
+        .dc-group.merged {
+            border: 3px solid #ffc107; background-color: rgba(255, 193, 7, 0.08);
+            box-shadow: inset 0 0 15px rgba(255, 193, 7, 0.2);
+        }
+        
+        .yoko-panel {
+            background-color: #cfd8dc; border-radius: 12px;
+            border: 2px solid #b0bec5; box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            color: #333; margin-bottom: 12px; position: relative;
+        }
+        .yoko-panel:last-child { margin-bottom: 0; }
+        
+        .sortable-ghost { opacity: 0.3; background-color: #e0e0e0; }
+        .sortable-drag { box-shadow: 0 10px 25px rgba(0,0,0,0.8); cursor: grabbing !important; }
+        
+        .drag-handle { 
+            color: #555; font-size: 1.8rem; margin-right: 12px; cursor: grab;
+            padding: 5px 12px; background: rgba(0,0,0,0.08); border-radius: 8px; 
+            touch-action: none;
+        }
+        .drag-handle:active { cursor: grabbing; background: rgba(0,0,0,0.2); }
+
+        /* === 主從架構視覺設計 === */
+        .dc-group.merged .yoko-panel { margin-bottom: 0; border-radius: 0; border-bottom: none; }
+        .dc-group.merged .yoko-panel:first-child { border-top-left-radius: 12px; border-top-right-radius: 12px; z-index: 2; border-bottom: 1px solid #b0bec5; }
+        .dc-group.merged .yoko-panel:nth-child(n+2) { background-color: #90a4ae; border-top: 1px dashed #78909c; }
+        .dc-group.merged .yoko-panel:nth-child(n+2) .yoko-screen { display: none; }
+        .dc-group.merged .yoko-panel:nth-child(n+2) .mb-2 { margin-bottom: 0 !important; }
+        .dc-group.merged .yoko-panel:last-child {
+            border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; border-bottom: 2px solid #b0bec5; margin-bottom: 0;
+        }
+
+        /* === 螢幕與按鈕 === */
+        .yoko-screen {
+            background-color: #000; border-radius: 8px; padding: 15px 10px; 
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; min-height: 120px;
+        }
+        .digit-col { display: flex; flex-direction: column; align-items: center; justify-content: center; margin: 0 4px; }
+        .digit-btn {
+            background-color: #b3c0d1; border: 1px solid #8a9ba8; border-radius: 4px;
+            width: 36px; height: 28px; font-size: 12px; color: #333;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; touch-action: none;
+        }
+        .digit-btn:active { background-color: #8a9ba8; }
+        .digit-val, .decimal-point {
+            font-family: 'Courier New', Courier, monospace; font-size: 3rem; font-weight: bold; color: #00ffcc; text-shadow: 0 0 5px #00ffcc; margin: 5px 0; line-height: 1;
+        }
+        .unit-text { font-family: 'Courier New', monospace; font-size: 1.5rem; color: #00ffcc; align-self: flex-end; margin-bottom: 10px; margin-left: 8px; }
+
+        /* === 左側記憶列 === */
+        .mem-rail { display: flex; flex-direction: column; justify-content: center; gap: 8px; flex: 0 0 auto; }
+        .mem-btn {
+            width: 82px; padding: 6px 4px; border-radius: 10px; text-align: center;
+            background: #37474f; border: 2px solid #546e7a; color: #b0bec5;
+            cursor: pointer; touch-action: none; transition: all .15s ease;
+        }
+        .mem-btn.has-val { border-color: #00ffcc; color: #fff; background: #263238; }
+        .mem-btn:active { transform: scale(0.94); background: #00ffcc; color: #000; }
+        .mem-btn.flash { background: #ffc107; color: #000; border-color: #fff; }
+        .mem-label { font-size: .95rem; font-weight: bold; line-height: 1; }
+        .mem-val { font-family: 'Courier New', monospace; font-size: .78rem; color: #00ffcc; line-height: 1.3; }
+        .mem-btn.has-val .mem-val { color: #00ffcc; }
+        .mem-hint { font-size: .62rem; color: #78909c; text-align: center; width: 82px; line-height: 1.1; }
+        .mem-hint.ramping { color: #ffc107; font-weight: bold; font-size: .66rem; white-space: pre-line; }
+        .mem-btn.ramp-src { border-color: #ffc107; box-shadow: 0 0 10px rgba(255,193,7,.6); }
+
+        /* === 隨動機台的小螢幕（合併時顯示）=== */
+        .mini-readout {
+            display: none; font-family: 'Courier New', monospace; font-weight: bold;
+            background: #000; color: #00ffcc; text-shadow: 0 0 4px #00ffcc;
+            padding: 3px 12px; border-radius: 6px; margin-right: 10px;
+            font-size: 1.25rem; line-height: 1.2; border: 1px solid #37474f;
+        }
+        .dc-group.merged .yoko-panel:nth-child(n+2) .mini-readout { display: inline-block; }
+        .mini-readout.off-sync { color: #ffc107; text-shadow: 0 0 4px #ffc107; }
+
+        /* === 右側微調列 === */
+        .fine-rail { display: none; flex-direction: column; justify-content: center; align-items: center; gap: 6px; flex: 0 0 auto; }
+        .fine-btn {
+            width: 62px; height: 54px; border-radius: 10px;
+            background: #1e88e5; border: 2px solid #64b5f6; color: #fff;
+            font-size: 1.8rem; font-weight: bold; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; touch-action: none;
+        }
+        .fine-btn:active { background: #64b5f6; transform: scale(0.94); }
+        .fine-tip { font-size: .68rem; color: #90a4ae; text-align: center; width: 68px; line-height: 1.2; }
+        .fine-delta { font-family: 'Courier New', monospace; font-size: .95rem; font-weight: bold; color: #ffc107; }
+
+        /* === 對話框 === */
+        .modal-mask {
+            position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 9999;
+            display: none; align-items: center; justify-content: center; padding: 20px;
+        }
+        .modal-box {
+            background: #37474f; border: 2px solid #ffc107; border-radius: 14px;
+            padding: 20px; max-width: 460px; width: 100%; box-shadow: 0 10px 40px rgba(0,0,0,.8);
+        }
+        .modal-box .row-line { display: flex; justify-content: space-between; padding: 4px 0; font-size: 1rem; }
+        .modal-box .btn { margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container mt-4 mb-5">
+        <h3 class="mb-2 text-center fw-bold text-light">Yokogawa 控制總機</h3>
+        <p class="text-center text-warning mb-4 small" id="mode-hint">💡 拖曳手柄：丟入框內【合併同步】，丟入空隙【拆解排序】</p>
+
+        <div class="row justify-content-center" id="board-container">
+            {% if not dcs %}
+            <div class="col-md-10 text-center text-muted mt-4 mb-5"><h5>請在下方勾選裝置並點擊刷新連線。</h5></div>
+            {% endif %}
+
+            <div id="main-groups" class="col-md-10 col-lg-8 d-flex flex-column align-items-center w-100">
+                {% for dc in dcs %}
+                <div class="dc-group w-100" style="max-width: 900px;" id="group_{{ dc.id }}">
+                  <div class="panel-stack">
+                    <div class="yoko-panel p-3" id="panel_{{ dc.id }}" data-id="{{ dc.id }}">
+                        <div class="d-flex justify-content-between align-items-center mb-2 px-2">
+                            <div class="d-flex align-items-center">
+                                <span class="drag-handle">⠿</span>
+                                <h4 class="mb-0 fw-bold">{{ dc.name }} <span class="fs-6 text-muted">({{ dc.model }})</span></h4>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <span class="mini-readout" id="mini_{{ dc.id }}">0.000</span>
+                                <span class="badge bg-warning text-dark me-3 sync-badge" style="display: none;">🔗 隨動模式</span>
+                                <span class="badge bg-dark">Range: {{ dc.range_a }} A</span>
+                            </div>
+                        </div>
+                        
+                        <div class="yoko-screen">
+                            <div class="digit-col me-3"><div id="sign_{{ dc.id }}" class="digit-val m-0">+</div></div>
+
+                            {% if dc.range_a <= 0.2 %}
+                                {% for step in [100000, 10000, 1000] %}
+                                <div class="digit-col">
+                                    <div class="digit-btn" {% if step > 10000 %}style="visibility: hidden;"{% endif %} 
+                                         onmousedown="startAdj('{{ dc.id }}', {{ step }}, event)" onmouseup="stopAdj('{{ dc.id }}')" onmouseleave="stopAdj('{{ dc.id }}')" ontouchstart="startAdj('{{ dc.id }}', {{ step }}, event)" ontouchend="stopAdj('{{ dc.id }}')" ontouchcancel="stopAdj('{{ dc.id }}')">▲</div>
+                                    <div id="digit_{{ dc.id }}_{{ step }}" class="digit-val">0</div>
+                                    <div class="digit-btn" {% if step > 10000 %}style="visibility: hidden;"{% endif %} 
+                                         onmousedown="startAdj('{{ dc.id }}', -{{ step }}, event)" onmouseup="stopAdj('{{ dc.id }}')" onmouseleave="stopAdj('{{ dc.id }}')" ontouchstart="startAdj('{{ dc.id }}', -{{ step }}, event)" ontouchend="stopAdj('{{ dc.id }}')" ontouchcancel="stopAdj('{{ dc.id }}')">▼</div>
+                                </div>
+                                {% endfor %}
+                                <div class="decimal-point">.</div>
+                                {% for step in [100, 10, 1] %}
+                                <div class="digit-col">
+                                    <div class="digit-btn" onmousedown="startAdj('{{ dc.id }}', {{ step }}, event)" onmouseup="stopAdj('{{ dc.id }}')" onmouseleave="stopAdj('{{ dc.id }}')" ontouchstart="startAdj('{{ dc.id }}', {{ step }}, event)" ontouchend="stopAdj('{{ dc.id }}')" ontouchcancel="stopAdj('{{ dc.id }}')">▲</div>
+                                    <div id="digit_{{ dc.id }}_{{ step }}" class="digit-val">0</div>
+                                    <div class="digit-btn" onmousedown="startAdj('{{ dc.id }}', -{{ step }}, event)" onmouseup="stopAdj('{{ dc.id }}')" onmouseleave="stopAdj('{{ dc.id }}')" ontouchstart="startAdj('{{ dc.id }}', -{{ step }}, event)" ontouchend="stopAdj('{{ dc.id }}')" ontouchcancel="stopAdj('{{ dc.id }}')">▼</div>
+                                </div>
+                                {% endfor %}
+                                <div class="unit-text">mA</div>
+                            {% else %}
+                                <div class="digit-col"><div class="digit-btn" style="visibility: hidden;">▲</div><div id="digit_{{ dc.id }}_1000000" class="digit-val">0</div><div class="digit-btn" style="visibility: hidden;">▼</div></div>
+                                <div class="decimal-point">.</div>
+                                {% for step in [100000, 10000, 1000, 100, 10] %}
+                                <div class="digit-col">
+                                    <div class="digit-btn" {% if step > 10000 %}style="visibility: hidden;"{% endif %} 
+                                         onmousedown="startAdj('{{ dc.id }}', {{ step }}, event)" onmouseup="stopAdj('{{ dc.id }}')" onmouseleave="stopAdj('{{ dc.id }}')" ontouchstart="startAdj('{{ dc.id }}', {{ step }}, event)" ontouchend="stopAdj('{{ dc.id }}')" ontouchcancel="stopAdj('{{ dc.id }}')">▲</div>
+                                    <div id="digit_{{ dc.id }}_{{ step }}" class="digit-val">0</div>
+                                    <div class="digit-btn" {% if step > 10000 %}style="visibility: hidden;"{% endif %} 
+                                         onmousedown="startAdj('{{ dc.id }}', -{{ step }}, event)" onmouseup="stopAdj('{{ dc.id }}')" onmouseleave="stopAdj('{{ dc.id }}')" ontouchstart="startAdj('{{ dc.id }}', -{{ step }}, event)" ontouchend="stopAdj('{{ dc.id }}')" ontouchcancel="stopAdj('{{ dc.id }}')">▼</div>
+                                </div>
+                                {% endfor %}
+                                <div class="unit-text">A</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                  </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div class="row justify-content-center mt-2">
+            <div class="col-md-10 col-lg-8">
+                <div class="conn-manager p-3 shadow" style="background-color: #424242; border-radius: 12px; border-left: 5px solid #00ffcc;">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+                        <h5 class="mb-0 fw-bold me-3" style="color: #00ffcc;">🔌 連線與設定</h5>
+                        <div class="d-flex align-items-center flex-wrap">
+                            <div class="form-check form-switch me-3">
+                                <input class="form-check-input" type="checkbox" id="allowMergeToggle" checked onchange="toggleMergeMode(this.checked)">
+                                <label class="form-check-label text-info fw-bold" for="allowMergeToggle">允許合併面板</label>
+                            </div>
+                            <div class="form-check form-switch me-3">
+                                <input class="form-check-input" type="checkbox" id="rampToggle" checked onchange="setRampEnabled(this.checked)">
+                                <label class="form-check-label fw-bold" style="color:#69f0ae" for="rampToggle">記憶切換限速</label>
+                            </div>
+                            <div class="d-flex align-items-center me-3">
+                                <input type="number" id="rampRate" value="0.05" step="0.01" min="0.001"
+                                       class="form-control form-control-sm text-center"
+                                       style="width: 84px; background:#263238; color:#69f0ae; border-color:#546e7a;"
+                                       onchange="setRampRate(this.value)">
+                                <span class="ms-1 small text-muted">mA/s</span>
+                            </div>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="autoPoll" {% if global_polling %}checked{% endif %} onchange="togglePolling(this.checked)">
+                                <label class="form-check-label text-warning fw-bold" for="autoPoll">自動抓取電流</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center">
+                        {% for name, info in known_devices.items() %}
+                        <div class="form-check form-switch me-4 mb-2 fs-5">
+                            <input class="form-check-input" type="checkbox" id="chk_{{ name }}" value="{{ name }}" {% if name in active_dcs %}checked{% endif %}>
+                            <label class="form-check-label" for="chk_{{ name }}">{{ name }} <small class="text-info">({{ info.type }})</small></label>
+                        </div>
+                        {% endfor %}
+                        <button class="btn btn-warning fw-bold ms-auto mt-2" onclick="refreshConnections()">🔄 刷新連線</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 合併衝突對話框 -->
+    <div id="mergeModal" class="modal-mask">
+        <div class="modal-box">
+            <h5 class="fw-bold text-warning mb-3">⚠️ 合併時電流值不一致</h5>
+            <div id="mergeInfo" class="mb-3"></div>
+            <button class="btn btn-warning w-100 fw-bold" id="mergeBtnMaster">👑 覆寫為主控台數值</button>
+            <button class="btn btn-info w-100 fw-bold" id="mergeBtnAvg">⚖️ 取平均值</button>
+            <button class="btn btn-outline-light w-100" id="mergeBtnKeep">維持現狀（不變更）</button>
+        </div>
+    </div>
+
+    <script>
+        // === 1. 拖曳模式控制變數 ===
+        let isMergeAllowed = true;
+        
+        function toggleMergeMode(state) {
+            isMergeAllowed = state;
+            let hint = document.getElementById('mode-hint');
+            if(state) {
+                hint.innerHTML = '💡 拖曳手柄：丟入框內【合併同步】，丟入空隙【拆解排序】';
+                hint.className = 'text-center text-warning mb-4 small';
+            } else {
+                hint.innerHTML = '💡 純排序模式：拖曳手柄來改變面板的上下順序。';
+                hint.className = 'text-center text-info mb-4 small';
+            }
+        }
+
+        // === 2. 數值資料與共用工具 ===
+        const dcData = {
+            {% for dc in dcs %}
+            "{{ dc.id }}": { value_uA: Math.round(Number("{{ dc.current_a }}") * 1000000), range_A: Number("{{ dc.range_a }}") },
+            {% endfor %}
+        };
+
+        function minStepFor(range_A) { return range_A <= 0.2 ? 1 : 10; }   // uA
+        function unitOf(range_A)    { return range_A <= 0.2 ? 'mA' : 'A'; }
+        function fmtVal(uA, range_A) {
+            return range_A <= 0.2 ? (uA / 1000).toFixed(3) : (uA / 1000000).toFixed(5);
+        }
+        function panelsOf(groupEl) {
+            let stack = groupEl.querySelector('.panel-stack');
+            return stack ? Array.from(stack.querySelectorAll('.yoko-panel')) : [];
+        }
+        function idsOf(groupEl) { return panelsOf(groupEl).map(p => p.getAttribute('data-id')); }
+        function masterOf(groupEl) { let ids = idsOf(groupEl); return ids.length ? ids[0] : null; }
+
+        let interactTimers = {};
+        function markInteract(id) {
+            interactingDCs[id] = true;
+            if (interactTimers[id]) clearTimeout(interactTimers[id]);
+            interactTimers[id] = setTimeout(() => { interactingDCs[id] = false; }, 1800);
+        }
+
+        // 設定單一裝置數值（含 range 夾限、畫面更新、送出指令）
+        function setDeviceValue(id, uA) {
+            let dc = dcData[id];
+            if (!dc) return;
+            let limit = Math.round(dc.range_A * 1000000);
+            uA = Math.round(uA);
+            if (uA > limit) uA = limit;
+            if (uA < -limit) uA = -limit;
+            let prev = dc.value_uA;
+            dc.value_uA = uA;
+            markInteract(id);
+            renderDisplay(id);
+            if (prev !== uA) sendCmd(id);   // 值沒變就不重送，減少 VISA 流量
+        }
+
+        // === 3. SortableJS 巢狀拖曳邏輯 ===
+        const mainGroupsEl = document.getElementById('main-groups');
+        if (mainGroupsEl) {
+            new Sortable(mainGroupsEl, {
+                group: { name: 'shared', put: true, pull: false },
+                animation: 150,
+                ghostClass: 'sortable-ghost',
+                filter: '.mem-rail, .fine-rail',   // 點記憶/微調按鈕時不要觸發群組拖曳
+                preventOnFilter: false,
+                onAdd: function (evt) {
+                    let panel = evt.item;
+                    let newGroup = document.createElement('div');
+                    newGroup.className = 'dc-group w-100';
+                    newGroup.style.maxWidth = '900px';
+                    let stack = document.createElement('div');
+                    stack.className = 'panel-stack';
+
+                    panel.parentNode.insertBefore(newGroup, panel);
+                    newGroup.appendChild(stack);
+                    stack.appendChild(panel);
+
+                    buildRails(newGroup);
+                    initGroupSortable(stack);
+                    cleanUpEmptyGroups();
+                    updateGroupStyles();
+                }
+            });
+        }
+
+        function initGroupSortable(stackEl) {
+            if (!stackEl || stackEl.sortable) return;
+            stackEl.sortable = new Sortable(stackEl, {
+                group: { name: 'shared', put: function () { return isMergeAllowed; }, pull: true },
+                animation: 150,
+                handle: '.drag-handle',
+                ghostClass: 'sortable-ghost',
+                onEnd: function () {
+                    document.querySelectorAll('.dc-group').forEach(cancelRamp);
+                    cleanUpEmptyGroups();
+                    updateGroupStyles();
+                    syncGroupValues();
+                }
+            });
+        }
+
+        function cleanUpEmptyGroups() {
+            document.querySelectorAll('.dc-group').forEach(group => {
+                if (panelsOf(group).length === 0) {
+                    let stack = group.querySelector('.panel-stack');
+                    if (stack && stack.sortable) stack.sortable.destroy();
+                    group.remove();
+                }
+            });
+        }
+
+        function updateGroupStyles() {
+            document.querySelectorAll('.dc-group').forEach(group => {
+                let panels = panelsOf(group);
+                if (panels.length > 1) {
+                    group.classList.add('merged');
+                    panels.forEach(p => p.querySelector('.sync-badge').style.display = 'inline-block');
+                    panels[0].querySelector('.sync-badge').innerText = '👑 主控台';
+                    for (let i = 1; i < panels.length; i++) panels[i].querySelector('.sync-badge').innerText = '🔗 隨動中';
+                } else if (panels.length === 1) {
+                    group.classList.remove('merged');
+                    panels[0].querySelector('.sync-badge').style.display = 'none';
+                }
+                let fine = group.querySelector('.fine-rail');
+                if (fine) fine.style.display = (panels.length === 2) ? 'flex' : 'none';
+                renderMemRail(group);
+                updateFineDelta(group);
+            });
+        }
+
+        // === 4. 左側電流記憶 M1/M2/M3 ===
+        let memStore = {};
+        function loadMem() {
+            try { memStore = JSON.parse(localStorage.getItem('yoko_mem') || '{}'); }
+            catch (e) { memStore = {}; }
+        }
+        function persistMem() {
+            try { localStorage.setItem('yoko_mem', JSON.stringify(memStore)); } catch (e) {}
+        }
+        loadMem();
+
+        // === 4b. 記憶切換限速（斜坡）===
+        let RAMP_ENABLED = true;
+        let RAMP_RATE_mA_s = 0.05;          // 預設 0.05 mA/s
+        const RAMP_TICK_MS = 200;
+
+        (function loadRampCfg() {
+            try {
+                let c = JSON.parse(localStorage.getItem('yoko_ramp') || 'null');
+                if (c) {
+                    RAMP_ENABLED = !!c.enabled;
+                    RAMP_RATE_mA_s = Number(c.rate) > 0 ? Number(c.rate) : 0.05;
+                }
+            } catch (e) {}
+            let t = document.getElementById('rampToggle');
+            let r = document.getElementById('rampRate');
+            if (t) t.checked = RAMP_ENABLED;
+            if (r) r.value = RAMP_RATE_mA_s;
+        })();
+
+        function persistRampCfg() {
+            try { localStorage.setItem('yoko_ramp', JSON.stringify({ enabled: RAMP_ENABLED, rate: RAMP_RATE_mA_s })); } catch (e) {}
+        }
+        function setRampEnabled(state) { RAMP_ENABLED = state; persistRampCfg(); }
+        function setRampRate(v) {
+            let n = Number(v);
+            if (!(n > 0)) { n = 0.05; document.getElementById('rampRate').value = n; }
+            RAMP_RATE_mA_s = n;
+            persistRampCfg();
+        }
+
+        function rampHintEl(groupEl) { return groupEl.querySelector('.mem-hint'); }
+
+        function cancelRamp(groupEl) {
+            if (!groupEl || !groupEl._ramp) return;
+            clearInterval(groupEl._ramp.timer);
+            if (groupEl._ramp.btn) groupEl._ramp.btn.classList.remove('ramp-src');
+            groupEl._ramp = null;
+            let h = rampHintEl(groupEl);
+            if (h) { h.classList.remove('ramping'); h.innerText = '短按叫出 / 長按儲存'; }
+        }
+
+        // 以 RAMP_RATE_mA_s 為上限，把群組內所有裝置線性推向 targetUA
+        function startRamp(groupEl, targetUA, btn) {
+            cancelRamp(groupEl);
+            let ids = idsOf(groupEl).filter(id => dcData[id]);
+            if (!ids.length) return;
+
+            let startVals = {};
+            ids.forEach(id => startVals[id] = dcData[id].value_uA);
+            let maxDist = Math.max.apply(null, ids.map(id => Math.abs(targetUA - startVals[id])));
+
+            if (!RAMP_ENABLED || maxDist === 0) {
+                ids.forEach(id => setDeviceValue(id, targetUA));
+                updateFineDelta(groupEl);
+                return;
+            }
+
+            // 走最遠的那台剛好貼著速率上限，其餘依比例放慢並同時到達
+            let rate_uA_s = RAMP_RATE_mA_s * 1000;
+            let totalMs = (maxDist / rate_uA_s) * 1000;
+            let t0 = (window.performance ? performance.now() : Date.now());
+            let hint = rampHintEl(groupEl);
+            if (btn) btn.classList.add('ramp-src');
+            if (hint) hint.classList.add('ramping');
+
+            let tick = () => {
+                let now = (window.performance ? performance.now() : Date.now());
+                let f = Math.min(1, (now - t0) / totalMs);
+                ids.forEach(id => {
+                    let step = minStepFor(dcData[id].range_A);
+                    let v = startVals[id] + (targetUA - startVals[id]) * f;
+                    setDeviceValue(id, Math.round(v / step) * step);
+                });
+                updateFineDelta(groupEl);
+                if (hint) {
+                    let left = Math.max(0, Math.ceil((totalMs - (now - t0)) / 1000));
+                    hint.innerText = '⏳ ' + Math.round(f * 100) + '% ‧ 剩 ' + left + 's\n點 M 可中止';
+                }
+                if (f >= 1) {
+                    ids.forEach(id => setDeviceValue(id, targetUA));
+                    cancelRamp(groupEl);
+                    updateFineDelta(groupEl);
+                    if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+                }
+            };
+
+            groupEl._ramp = { timer: setInterval(tick, RAMP_TICK_MS), btn: btn || null, target: targetUA };
+            tick();
+        }
+
+        function renderMemRail(groupEl) {
+            let key = masterOf(groupEl);
+            if (!key || !dcData[key]) return;
+            let slots = memStore[key] || [null, null, null];
+            let range = dcData[key].range_A;
+            groupEl.querySelectorAll('.mem-btn').forEach(btn => {
+                let i = Number(btn.getAttribute('data-slot'));
+                let v = slots[i];
+                let valEl = btn.querySelector('.mem-val');
+                if (v === null || v === undefined) {
+                    valEl.innerText = '－－';
+                    btn.classList.remove('has-val');
+                } else {
+                    valEl.innerText = fmtVal(v, range) + ' ' + unitOf(range);
+                    btn.classList.add('has-val');
+                }
+            });
+        }
+
+        function flashBtn(btn) {
+            btn.classList.add('flash');
+            setTimeout(() => btn.classList.remove('flash'), 250);
+        }
+
+        function saveMemSlot(groupEl, slot, btn) {
+            let key = masterOf(groupEl);
+            if (!key || !dcData[key]) return;
+            if (!memStore[key]) memStore[key] = [null, null, null];
+            memStore[key][slot] = dcData[key].value_uA;
+            persistMem();
+            renderMemRail(groupEl);
+            if (btn) flashBtn(btn);
+            if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+        }
+
+        function recallMemSlot(groupEl, slot, btn) {
+            let key = masterOf(groupEl);
+            if (!key) return;
+            let slots = memStore[key];
+            if (!slots || slots[slot] === null || slots[slot] === undefined) {
+                saveMemSlot(groupEl, slot, btn);   // 空欄位：直接存入目前值
+                return;
+            }
+            startRamp(groupEl, slots[slot], btn);   // 依限速斜坡推進（關閉限速時直接跳值）
+            if (btn) flashBtn(btn);
+            if (navigator.vibrate) navigator.vibrate(15);
+        }
+
+        // === 5. 右側微調（僅兩台裝置時顯示）===
+        // 每按一次，只把「其中一台」推動一個最小刻度，兩台交替 → 等效解析度加倍
+        function fineStep(groupEl, dir) {
+            cancelRamp(groupEl);
+            let ids = idsOf(groupEl);
+            if (ids.length !== 2) return;
+            let a = dcData[ids[0]], b = dcData[ids[1]];
+            if (!a || !b) return;
+
+            let targetId;
+            if (dir > 0) targetId = (a.value_uA <= b.value_uA) ? ids[0] : ids[1];
+            else         targetId = (a.value_uA >= b.value_uA) ? ids[0] : ids[1];
+
+            let step = minStepFor(dcData[targetId].range_A);
+            setDeviceValue(targetId, dcData[targetId].value_uA + dir * step);
+            updateFineDelta(groupEl);
+            if (navigator.vibrate) navigator.vibrate(8);
+        }
+
+        function updateFineDelta(groupEl) {
+            if (!groupEl) return;
+            let ids = idsOf(groupEl);
+
+            // 隨動機台若與主控台不同值，小螢幕轉為琥珀色提示
+            if (ids.length > 1 && dcData[ids[0]]) {
+                let mv = dcData[ids[0]].value_uA;
+                for (let i = 1; i < ids.length; i++) {
+                    let mini = document.getElementById('mini_' + ids[i]);
+                    if (mini && dcData[ids[i]]) mini.classList.toggle('off-sync', dcData[ids[i]].value_uA !== mv);
+                }
+            }
+
+            let el = groupEl.querySelector('.fine-delta');
+            if (!el) return;
+            if (ids.length !== 2 || !dcData[ids[0]] || !dcData[ids[1]]) { el.innerText = ''; return; }
+            let step = minStepFor(dcData[ids[0]].range_A);
+            let d = Math.round((dcData[ids[0]].value_uA - dcData[ids[1]].value_uA) / step);
+            el.innerText = 'Δ ' + (d > 0 ? '+' : '') + d;
+            el.style.color = (d === 0) ? '#78909c' : '#ffc107';
+        }
+
+        // === 6. 建立左右兩側控制列 ===
+        function buildRails(groupEl) {
+            if (groupEl.querySelector('.mem-rail')) return;
+
+            let mem = document.createElement('div');
+            mem.className = 'mem-rail';
+            for (let i = 0; i < 3; i++) {
+                let b = document.createElement('div');
+                b.className = 'mem-btn';
+                b.setAttribute('data-slot', i);
+                b.innerHTML = '<div class="mem-label">M' + (i + 1) + '</div><div class="mem-val">－－</div>';
+                attachMemHandlers(b, groupEl, i);
+                mem.appendChild(b);
+            }
+            let hint = document.createElement('div');
+            hint.className = 'mem-hint';
+            hint.innerText = '短按叫出 / 長按儲存';
+            mem.appendChild(hint);
+            groupEl.insertBefore(mem, groupEl.firstChild);
+
+            let fine = document.createElement('div');
+            fine.className = 'fine-rail';
+            let up = document.createElement('div');   up.className = 'fine-btn';   up.innerText = '＋';
+            let dn = document.createElement('div');   dn.className = 'fine-btn';   dn.innerText = '－';
+            let tip = document.createElement('div');  tip.className = 'fine-tip';
+            tip.innerHTML = '半步微調<br><span class="fine-delta"></span>';
+            attachFineHandlers(up, groupEl, 1);
+            attachFineHandlers(dn, groupEl, -1);
+            fine.appendChild(up); fine.appendChild(tip); fine.appendChild(dn);
+            groupEl.appendChild(fine);
+        }
+
+        function attachMemHandlers(btn, groupEl, slot) {
+            let timer = null, longFired = false, aborted = false;
+            const start = (e) => {
+                if (e.cancelable) e.preventDefault();
+                longFired = false;
+                aborted = false;
+                if (groupEl._ramp) {          // 斜坡進行中：任何一按都是「中止」
+                    cancelRamp(groupEl);
+                    aborted = true;
+                    if (navigator.vibrate) navigator.vibrate([60]);
+                    return;
+                }
+                timer = setTimeout(() => { longFired = true; saveMemSlot(groupEl, slot, btn); }, 600);
+            };
+            const end = (e) => {
+                if (e.cancelable) e.preventDefault();
+                if (timer) { clearTimeout(timer); timer = null; }
+                if (aborted) { aborted = false; return; }
+                if (!longFired) recallMemSlot(groupEl, slot, btn);
+            };
+            const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+            btn.addEventListener('touchstart', start, { passive: false });
+            btn.addEventListener('touchend', end, { passive: false });
+            btn.addEventListener('touchcancel', cancel);
+            btn.addEventListener('mousedown', start);
+            btn.addEventListener('mouseup', end);
+            btn.addEventListener('mouseleave', cancel);
+        }
+
+        function attachFineHandlers(btn, groupEl, dir) {
+            let t = null, iv = null;
+            const stop = () => {
+                if (t) clearTimeout(t);
+                if (iv) clearInterval(iv);
+                t = null; iv = null;
+            };
+            const start = (e) => {
+                if (e.cancelable) e.preventDefault();
+                stop();
+                fineStep(groupEl, dir);
+                t = setTimeout(() => { iv = setInterval(() => fineStep(groupEl, dir), 250); }, 700);
+            };
+            btn.addEventListener('touchstart', start, { passive: false });
+            btn.addEventListener('touchend', stop);
+            btn.addEventListener('touchcancel', stop);
+            btn.addEventListener('mousedown', start);
+            btn.addEventListener('mouseup', stop);
+            btn.addEventListener('mouseleave', stop);
+        }
+
+        // 初始化既有群組
+        document.querySelectorAll('.dc-group').forEach(group => {
+            buildRails(group);
+            initGroupSortable(group.querySelector('.panel-stack'));
+        });
+
+        // === 7. 顯示與合併同步 ===
+        window.onload = () => { Object.keys(dcData).forEach(renderDisplay); updateGroupStyles(); };
+
+        function renderDisplay(dcId) {
+            let dc = dcData[dcId];
+            if (!dc) return;
+            let mini = document.getElementById('mini_' + dcId);
+            if (mini) {
+                mini.innerText = (dc.value_uA >= 0 ? '+' : '') + fmtVal(dc.value_uA, dc.range_A) + ' ' + unitOf(dc.range_A);
+            }
+            let signEl = document.getElementById('sign_' + dcId);
+            if (!signEl) return;
+            signEl.innerText = dc.value_uA < 0 ? '-' : '+';
+            let absVal = Math.abs(dc.value_uA);
+            let steps = dc.range_A <= 0.2 ? [100000, 10000, 1000, 100, 10, 1] : [1000000, 100000, 10000, 1000, 100, 10];
+            steps.forEach(step => {
+                let el = document.getElementById(`digit_${dcId}_${step}`);
+                if (el) el.innerText = Math.floor(absVal / step) % 10;
+            });
+        }
+
+        // 合併衝突詢問對話框
+        function askMergeChoice(ids, vals, range) {
+            return new Promise(resolve => {
+                let mask = document.getElementById('mergeModal');
+                let info = document.getElementById('mergeInfo');
+                let avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+                let step = minStepFor(range);
+                avg = Math.round(avg / step) * step;
+
+                let rows = ids.map((id, i) =>
+                    `<div class="row-line"><span>${i === 0 ? '👑 ' : '🔗 '}${id}</span>
+                     <span class="fw-bold" style="color:#00ffcc">${fmtVal(vals[i], range)} ${unitOf(range)}</span></div>`
+                ).join('');
+                rows += `<hr class="my-2"><div class="row-line"><span>平均值</span>
+                         <span class="fw-bold text-warning">${fmtVal(avg, range)} ${unitOf(range)}</span></div>`;
+                info.innerHTML = rows;
+
+                mask.style.display = 'flex';
+                const done = (choice) => {
+                    mask.style.display = 'none';
+                    document.getElementById('mergeBtnMaster').onclick = null;
+                    document.getElementById('mergeBtnAvg').onclick = null;
+                    document.getElementById('mergeBtnKeep').onclick = null;
+                    resolve({ choice: choice, avg: avg });
+                };
+                document.getElementById('mergeBtnMaster').onclick = () => done('master');
+                document.getElementById('mergeBtnAvg').onclick = () => done('avg');
+                document.getElementById('mergeBtnKeep').onclick = () => done('keep');
+            });
+        }
+
+        async function syncGroupValues() {
+            let groups = Array.from(document.querySelectorAll('.dc-group')).filter(g => panelsOf(g).length > 1);
+            for (const group of groups) {
+                let ids = idsOf(group);
+                let vals = ids.map(id => dcData[id].value_uA);
+                let masterVal = vals[0];
+                if (vals.every(v => v === masterVal)) continue;
+
+                let range = dcData[ids[0]].range_A;
+                let res = await askMergeChoice(ids, vals, range);
+                if (res.choice === 'keep') { updateFineDelta(group); continue; }
+
+                let target = (res.choice === 'avg') ? res.avg : masterVal;
+                ids.forEach(id => setDeviceValue(id, target));
+                updateFineDelta(group);
+            }
+        }
+
+        // === 8. 原有的位數調整 / 連線 / 輪詢 ===
+        let isGlobalPolling = {{ 'true' if global_polling else 'false' }};
+        function togglePolling(state) {
+            isGlobalPolling = state;
+            fetch('/api/set_polling', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: state }) });
+        }
+
+        function refreshConnections() {
+            let selected = [];
+            document.querySelectorAll('input[type="checkbox"][id^="chk_"]:checked').forEach(cb => selected.push(cb.value));
+            fetch('/api/connect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ devices: selected }) })
+            .then(() => location.reload()).catch(err => alert('連線錯誤: ' + err));
+        }
+
+        let adjIntervals = {}, adjTimeouts = {}, interactingDCs = {}, activeTargets = {}; 
+
+        function startAdj(sourceId, step_uA, event) {
+            if (event && event.cancelable) event.preventDefault();
+            stopAdj(sourceId, true);
+            
+            let panel = document.getElementById('panel_' + sourceId);
+            let group = panel.closest('.dc-group');
+            cancelRamp(group);
+            let panels = panelsOf(group);
+            let masterId = panels[0].getAttribute('data-id');
+            
+            let targets = panels.map(p => p.getAttribute('data-id'));
+            activeTargets[sourceId] = targets;
+            targets.forEach(dc => interactingDCs[dc] = true);
+            
+            let applyStep = () => {
+                if (navigator.vibrate) navigator.vibrate(10);
+                
+                let masterDC = dcData[masterId];
+                masterDC.value_uA += step_uA;
+                let mLimit = Math.round(masterDC.range_A * 1000000);
+                if (masterDC.value_uA > mLimit) masterDC.value_uA = mLimit;
+                if (masterDC.value_uA < -mLimit) masterDC.value_uA = -mLimit;
+                
+                targets.forEach(id => {
+                    if (id !== masterId) {
+                        let dc = dcData[id];
+                        dc.value_uA = masterDC.value_uA;
+                        let limit = Math.round(dc.range_A * 1000000);
+                        if (dc.value_uA > limit) dc.value_uA = limit;
+                        if (dc.value_uA < -limit) dc.value_uA = -limit;
+                    }
+                    renderDisplay(id); sendCmd(id);
+                });
+                updateFineDelta(group);
+            };
+            
+            applyStep();
+            adjTimeouts[sourceId] = setTimeout(() => {
+                adjIntervals[sourceId] = setInterval(applyStep, 100);
+            }, 300);
+        }
+
+        function stopAdj(sourceId, immediate = false) {
+            if (adjTimeouts[sourceId]) clearTimeout(adjTimeouts[sourceId]);
+            if (adjIntervals[sourceId]) clearInterval(adjIntervals[sourceId]);
+            let targets = activeTargets[sourceId] || [sourceId];
+            if (!immediate) { setTimeout(() => { targets.forEach(dc => interactingDCs[dc] = false); }, 1500); delete activeTargets[sourceId]; } 
+            else { targets.forEach(dc => interactingDCs[dc] = false); }
+        }
+
+        let isSending = {}, pendingSend = {}, debounceTimer = {};
+        function sendCmd(dcId) {
+            if (debounceTimer[dcId]) clearTimeout(debounceTimer[dcId]);
+            debounceTimer[dcId] = setTimeout(() => {
+                if (isSending[dcId]) { pendingSend[dcId] = true; return; }
+                executeSend(dcId);
+            }, 80);
+        }
+
+        function executeSend(dcId) {
+            isSending[dcId] = true; pendingSend[dcId] = false;
+            fetch('/api/set_current', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dc_id: dcId, value: dcData[dcId].value_uA / 1000000.0 }) })
+            .finally(() => { isSending[dcId] = false; if (pendingSend[dcId]) { executeSend(dcId); } });
+        }
+
+        function pollSync() {
+            if (!isGlobalPolling) { setTimeout(pollSync, 500); return; }
+            fetch('/api/get_currents').then(r => r.json()).then(data => {
+                Object.keys(data).forEach(id => {
+                    if (dcData[id] && !interactingDCs[id] && !isSending[id]) {
+                        dcData[id].value_uA = Math.round(data[id] * 1000000);
+                        renderDisplay(id);
+                    }
+                });
+                document.querySelectorAll('.dc-group').forEach(updateFineDelta);
+            }).finally(() => { setTimeout(pollSync, 500); });
+        }
+        pollSync(); 
+    </script>
+</body>
+</html>

@@ -1,0 +1,32 @@
+# LAB-QEL論文庫：在 NAS 上用 Docker（Synology Container Manager / QNAP Container Station）執行
+services:
+  paperlib:
+    build: .
+    image: paperlib:1.5.1
+    container_name: paperlib
+    restart: unless-stopped
+    ports:
+      - "8080:8080"            # 瀏覽器開 http://<NAS 的 IP>:8080
+    environment:
+      PAPERLIB_SITE_NAME: "LAB-QEL論文庫"
+      PAPERLIB_MAX_UPLOAD_MB: "300"
+      PAPERLIB_CROSSREF_MAILTO: ""   # 可填實驗室信箱，Crossref 建議附上
+      TZ: "Asia/Taipei"
+    volumes:
+      - ./data:/data           # 主資料庫：library.db、PDF、縮圖、備份都在這裡
+      - ./import:/import:ro    # 舊論文資料夾（只在第一次匯入時用，唯讀）
+
+  # ── 不用 VPN 從外網連線（Cloudflare Tunnel）───────────────────────────
+  # 1. 在 Cloudflare 後台 Zero Trust → Networks → Tunnels 建立 Tunnel，複製 token
+  # 2. 把下面整段取消註解，token 貼到 TUNNEL_TOKEN
+  # 3. 在 Tunnel 的 Public Hostname 設定：網址 例如 papers.你的網域，Service 填 http://paperlib:8080
+  # 4. 在 Container Manager 重新建置專案
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: paperlib-tunnel
+  #   restart: unless-stopped
+  #   command: tunnel --no-autoupdate run
+  #   environment:
+  #     TUNNEL_TOKEN: "貼上 Cloudflare 給的 token"
+  #   depends_on:
+  #     - paperlib

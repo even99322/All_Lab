@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab Control Hub</title>
+<style>
+  :root {
+    --bg:#f4f5f7; --card:#ffffff; --text:#1f2328; --muted:#6b7280; --border:#e3e6ea; --soft:#f1f3f5;
+    --accent:#1971c2; --ok:#2b8a3e; --warn:#e67700; --err:#e03131; --run:#1971c2; --idle:#868e96; --pause:#f08c00;
+    --bar:#dbe4ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#141517; --card:#1f2023; --text:#e9ecef; --muted:#9097a0; --border:#2e3136; --soft:#26282c;
+      --accent:#4dabf7; --ok:#51cf66; --warn:#ffa94d; --err:#ff6b6b; --run:#4dabf7; --idle:#909296; --pause:#fcc419;
+      --bar:#2c3440;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:14px/1.5 "Segoe UI","Microsoft JhengHei","Noto Sans TC",system-ui,sans-serif; }
+  header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 20px; border-bottom:1px solid var(--border);
+           background:var(--card); position:sticky; top:0; z-index:2; }
+  header h1 { font-size:18px; margin:0; font-weight:700; }
+  header .meta { color:var(--muted); font-size:12px; }
+  header .sp { flex:1; }
+  header a { color:var(--muted); font-size:13px; text-decoration:none; }
+  main { max-width:1280px; margin:0 auto; padding:18px 16px 40px; }
+  .banner { display:none; margin-bottom:14px; padding:10px 14px; border-radius:8px; border:1px solid var(--err);
+            color:var(--err); background:color-mix(in srgb, var(--err) 10%, transparent); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:22px; }
+  .stat { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  .stat .v { font-size:24px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .stat .k { color:var(--muted); font-size:12px; }
+  h2 { font-size:15px; margin:26px 0 10px; display:flex; align-items:center; gap:8px; }
+  h2 .n { color:var(--muted); font-weight:400; font-size:13px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(360px,1fr)); gap:14px; }
+  @media (max-width:420px) { .grid { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px 16px; min-width:0; }
+  .card.off { opacity:.62; }
+  .row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .name { font-size:16px; font-weight:700; }
+  .chip { display:inline-flex; align-items:center; gap:5px; padding:1px 9px; border-radius:999px; font-size:12px; font-weight:600;
+          color:#fff; background:var(--idle); }
+  .chip.running,.chip.preparing { background:var(--run); } .chip.paused { background:var(--pause); color:#1f2328; }
+  .chip.finished { background:var(--ok); } .chip.failed,.chip.aborted { background:var(--err); }
+  .chip.updating { background:var(--warn); } .chip.offline { background:transparent; color:var(--muted); border:1px solid var(--border); }
+  .tag { font-size:11px; padding:0 7px; border-radius:6px; border:1px solid var(--border); color:var(--muted); }
+  .tag.warn { border-color:var(--warn); color:var(--warn); }
+  .sub { color:var(--muted); font-size:12px; margin-top:2px; overflow-wrap:anywhere; }
+  .run { margin-top:12px; padding:10px 12px; border-radius:8px; background:var(--soft); }
+  .run .t { font-weight:600; overflow-wrap:anywhere; }
+  .bar { height:8px; background:var(--bar); border-radius:99px; overflow:hidden; margin:8px 0 4px; }
+  .bar > i { display:block; height:100%; background:var(--run); border-radius:99px; transition:width .6s; }
+  .run .m { display:flex; justify-content:space-between; color:var(--muted); font-size:12px; font-variant-numeric:tabular-nums; }
+  .inst { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .inst span { font-size:12px; padding:2px 8px; border-radius:6px; background:var(--soft); white-space:nowrap; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--idle); margin-right:4px; vertical-align:1px; }
+  .dot.on { background:var(--ok); } .dot.lease { background:var(--run); }
+  .log { margin-top:10px; font:12px/1.45 ui-monospace,Consolas,monospace; color:var(--muted); max-height:92px; overflow:auto;
+         border-top:1px dashed var(--border); padding-top:6px; }
+  .log div { white-space:pre-wrap; overflow-wrap:anywhere; }
+  .log .warning { color:var(--warn); } .log .error { color:var(--err); }
+  .btns { display:flex; gap:8px; margin-top:10px; }
+  button { font:inherit; font-size:13px; padding:4px 12px; border-radius:6px; border:1px solid var(--border);
+           background:var(--card); color:var(--text); cursor:pointer; }
+  a.btn { font-size:13px; padding:4px 12px; border-radius:6px; border:1px solid var(--accent, #3b82f6);
+    color:var(--accent, #3b82f6); text-decoration:none; }
+  button.stop { border-color:var(--err); color:var(--err); }
+  button:disabled { opacity:.5; cursor:default; }
+  .tablewrap { overflow-x:auto; background:var(--card); border:1px solid var(--border); border-radius:12px; }
+  table { border-collapse:collapse; width:100%; min-width:640px; }
+  th,td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  th { font-size:12px; color:var(--muted); font-weight:600; background:var(--soft); }
+  tr:last-child td { border-bottom:0; }
+  td a { color:var(--accent); text-decoration:none; }
+  .empty { color:var(--muted); padding:18px; text-align:center; background:var(--card); border:1px dashed var(--border); border-radius:12px; }
+  .num { font-variant-numeric:tabular-nums; }
+  td.wrap { white-space:normal; }
+  .ent { display:block; margin:1px 0; }
+  .tag.ok { border-color:var(--ok); color:var(--ok); }
+  .tag.run { border-color:var(--run); color:var(--run); }
+  .tag.err { border-color:var(--err); color:var(--err); }
+  select { font:inherit; font-size:13px; padding:3px 6px; border-radius:6px; border:1px solid var(--border);
+           background:var(--card); color:var(--text); }
+</style>
+</head>
+<body>
+<header>
+  <h1>🛰 Lab Control Hub</h1>
+  <span class="meta" id="meta">連線中…</span>
+  <span class="sp"></span>
+  <a href="/logout">登出</a>
+</header>
+<main>
+  <div class="banner" id="banner">與 Hub 的連線中斷，重新連線中…</div>
+  <div class="stats" id="stats"></div>
+
+  <h2>量測節點 <span class="n" id="nodes-n"></span></h2>
+  <div class="grid" id="nodes"></div>
+
+  <h2>儀器（掛載位置與歸屬） <span class="n" id="inst-n"></span></h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>儀器</th><th>型號 / 序號</th><th>識別</th><th>掛載於（名稱 · 狀態）</th><th>歸屬</th><th></th></tr></thead>
+    <tbody id="insts"></tbody>
+  </table></div>
+
+  <h2>所有電腦 <span class="n" id="devs-n"></span></h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>狀態</th><th>電腦</th><th>使用者</th><th>角色</th><th>版本</th><th>目前</th><th>IP</th><th>最後回報</th></tr></thead>
+    <tbody id="devs"></tbody>
+  </table></div>
+
+  <h2>Hub</h2>
+  <div class="card" id="hubcard"></div>
+
+  <h2>量測檔（Hub 上） <span class="n" id="files-n"></span></h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>時間</th><th>節點</th><th>檔案</th><th>大小</th><th></th></tr></thead>
+    <tbody id="files"></tbody>
+  </table></div>
+</main>
+<script>
+const STATE = {idle:"閒置", preparing:"準備中", running:"量測中", paused:"已暫停", finished:"完成", aborted:"已中斷",
+               failed:"失敗", updating:"更新中", offline:"離線"};
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function ver(v) { const m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?([a-z]*)/i.exec(v || ""); return m ? [+m[1], +(m[2]||0), +(m[3]||0), m[4]||""] : [0,0,0,""]; }
+function older(a, b) { const x = ver(a), y = ver(b); for (let i = 0; i < 4; i++) { if (x[i] < y[i]) return true; if (x[i] > y[i]) return false; } return false; }
+function ago(s) { if (s == null) return "—"; if (s < 60) return `${Math.round(s)} 秒前`; if (s < 3600) return `${Math.round(s/60)} 分前`;
+                  if (s < 86400) return `${Math.round(s/3600)} 小時前`; return `${Math.round(s/86400)} 天前`; }
+function dur(s) { if (s == null || !isFinite(s)) return ""; s = Math.max(0, Math.round(s)); const h = Math.floor(s/3600), m = Math.floor(s%3600/60), x = s%60;
+                  return h ? `${h}:${String(m).padStart(2,"0")}:${String(x).padStart(2,"0")}` : `${m}:${String(x).padStart(2,"0")}`; }
+function size(b) { const u = ["B","KB","MB","GB"]; let i = 0; while (b >= 1024 && i < 3) { b /= 1024; i++; } return `${b.toFixed(i ? 1 : 0)} ${u[i]}`; }
+function fmtLevel(i) { if (i.level == null) return ""; const v = +i.level; if (!isFinite(v)) return "";
+  const u = i.unit || ""; if (u === "A" && Math.abs(v) < 1) return ` ${(v*1e3).toPrecision(6).replace(/\.?0+$/,"")} mA`;
+  return ` ${v.toPrecision(6).replace(/\.?0+$/,"")} ${u}`; }
+
+async function api(path, opts) {
+  const r = await fetch(path, Object.assign({credentials:"same-origin"}, opts || {}));
+  if (r.status === 401) { location.href = "/login"; throw new Error("401"); }
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+
+async function command(node, cmd, label, args) {
+  if (cmd === "stop" && !confirm(`確定要停止 ${node} 的量測？`)) return;
+  try {
+    const r = await api(`/api/nodes/${encodeURIComponent(node)}/commands?wait=${cmd === "scan" ? 60 : 30}`,
+      {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({cmd, args:args || {}, from:{user:"網頁"}})});
+    if (!r.reply.ok) alert(`${label}失敗：${r.reply.error}`);
+    else if (cmd === "connect_all" || cmd === "disconnect_all") {
+      const bad = Object.entries(r.reply.result || {}).filter(([k, v]) => v);
+      if (bad.length) alert(`${label}：${bad.length} 台沒有成功\n\n` + bad.map(([k, v]) => `${k}：${v}`).join("\n"));
+    } else if (cmd === "scan") alert(`掃描完成：找到 ${(r.reply.result || []).length} 個 VISA 資源`);
+    refresh();
+  } catch (e) { alert(`${label}失敗：${e.message}`); }
+}
+
+async function claim(key, host) {
+  if (!host) return;
+  if (!confirm(`把 ${key} 拉到 ${host}？\n其他電腦上連著的會被中斷。`)) return;
+  try {
+    const r = await api("/api/instruments/claim", {method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({key, host, by:"網頁"})});
+    refresh();
+  } catch (e) { alert(`拉取失敗：${e.message}`); }
+}
+
+async function hubUpdate() {
+  if (!confirm("更新 Hub 並重新啟動？（約 5 秒）")) return;
+  try { await api("/api/hub/update", {method:"POST", headers:{"Content-Type":"application/json"}, body:"{}"}); }
+  catch (e) { alert(`更新失敗：${e.message}`); return; }
+  $("hubcard").innerHTML = "Hub 重新啟動中…";
+  setTimeout(refresh, 5000);
+}
+
+function instRow(r) {
+  const title = r.entries.map(e => e.name).filter(Boolean)[0] || r.key;
+  const ents = r.entries.map(e => {
+    const st = !e.online ? '<span class="tag">離線</span>' : e.lease ? '<span class="tag run">量測中</span>'
+      : e.connected ? '<span class="tag ok">已連線</span>' : e.configured ? '<span class="tag">未連線</span>' : '<span class="tag">偵測到</span>';
+    return `<span class="ent">${esc(e.node ? "🛰 " + e.node : "💻 " + e.host)}${e.name ? " · " + esc(e.name) : ""} ${st}${fmtLevel(e) ? " " + esc(fmtLevel(e)) : ""}</span>`;
+  }).join("");
+  let own = r.owner ? `<b>${esc(r.owner)}</b>` : (r.shared ? '<span class="tag warn">共用，未歸屬</span>' : "—");
+  let act = "";
+  if (r.network && (r.shared || r.owner)) {
+    const hosts = r.entries.filter(e => e.online && e.host !== r.owner);
+    if (hosts.length) act = `<select onchange="claim('${esc(r.key)}', this.value); this.value=''">
+      <option value="">拉取到…</option>${hosts.map(e => `<option value="${esc(e.host)}">${esc(e.node || e.host)}</option>`).join("")}</select>`;
+  }
+  return `<tr><td class="wrap"><b>${esc(title)}</b>${r.entries[0] && r.entries[0].label ? `<div class="sub">${esc(r.entries[0].label)}</div>` : ""}</td>
+    <td class="wrap">${esc(r.model || "")}${r.serial ? `<div class="sub">${esc(r.serial)}</div>` : ""}</td>
+    <td class="num">${esc(r.key)}</td><td class="wrap">${ents}</td><td>${own}</td><td>${act}</td></tr>`;
+}
+
+function hubCard(h) {
+  if (!h) return "";
+  return `<div class="row"><span class="name">Hub v${esc(h.version)}</span>
+      ${h.update_available ? `<span class="tag warn">發佈資料夾有 v${esc(h.latest_release)}</span>` : ""}</div>
+    <div class="sub">執行中：${esc(h.path)} · 已執行 ${dur(h.uptime)} · 發佈資料夾：${esc(h.releases_dir || "未設定")}</div>
+    <div class="btns"><a class="btn" href="${location.protocol}//${location.hostname}:8766/" target="_blank" rel="noopener">🛠 Hub 控制台（更新 / 重建 / 重啟）</a></div>`;
+}
+
+async function refreshInst() {
+  try {
+    const r = (await api("/api/instruments")).instruments;
+    const shared = r.filter(x => x.shared && !x.owner).length;
+    $("inst-n").textContent = `${r.length} 台` + (shared ? ` · ${shared} 台共用未歸屬` : "");
+    $("insts").innerHTML = r.length ? r.map(instRow).join("")
+      : '<tr><td colspan="6" style="color:var(--muted)">還沒有電腦回報儀器（Lab Control 0.0.8 以上會自動回報）</td></tr>';
+  } catch (e) {}
+}
+
+function nodeCard(n, latest) {
+  const st = n.online ? (n.state || "idle") : "offline";
+  const run = n.run || null;
+  const active = n.online && ["running","paused","preparing"].includes(st);
+  let html = `<div class="card ${n.online ? "" : "off"}">
+    <div class="row"><span class="name">${esc(n.name)}</span><span class="chip ${esc(st)}">${esc(STATE[st] || st)}</span>
+      ${n.simulate ? '<span class="tag">模擬模式</span>' : ""}
+      ${n.version ? `<span class="tag ${latest && older(n.version, latest) ? "warn" : ""}">v${esc(n.version)}${latest && older(n.version, latest) ? " · 可更新" : ""}</span>` : ""}
+    </div>
+    <div class="sub">${esc(n.user || "")}@${esc(n.host || "")} · ${esc(n.ip || "")} · ${n.online ? "上線中" : "最後上線 " + ago(n.seen_ago)}</div>`;
+  if (run) {
+    const tot = run.total || 0, idx = Math.min(run.index || 0, tot || 0);
+    const pct = tot ? (100 * idx / tot) : 0;
+    const status = run.status && run.status !== "running" ? `（${STATE[run.status] || run.status}）` : "";
+    html += `<div class="run"><div class="t">${esc(run.name || "量測")} ${esc(status)}</div>
+      <div class="sub">由 ${esc(run.by || "?")} 開始</div>
+      <div class="bar"><i style="width:${pct.toFixed(1)}%"></i></div>
+      <div class="m"><span>${idx} / ${tot || "?"} 點（${pct.toFixed(0)}%）</span><span>${active && run.eta != null ? "剩餘 " + dur(run.eta) : ""}</span></div></div>`;
+  }
+  const upd = n.update || {};
+  if (upd.pending) html += `<div class="sub">⬆ 等待更新到 ${esc(upd.pending)}</div>`;
+  if (upd.error) html += `<div class="sub" style="color:var(--err)">更新失敗：${esc(upd.error)}</div>`;
+  if (n.error) html += `<div class="sub" style="color:var(--warn)">⚠ ${esc(n.error)}</div>`;
+  const insts = n.instruments || [];
+  if (insts.length) html += `<div class="inst">${insts.map(i =>
+      `<span title="${esc(i.driver || "")}"><i class="dot ${i.lease ? "lease" : i.connected ? "on" : ""}"></i>${esc(i.name)}${esc(fmtLevel(i))}</span>`).join("")}</div>`;
+  const logs = (n.log || []).slice(-6);
+  if (logs.length) html += `<div class="log">${logs.map(l => `<div class="${esc(l.level)}">${esc(new Date(l.time*1000).toLocaleTimeString())} ${esc(l.message)}</div>`).join("")}</div>`;
+  if (active) html += `<div class="btns">
+      <button onclick="command('${esc(n.name)}','${st === "paused" ? "resume" : "pause"}','${st === "paused" ? "繼續" : "暫停"}')">${st === "paused" ? "▶ 繼續" : "⏸ 暫停"}</button>
+      <button class="stop" onclick="command('${esc(n.name)}','stop','停止')">⏹ 停止量測</button></div>`;
+  if (n.online) html += `<div class="btns">
+      <button onclick="command('${esc(n.name)}','connect_all','全部連線')">🔌 全部連線</button>
+      <button onclick="command('${esc(n.name)}','disconnect_all','全部斷線')">⏏ 全部斷線</button>
+      <button onclick="command('${esc(n.name)}','scan','掃描儀器')">🔍 掃描儀器</button></div>`;
+  return html + "</div>";
+}
+
+function devRow(d, latest) {
+  const run = d.run;
+  const st = d.online ? (d.state || "idle") : "offline";
+  const now = run && run.name ? `${STATE[st] || st} · ${esc(run.name)} ${run.index ?? ""}/${run.total ?? ""}` : (STATE[st] || st);
+  const old = latest && d.version && older(d.version, latest);
+  return `<tr><td><i class="dot ${d.online ? "on" : ""}"></i>${d.online ? "線上" : "離線"}</td>
+    <td>${esc(d.host || "")}</td><td>${esc(d.user || "")}</td>
+    <td>${d.role === "node" ? "🛰 量測節點" + (d.node ? `（${esc(d.node)}）` : "") : "💻 控制端"}</td>
+    <td class="${old ? "" : ""}">${esc(d.version || "")}${old ? ' <span class="tag warn">可更新</span>' : ""}</td>
+    <td>${now}${d.simulate ? ' <span class="tag">模擬</span>' : ""}</td>
+    <td class="num">${esc(d.ip || "")}</td><td class="num">${ago(d.seen_ago)}</td></tr>`;
+}
+
+async function refresh() {
+  try {
+    const s = await api("/api/state");
+    $("banner").style.display = "none";
+    const nodesOn = s.nodes.filter(n => n.online), devOn = s.devices.filter(d => d.online);
+    const running = s.devices.filter(d => d.online && ["running","paused","preparing"].includes(d.state)).length;
+    $("meta").textContent = `Hub v${s.version} · ${new Date(s.time*1000).toLocaleString()}` +
+      (s.latest ? ` · 最新 Lab Control v${s.latest}` : "");
+    $("stats").innerHTML = [
+      [`${nodesOn.length} / ${s.nodes.length}`, "量測節點上線"],
+      [`${devOn.length}`, "電腦開著 Lab Control"],
+      [`${running}`, "量測進行中"],
+      [s.releases.length ? `v${s.releases[s.releases.length-1]}` : "—", "Hub 上的最新發佈"],
+    ].map(([v,k]) => `<div class="stat"><div class="v">${esc(v)}</div><div class="k">${esc(k)}</div></div>`).join("");
+    $("nodes-n").textContent = `${nodesOn.length} 台上線`;
+    $("nodes").innerHTML = s.nodes.length ? s.nodes.map(n => nodeCard(n, s.latest)).join("")
+      : '<div class="empty">還沒有量測節點。在量測電腦的 Lab Control 按「🛰 量測節點」。</div>';
+    $("hubcard").innerHTML = hubCard(s.hub);
+    $("devs-n").textContent = `${devOn.length} / ${s.devices.length} 台線上`;
+    $("devs").innerHTML = s.devices.length ? s.devices.map(d => devRow(d, s.latest)).join("")
+      : '<tr><td colspan="8" style="color:var(--muted)">還沒有電腦連上 Hub</td></tr>';
+  } catch (e) {
+    if (e.message !== "401") $("banner").style.display = "block";
+  }
+}
+
+async function refreshFiles() {
+  try {
+    const f = (await api("/api/files?limit=30")).files;
+    $("files-n").textContent = f.length ? `最近 ${f.length} 個` : "";
+    $("files").innerHTML = f.length ? f.map(x => `<tr><td class="num">${esc(new Date(x.mtime*1000).toLocaleString())}</td>
+      <td>${esc(x.node)}</td><td style="white-space:normal;overflow-wrap:anywhere">${esc(x.rel)}</td>
+      <td class="num">${size(x.size)}</td><td><a href="${esc(x.url)}">下載</a></td></tr>`).join("")
+      : '<tr><td colspan="5" style="color:var(--muted)">量測結束後，節點會把資料檔上傳到這裡</td></tr>';
+  } catch (e) {}
+}
+
+refresh(); refreshFiles(); refreshInst();
+setInterval(refresh, 2000);
+setInterval(refreshInst, 3000);
+setInterval(refreshFiles, 10000);
+</script>
+</body>
+</html>

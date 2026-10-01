@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.DS_Store
+Thumbs.db
+
+# 執行時的資料（不進版本控制）
+/dev-data/
+/portal-data/
+/agent-data/
+/modules/paperlib/data/
+/modules/paperlib/import/
+/build/
+/dist/

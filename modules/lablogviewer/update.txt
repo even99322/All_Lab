@@ -1,0 +1,1567 @@
+LabLogViewer v0.17B - Windows Static Compatibility Audit
+Date: 2026-09-25
+
+Scope
+-----
+Targeted source inspection only. No Windows VM, Wine, remote Windows,
+Windows GUI execution, Windows packaging, network request, or full regression
+run was performed. This audit does not establish native Windows compatibility.
+
+Areas inspected
+---------------
+Production paths and temporary files; persistent JSON/text encoding; application
+theme, Follow System, scientific plot and export appearance; Settings > Appearance
+> Advanced QAction/QMenu construction; open/save/export dialogs; clipboard and
+drag-to-share MIME/file URLs; Online Paper Library launcher; shell/process calls;
+shortcuts; session and tag persistence; and obvious 3D/OpenGL platform assumptions.
+
+Findings by severity
+--------------------
+CRITICAL: None found by static inspection.
+HIGH: None found by static inspection.
+MEDIUM: Rename reserves the destination with os.link() before unlinking the
+old name (app/core/data_rename.py). This preserves no-overwrite behavior on
+filesystems that support hard links, but Rename may fail on Windows removable
+or network filesystems without hard-link support. No change made: replacing
+the transaction requires behavioral testing and is outside this audit.
+LOW: Follow System depends on Qt reporting colorScheme()/colorSchemeChanged;
+the code falls back to the initial application palette if the API is unavailable.
+Runtime response to Windows appearance changes remains unverified.
+
+SAFE / INTENTIONAL
+------------------
+- External JSON uses explicit UTF-8 reads/writes, including tags.json and
+  settings.json; no CP950-dependent persistent JSON decoding was found.
+- POSIX directory fsync is explicitly skipped on Windows (os.name != "nt").
+- Settings > Appearance > Advanced uses Qt QAction/QMenu APIs; application,
+  scientific plot, and export appearance states are persisted independently.
+- Online Paper Library uses QDesktopServices.openUrl(QUrl(...)); its URL was
+  not opened or contacted during this audit.
+- Drag-to-share uses QMimeData and QUrl.fromLocalFile(Path), not a Finder-only
+  command. Clipboard uses Qt APIs. Dialogs use QFileDialog.
+- The one platform-dependent shortcut uses Meta on macOS and Ctrl elsewhere;
+  standard Copy/Save shortcuts use QKeySequence.StandardKey.
+- The 3D backend probes for an OpenGL context before constructing Q3DSurface;
+  actual Windows GPU/driver behavior is not established by static inspection.
+- No production os.system, subprocess, shell=True, AppleScript, osascript,
+  pbcopy/pbpaste, defaults, xattr, or hard-coded /Users or /Applications path
+  was found in the targeted production search.
+
+Changes and checks
+------------------
+Files modified: update.txt only. No application code or scientific data changed.
+Small fixes applied: none.
+Checks: targeted ripgrep searches and source review. No tests rerun; the prior
+v0.17B full suite was 773 passed, 3 skipped, 31 warnings, and 118 HDF5/H5
+SHA-256 values were unchanged. Those are prior results, not audit reruns.
+
+Windows native validation: NOT PERFORMED.
+Windows packaging validation: NOT PERFORMED.
+
+Later validation
+----------------
+On real Windows hardware, verify launch, Light/Dark/Follow System transitions,
+Settings > Appearance > Advanced, Chinese tags/settings persistence, 1D/2D/3D
+rendering, white/dark plot export, clipboard/file drag, open/save dialogs,
+session restore, and Rename on NTFS plus any supported removable/network drive.
+Confirm Qt/OpenGL availability and GPU-driver behavior separately.
+
+
+============================================================
+v0.17C - ICON REPLACEMENT, STAR, THEME CONTROL AND UI CONSISTENCY PASS
+============================================================
+Date: 2026-09-25
+Version: 0.17C (app/__init__.py __version__ = "0.17C")
+Folder operation: NEW folder LabLogViewer_v0.17C, copied from
+LabLogViewer_v0.17B before any edit (user instruction overrode the
+"in-place" wording of the original icon prompt). LabLogViewer_v0.17B and
+LabLogViewer_v0.17B.zip were NOT modified.
+Source icon directory (development input only):
+/Users/liuyushu/Desktop/lab browser/icom
+Runtime assets: app/resources/icons/ (no runtime dependency on icom/).
+
+Icon system
+-----------
+- New module app/icons.py. UI asks for a semantic name: icon("reload").
+  A QIconEngine renders the packaged SVG at paint time with the current
+  application theme's line color (Light #1D1D1F, Dark #E6E6E6; disabled
+  uses the theme secondary color), so icons switch with Light/Dark/Follow
+  System without per-widget code. Pixmaps are cached per name/color/size/DPR.
+- make_icon_only(button, name, text, size, flat=...) shows only the icon;
+  the former label stays as button text (hidden), tooltip and accessible
+  name. If an asset is missing, the text is shown instead and the name is
+  listed by icons.missing_icons() (fallback, control never removed).
+- icon_directory() also resolves sys._MEIPASS/app/resources/icons for a
+  future PyInstaller build (add datas=[("app/resources/icons",
+  "app/resources/icons")]). Packaging itself was NOT done.
+- Tooltips use Qt's default ~700 ms wake-up delay (within 500-800 ms).
+  Widget tooltips are now retranslated by LocalizationManager like actions.
+
+Asset mapping (icom -> app/resources/icons)
+- import.py (actually SVG text) -> open.svg        [stroke 2 -> 1.5 to match]
+- reload.py (actually SVG text) -> reload.svg      [never executed]
+- folder.svg / folder-open.svg -> folder.svg / folder_open.svg
+- light/dark/system.svg -> theme_light/theme_dark/theme_system.svg
+- mouse course.svg -> pointer.svg; show trace.svg -> show_trace.svg
+- tag.svg, trace.svg: dot circles given fill="currentColor" so they recolor
+- drag_to_share.png (opaque white bg) -> drag_share.png: converted to a
+  transparent mask, strokes thickened to match the SVG set, recolored at
+  runtime (no background rectangle)
+- analysis, export, save, show, hide, maximize: copied as-is
+- Created for this pass (same 256 grid / 16 stroke style): star.svg,
+  filter.svg (Retrieve by Tags), back.svg (Back to Folder),
+  debackground.svg (resonance dip over dotted background), copy.svg,
+  view_all.svg (magnifier minus)
+
+Semantic mappings
+- Database Browser: open, reload, star/star_filled, tag, filter, back,
+  debackground, theme_* (round Appearance button), folder/folder_open
+  (tree items follow expanded state).
+- Viewer: open, reload (same assets as Browser; SEPARATE QActions and
+  handlers: Browser Open = getExistingDirectory/open_database, Viewer
+  Open = getOpenFileName/open_file; Browser Reload = reload_database,
+  Viewer Reload = _reload_current_file), trace (Traces), show_trace (Show
+  menu), export (Export menu), analysis (Analysis menu), pointer,
+  drag_share, maximize (Maximize Plot / Restore Layout tooltip follows
+  state), save (Save View Preset), show/hide (Trace Manager Show column).
+- YIG Analysis: view_all, copy, save, pointer, drag_share.
+
+Behavior-visible changes requested by the user in this pass
+- Icon controls are icon-only; label moved to hover tooltip.
+- Top toolbar icons 32 px (Browser top row, Viewer application toolbar).
+  Analysis toolbars 20 px. Constants: theme.TOOLBAR_ICON_SIZE,
+  theme.ANALYSIS_ICON_SIZE, theme.APPEARANCE_BUTTON_SIZE.
+- Browser top row = three segments whose stretch follows the workspace
+  splitter columns (Open/Reload | Star/Tag/Retrieve/Back | Appearance,
+  De-background), so Star/Tag sit above "Data in Folder".
+- Toolbar buttons are flat (transparent until hover); checked/pressed =
+  Selected surface + 1 px Accent border (no geometry shift). Other
+  checkable buttons also get the Accent border when checked.
+- Menu buttons: drop-down arrow hidden (QToolButton::menu-indicator);
+  pressed surface is shown while the menu is open.
+- Star: starred = yellow filled star (#F5B800 fill, #C98F00 edge);
+  unstarred = outline in theme text color. Used in the Star button and
+  the Data list Star column (text glyphs removed; state kept in
+  STAR_STATE_ROLE). Clicking the Star column cell toggles Star/Unstar via
+  the existing _toggle_star/StarStore path. Double-click still opens the
+  Viewer as before. StarStore persistence unchanged.
+- Appearance: the Browser dropdown + label were replaced by one round
+  button cycling Light (sun) -> Dark (moon) -> Follow System (system
+  icon; tooltip shows the resolved Light/Dark). Settings > Appearance and
+  Advanced (Scientific Plot / Export background) are unchanged.
+- Trace Manager Show column: checkbox removed; eye / closed-eye icon,
+  click toggles visibility (same TraceSelectionState path as before).
+- Mark Tool icons paint with the theme text color (were fixed #25364a,
+  invisible on Dark).
+- Viewer Plot Settings: the QStackedWidget sizes to the current page, so
+  1D/2D no longer reserve the 3D page height (removed the empty gap).
+  3D layout unchanged.
+- Formula preview (x' = x, y' = y) themed via QLabel#formulaPreview.
+- Palette aligned to the user's table: Light accent #297FA8, Dark panel
+  #141A21 (other listed values already matched). Tabs get padding and an
+  Accent underline on the selected tab (app-wide).
+- YIG Analysis: Copy Active/Copy All/Save Active/Save All text buttons
+  merged into one Copy and one Save icon button with This Pane / All Panes
+  menus (same handlers); View All is an icon; per-pane plot toolbar View
+  All / Copy Plot / Save Plot are icons; Matplotlib toolbar 20 px; pane
+  borders use theme accent/border; Fit Results bar gains the same Copy /
+  Save buttons (existing copy_pane/copy_all/save_* methods). Left control
+  panel labels wrap and the column is sized to its content (no clipped
+  fields, no horizontal scrollbar). No fitting code touched.
+
+Windows follow-ups from the static audit
+- MEDIUM fixed: data_rename falls back to a no-overwrite os.rename when
+  os.link fails (FAT/exFAT/network shares). Windows rename never replaces;
+  POSIX fallback re-checks existence immediately before renaming.
+- LOW improved: Follow System reads HKCU ...\Themes\Personalize
+  AppsUseLightTheme via winreg when Qt reports Unknown, and re-resolves on
+  QEvent.ThemeChange. No-op on macOS.
+
+Star / Unstar: modified in this pass BY USER REQUEST (see above).
+Not changed: HDF5 reader, Labber parser, data model, fitting equations and
+algorithms, De-background math, Node/Antinode, formula math, colormaps,
+3D rendering/LOD/camera/export, Liquid Glass (not started), packaging.
+
+Files changed vs v0.17B
+- app/__init__.py, app/theme.py, app/icons.py (new),
+  app/resources/__init__.py + app/resources/icons/* (new),
+  app/core/data_rename.py, app/gui/browser_window.py,
+  app/gui/main_window.py, app/gui/plot_interaction.py,
+  app/gui/mark_tool_icons.py, app/localization/catalogs.py,
+  app/localization/manager.py,
+  app/analysis/yig_fitting/ui/plots.py,
+  app/analysis/yig_fitting/ui/analysis_pane.py,
+  app/analysis/yig_fitting/ui/main_window.py, README.md, update.txt
+- tests: test_v017c_icons.py (new, 20 tests); updated for the requested
+  UI changes: test_v09g_browser_presets.py, test_gui_browser_smoke.py
+  (star state role instead of glyph), test_v017b_theme.py (round
+  Appearance button instead of combo), test_v012c_overlay_manager.py (eye
+  click instead of checkbox), test_v09e_axis_transform_colormap.py
+  (version 0.17C).
+
+Known limitations / remaining icon work
+- Matplotlib navigation icons pick light/dark once when the Analysis
+  window is created; switching theme while it is open leaves them as-is.
+- macOS native menus snapshot action icons; they may not recolor until
+  the menu is rebuilt.
+- Menu buttons rely on the tooltip and the pressed surface to signal a
+  menu (no arrow) as requested.
+- Item tooltips in tree cells (star cell, eye cell) are English/Chinese
+  via catalog for the star cell; the eye cell tooltip is English only.
+- Native macOS / Windows GUI rendering was not visually verified on real
+  hardware; screenshots were taken with the offscreen Qt platform.
+
+
+============================================================
+v0.17D - COMPONENT-LEVEL LIQUID GLASS INTEGRATION PASS
+============================================================
+Date: 2026-09-25
+Project: LabLogViewer v0.17D
+Folder: /Users/liuyushu/Desktop/lab browser/LabLogViewer_v0.17D
+
+Folder and handoff history
+--------------------------
+The user explicitly requested a new v0.17D folder, overriding the attached
+specification's in-place v0.17B wording. The v0.17B update.txt was read before
+source editing. An initial v0.17D prototype was mistakenly copied from v0.17B.
+The user caught the missing newer icons/layout. The latest existing v0.17C
+project was then inspected and launched on the real Mac desktop. v0.17D was
+resynchronized from v0.17C and Glass re-integrated on that base. v0.17B and
+v0.17C were not edited. The v0.17C icon system, Browser three-segment toolbar,
+Viewer icon toolbar, Analysis icons, and improved 1D/2D control layout remain.
+
+Reference, license, and implementation
+--------------------------------------
+Local reference: development_reference/pyglass-main, corresponding to
+https://github.com/neomosh8/pyglass. Its LICENSE is MIT, copyright 2026
+neomosh8. The full notice is retained in docs/third_party_pyglass.txt.
+Studied: GlassRenderer and paint_glass in pyglass/effect.py; GlassKernel and
+GlassMaterial in pyglass/refract.py; WidgetBackdrop in pyglass/backdrop.py.
+Adapted concepts: separate in-app backdrop, optical processing and foreground;
+edge refraction, reduced-resolution frosting, tint and restrained rim;
+cached material and a fallback. No PyGlass/PyQt6 source file was copied into
+the runtime. app/gui/glass.py is a smaller independent PySide6 implementation.
+No dependency was added.
+
+Architecture and coverage
+-------------------------
+app/gui/glass.py provides GlassRenderer, GlassToolSurface and GlassToolBar.
+Browser uses GlassToolSurface behind its existing three toolbar segments.
+Viewer uses GlassToolBar behind its existing QAction/QToolButton row.
+The v0.17C IconManager-equivalent app/icons.py remains independent and paints
+the existing SVG/PNG icons as sharp foreground; actions, callbacks, shortcuts,
+tooltips and accessibility labels remain owned by their original controls.
+Analysis controls, scientific plots, tables, colorbars, 3D viewport, and
+fitting/numerical code intentionally receive no Glass.
+
+Material and lifecycle
+----------------------
+The material samples only the in-app parent background using QWidget.render
+without drawing children. It reduces the backdrop for frosting, computes a
+small edge displacement/refraction with NumPy, applies theme-specific tint,
+and paints a subtle sheen/rim. Foreground children are never blurred or
+distorted. The raster is HiDPI-aware using devicePixelRatioF and QImage DPR.
+The optical image is cached and invalidated on show, resize and theme change;
+the timer coalesces refreshes. Idle paint uses the cached image, not another
+data transformation or capture. Browser Safe Recovery uses the fallback.
+LABLOGVIEWER_DISABLE_GLASS=1 disables optical processing globally. Rendering
+exceptions also fall back to the same geometry-preserving solid material.
+No desktop capture or screen-recording permission is required.
+
+Real macOS validation and performance
+-------------------------------------
+Real desktop-context screenshots were captured from both the unchanged
+v0.17C source and the corrected v0.17D project (not offscreen widgets):
+/private/tmp/lablogviewer-v017c-{browser,viewer}-{light,dark}-desktop.png
+/private/tmp/lablogviewer-v017d-{browser,viewer}-{light,dark}-desktop.png
+/private/tmp/lablogviewer-v017d-browser-fallback-desktop.png
+Visual comparison confirmed Browser icon positions/three-column alignment,
+Viewer icons, compact 1D plot layout, sharp text/icons, Light/Dark materials,
+and a white scientific plot under Dark application theme. A single toolbar
+material refresh measured about 7-9 ms on this Mac in the native check;
+fallback refresh was effectively 0 ms. This is not a frame-time/FPS claim.
+
+Tests and scientific safety
+---------------------------
+Focused icon/theme/Glass tests: 36 passed. After one focused Theme test was
+made explicit about starting in Light mode, an additional 25 focused tests
+passed. Source compileall passed. An unrestricted 800-test run was attempted
+but stopped at test_toolbar_trace_manager_popouts_and_resizable_panes because
+it consumed sustained high CPU and increasing memory. The same isolated test
+also hung with optical Glass disabled and in the unchanged v0.17C project;
+this is a confirmed pre-existing base-suite blocker, not a Glass regression.
+The final regression excluding only that one test completed and exited 0:
+796 passed, 3 skipped, 1 deselected, 31 warnings in 393.09 s. The excluded
+test remains unresolved and was not weakened or deleted. A Theme test had an
+order-dependent Follow System/Light assumption; its setup now explicitly
+selects Light while retaining the Light-to-Dark assertions.
+123 available HDF5/H5 SHA-256 entries were byte-identical before/after this
+pass. No source scientific HDF5 was modified.
+
+Windows and limitations
+-----------------------
+New Glass code contains no PyQt6 import, OS capture, macOS command, hard-coded
+user path, locale-dependent text handling or HDF5 access. The same PySide6
+QImage/QPainter/NumPy path is used on macOS and Windows. Windows native Liquid
+Glass validation: NOT PERFORMED. Windows packaging validation: NOT PERFORMED.
+The Browser/Viewer toolbars currently sit over mostly uniform application
+backgrounds, so physically correct in-app refraction is visually subtle;
+desktop wallpaper is deliberately not sampled. The unrestricted full suite
+cannot be called green until the pre-existing Viewer/Mark hang is repaired.
+
+Files changed relative to v0.17C
+---------------------------------
+New: app/gui/glass.py, docs/third_party_pyglass.txt,
+tests/test_v017d_glass.py.
+Modified: app/__init__.py, app/gui/browser_window.py,
+app/gui/main_window.py, README.md, update.txt,
+tests/test_v017b_theme.py, tests/test_v09e_axis_transform_colormap.py.
+
+Next step
+---------
+User native acceptance of the Glass appearance, then separately diagnose the
+v0.17C-inherited Viewer/Mark test hang and validate on real Windows hardware.
+Do not treat this pass as Network Workspace, History Data, updater, or new 3D
+work.
+
+
+============================================================
+v0.17D (revised in place) - LAG FIX, LIQUID GLASS REWORK, GLASS DIALS
+============================================================
+Date: 2026-09-25
+Folder operation: edited LabLogViewer_v0.17D in place at the user's request.
+Version string unchanged (0.17D).
+
+Lag: root cause was the v0.17C icon engine, not the glass
+----------------------------------------------------------
+- Measured: glass refresh ~8 ms, only on show/resize/theme; 0 at idle.
+- Qt calls QIconEngine.isNull() on every paint/size-hint pass. app/icons.py
+  re-parsed the SVG with a new QSvgRenderer on every call. A QTreeWidget with
+  ResizeToContents columns re-measures every row whenever one row's icon
+  changes, so the Trace Manager (one eye icon per trace) was quadratic: the
+  855-trace 0828 RSMEP_1 file made 362,598 isNull calls (20 s) before the
+  window finished. This is also the "pre-existing" hang of
+  test_toolbar_trace_manager_popouts_and_resizable_panes noted above.
+- Fix (app/icons.py): SVG validity cached by content, recolored
+  QSvgRenderers cached, one shared QIcon per semantic name (colors are still
+  resolved at paint time, so Light/Dark switching is unchanged).
+- Fix (app/gui/main_window.py _refresh_multi_trace_panel): ResizeToContents
+  is suspended during the bulk update and restored once; new rows are built
+  before insertion; rows whose visible/active/reference state did not change
+  are skipped. The hanging test now completes.
+
+Liquid Glass rework (app/gui/glass.py)
+--------------------------------------
+- Why v0.17D looked weak: it refracted only the uniform window background, so
+  the result was a flat gradient box, and only a 2.5 px edge offset of PyGlass
+  was used.
+- Now: PySide6 port of PyGlass GlassKernel/GlassMaterial/paint_glass (MIT,
+  see docs/third_party_pyglass.txt), retuned for ~40 px capsules (bevel
+  clamped below half the capsule height). Snell refraction with chromatic
+  dispersion, Schlick-Fresnel environment reflection (bright top rim), a
+  spectral rim line, frost blur + milky haze, soft shadow, tint, sheen and
+  hairline. Light and Dark have separate styles.
+- Capsules: controls that sit together share one pill. Browser: Open/Reload |
+  Star/Tag/Retrieve/Back | glass dials | Appearance/De-background. Viewer:
+  separators split the toolbar into pills; overlapping pills are split at the
+  midpoint.
+- Backdrop: the parent's background plus sibling widgets inside the
+  refraction margin (e.g. the workspace just under the Browser toolbar),
+  never the host or its own buttons.
+- Cost: kernels cached per capsule size/thickness; a cached refresh measured
+  7-14 ms (offscreen) and runs only on show/resize/theme/dial change or when
+  controls move (settles after 120 ms, reusing cached pills meanwhile).
+  Idle cost is zero. Frost never rebuilds a kernel.
+- Fallback unchanged in intent: LABLOGVIEWER_DISABLE_GLASS=1, Safe Recovery,
+  or any optical exception paints a vector pill with the same geometry.
+
+Glass dials (Browser toolbar, right segment)
+--------------------------------------------
+- Two compact sliders, Thickness and Frost (0-100), in the style of the
+  supplied reference image: accent fill, white knob that grows while dragged.
+  Click-to-position, drag, arrow keys and wheel supported.
+- ThemeManager.glass_material / set_glass_material(final=...) broadcast
+  glass_material_changed to every glass surface (Browser and all Viewers).
+  Dragging refreshes at a throttled rate; the value is persisted to
+  settings.json (general.glass_thickness / glass_frost, defaults 0.5 / 0.25,
+  validated 0..1) only on release/keyboard/wheel.
+- Disabled with an explanatory tooltip when glass is disabled.
+- Labels/tooltips localized (English / Traditional Chinese).
+
+Tests
+-----
+- tests/test_v017d_glass.py rewritten for the new API: capsule refraction,
+  frost without kernel rebuild, bevel clamp, settings validation/persistence,
+  Browser capsules + dials + fallback + dark mode, Viewer optical failure
+  fallback, and an icon isNull caching regression test.
+- tests/test_v017b_theme.py: expected settings.json now includes the two
+  glass keys.
+- See the delivery message for the full-suite result of this pass.
+
+Not changed: HDF5 reader, parser, data model, fitting, De-background math,
+3D rendering, scientific plots, colormaps, Star persistence.
+Native macOS visual acceptance of the new glass is still required; screenshots
+in this pass were taken with the offscreen Qt platform.
+
+
+============================================================
+v0.17F - MEASUREMENT DRAG TRANSFER
+============================================================
+Date: 2026-09-25
+Source: v0.17D, copied into the user-requested new LabLogViewer_v0.17F folder.
+The complete v0.17D update.txt was read first. v0.17D was launched before
+source edits; its native GUI process was not used for an interaction claim.
+
+Implemented
+-----------
+- Browser measurement rows use Qt's normal left-drag threshold. Dragging onto
+  the Quick Preview transfer target sends one selected log to the configured
+  IP/host and port. Click, Star and double-click Viewer behavior remain.
+- The Browser can start/stop a TCP receiver. Sending runs on QThread and
+  displays preparing, connecting, byte progress, completed or failed status.
+  Receiving runs on a background thread and stores externally under
+  ~/.lablogviewer/received/; source HDF5 is read-only.
+- app/core/measurement_transfer.py serializes existing Experiment output,
+  not raw HDF5 fields. ZIP contains UTF-8 manifest plus .npy numeric arrays
+  with allow_pickle=False. Channel identity, units, logical dimensions,
+  sweep-axis order/values, scalar/vector flags, relation metadata and raw
+  real/complex data are retained. All actually present Sij (i,j=1..4) and
+  generic channels use the same path; no derived magnitude/phase duplication.
+- app/core/measurement_transport.py protocol v1 frames byte length and SHA-256,
+  checks corruption/incomplete transfer and validates the archive before
+  atomic storage. No executable object deserialization or sender-supplied path.
+- Receiver reconstruction API: load_measurement(), get_data(),
+  list_dimensions(), get_full_nd_array(). Direct Viewer opening of a received
+  archive is intentionally deferred; this is not a full Network Workspace.
+
+Flux / Empty / Function / Scalar regression
+-----------------------------------------
+The requested /mnt/data path is absent on this Mac, but the exact real file
+exists at ../Data/CPAEP/Data_0908/0908 X2 Flux-dep.hdf5. Existing Parser
+interprets it as Frequency 10001 x DC supply - 3 - Current 399, with complex
+VNA - S21 shape (10001,399). DC supply - 4 - Current retains its relation
+flag and equation x. A real socket transfer and receiver round-trip compared
+the entire complex array, logical axes and relation metadata. Empty was never
+interpreted independently in transfer. Real S31 was also tested from
+0826 LRCPAEP @4.782GHz.hdf5; all 16 Sij names were synthetic-tested.
+
+Validation and limitations
+--------------------------
+- Final focused transfer/Browser/icon suite: 41 passed, exit 0.
+- Native macOS Browser launch and real-desktop screenshot: first window,
+  six real Database rows, transfer controls and Quick Preview visible at
+  /private/tmp/lablogviewer-v017f-desktop.png. Native mouse drag and LAN
+  transfer were not manually exercised; functional drag/socket tests used
+  offscreen Qt and localhost.
+- An unrestricted full suite was attempted and interrupted after 336 passed,
+  1 skipped, 13 failed in 190.01 s. Failures were old Marks tests sharing
+  persistent state; the same two-test failure was reproduced on unchanged
+  v0.17D. It is not claimed as a passing full regression.
+- Windows code uses Python sockets/Path and PySide6; native Windows testing
+  and packaging were not performed.
+- Trusted LAN only: no authentication, TLS, discovery, remote Viewer/session
+  control, or endpoint persistence. Receiver is sequential, one connection at
+  a time. Archive resource cap is 2 GB.
+
+Files added: app/core/measurement_transfer.py,
+app/core/measurement_transport.py, app/gui/measurement_transfer_ui.py,
+docs/measurement_transfer.md, tests/test_v017f_measurement_transfer.py.
+Files modified: app/__init__.py, app/gui/browser_window.py, README.md,
+tests/test_v09e_axis_transform_colormap.py, update.txt.
+
+
+============================================================
+v0.17G - GLASS BUTTONS, ROUND CAPSULE HOVER, LIGHT GLASS, APPEARANCE PAGE
+============================================================
+Date: 2026-09-25
+Folder operation: NEW folder LabLogViewer_v0.17G copied from v0.17F.
+v0.17F was not modified. __version__ = "0.17G".
+
+Changes
+-------
+- app/theme.py: QPushButton and stand-alone QToolButton use a stylesheet
+  liquid-glass material (specular top border, split gradient body, translucent
+  edges; accent-tinted hover/pressed/checked; dimmed disabled). Real optical
+  refraction per button was not used: dozens of buttons would each need a
+  backdrop capture and kernel, which costs far more than it shows.
+- Buttons inside #browserGlassToolbar and #viewerApplicationToolbar capsules
+  hover/check as round translucent lenses (radius = icon/2 + 4) instead of
+  6 px rectangles.
+- app/gui/glass.py: Light theme adds optical bevel shading (edge_shade 0.16),
+  a cool body tint, a deeper 6-layer shadow and a lower inner shade; the dark
+  theme is unchanged.
+- Settings menu: the Appearance submenu (Light/Dark/Follow System/Advanced)
+  is replaced by "Appearance...", which opens SettingsDialog on its
+  Appearance page. That page holds Theme, Advanced (Scientific Plot
+  Appearance, Export Plot Background) and Toolbar Glass (Thickness, Frost).
+  The Browser round theme button and toolbar dials stay; all controls sync
+  through ThemeManager signals.
+- Localized: "Appearance..."/"外觀...", "Theme"/"主題",
+  "Toolbar Glass"/"工具列玻璃".
+
+Tests
+-----
+- test_v017b_theme.py updated for the menu action and Appearance page
+  (plot/export combos, two-way glass dial sync).
+- test_v017d_glass.py: stylesheet glass/round-hover rules, light-theme bevel
+  shading on a uniform backdrop.
+- Focused suites (glass, theme, icons, settings, Browser smoke, debug,
+  measurement transfer): 84 passed.
+
+3D Surface native audit (report only, nothing changed)
+------------------------------------------------------
+Run on the real macOS display with 0828 RSMEP_1 (855 x 501) and
+0908 X2 Flux-dep (399 x 10001). See the delivery message for the full list;
+the most serious items: Trajectory/Scatter never render
+(QScatter3DSeries.resetArray does not exist), native Surface opacity < 100%
+recolors the BWR map into false colors, Waterfall renders solid black,
+renderer.apply_scientific_plot_appearance raises AttributeError on every show
+(Q3DSurface has no update()), Dual Surface silently switches the height
+transform to Real, and mesh rebuilds block the GUI thread (Dual Surface ~10 s,
+Full Resolution on 4M points ~12 s with no visible change).
+
+
+============================================================
+v0.18A - HYBRID 3D ENGINE (QT GRAPHS 3D + DATA VISUALIZATION)
+============================================================
+Date: 2026-09-25
+Folder operation: NEW folder LabLogViewer_v0.18A copied from v0.17G.
+v0.17G was not modified. __version__ = "0.18A".
+
+Decision history (user choices)
+-------------------------------
+- 3D engine: Qt Graphs 3D requested. Native probes on PySide6 6.11 showed
+  surfaces work well but QCustom3DItem, scatter item sizes and user meshes do
+  not render reliably, so the user chose a hybrid engine.
+- Default performance mode: Balanced.
+
+New / changed files
+-------------------
+- app/visualization3d/graphs_renderer.py (new): GraphsSurfaceRenderer with the
+  SurfaceRenderer public API for Surface, Transparent Surface, Dual Surface and
+  Waterfall. resetArrayNp upload, texture colormap with straight alpha,
+  Approximate OIT, reference plane and bottom projection as helper surface
+  series, Waterfall as up to 64 colormapped ribbons, custom rotate/pan/pick,
+  interaction LOD (drag) with idle restore after 300 ms, async display-grid
+  preparation above 1M source points, live FPS (shown when >= 5 FPS), themed
+  colorbar, renderToImage export.
+- app/visualization3d/display_grid.py (new): evenly spaced peak-preserving
+  display grids with per-cell source indices.
+- app/visualization3d/renderer.py: Trajectory/Scatter fixes (keep proxy
+  references: the "QScatter3DSeries has no attribute resetArray" failure;
+  MeshPoint -> low-poly spheres, which were invisible before), reference plane
+  (horizontal plane at a Point Y value) and floor projection for point
+  geometries, apply_scientific_plot_appearance no longer raises
+  (requestUpdate instead of QWidget.update), themed colorbar, localized and
+  cleared reference-plane status text.
+- app/gui/main_window.py: renderer selection by geometry (graphs / native /
+  transparent fallback), Reference Plane and Bottom Projection enabled for
+  every geometry, Dual Surface restores the user's height transform on exit.
+- app/settings: persisted three_d_profile (balanced/quality/economy) and a
+  Settings > General "3D Performance" selector.
+- Localization: reference plane messages, waterfall ribbons, 3D profile.
+- requirements.txt: PySide6>=6.8.
+
+PySide6 6.11 constraints found and handled (all verified natively)
+------------------------------------------------------------------
+- resetArrayNp does not own the numpy buffer -> reset_surface() keeps buffers.
+- Python axis formatter copies were collected -> crash in updateLabels();
+  formatters are persistent, updated in place with markDirty(True).
+- Python-owned Q3DSurfaceWidgetItem crashed at interpreter shutdown -> Qt
+  parent, created before its QQuickWidget.
+- Default transparency gave false colors; Approximate OIT is correct.
+See app/visualization3d/README.md for the full list.
+
+Measurements (this Mac, native)
+-------------------------------
+- 855 x 501 upload: resetArrayNp 5.8 ms vs 1,403 ms per-item before.
+- Dual Surface switch: ~0.3 s vs ~10 s (three per-item rebuilds) before.
+- 399 x 10001 Full Resolution: ~0.5 s CPU (the remaining delay was the
+  existing confirmation dialog); display grid for 1M budget 225 ms in a worker.
+
+Tests
+-----
+- New: tests/test_v018a_display_grid.py (6), tests/test_v018a_graphs_renderer.py (5).
+- Updated for intended changes: test_v016d_corrections (proxy references),
+  test_v016d_geometry_mapping (projection/reference visible for all
+  geometries), settings expectations (three_d_profile).
+- Full suite (offscreen, clean HOME, --tb=line): 808 passed, 14 failed,
+  3 skipped. The 14 failures are the same pre-existing Mark-tool tests that
+  fail on v0.17D/v0.17G. With the default traceback style the run appears to
+  hang after the last test while pytest renders very large assertion reprs
+  from those Mark failures; --tb=line avoids that.
+- Offscreen tests exercise the Data Visualization fallback; the Qt Graphs path
+  was exercised by a scripted native audit on 0828 RSMEP_1 and
+  0908 X2 Flux-dep (all geometries, overlays, policies, cameras, transforms,
+  export).
+
+Known limits
+------------
+- Waterfall shows at most 64 traces (evenly spread, first and last kept).
+- Qt Graphs camera state is not interchangeable with the old renderer's saved
+  camera target; switching engines resets the view.
+- A small dark sorting artifact can appear where a translucent surface
+  intersects the reference plane at steep camera angles.
+- Windows native validation: NOT PERFORMED.
+
+
+============================================================
+v0.18B - 3D ANALYSIS WINDOW, PUBLICATION EXPORT, UI FIXES
+============================================================
+Date: 2026-09-26
+Folder operation: NEW folder LabLogViewer_v0.18B copied from v0.18A
+(v0.18A unchanged; backups LabLogViewer_v0.17G.zip and LabLogViewer_v0.18A.zip
+were created in 之前預存檔). __version__ = "0.18B".
+
+User decisions
+--------------
+- 3D look: interactive restyle + publication export; publication is the
+  default export, switchable to screen capture in Browser Settings.
+- 3D window follows the Viewer's current Data.
+
+Changes
+-------
+- app/gui/three_d_window.py (new): ThreeDAnalysisWindow hosting the Viewer's
+  existing 3D control page and 3D plot page (one implementation of all 3D
+  logic), with Copy / Save toolbar, Cmd/Ctrl+C / Cmd/Ctrl+S, and the current
+  export style shown.
+- app/gui/main_window.py: Plot Mode 1D/2D only; Analysis > 3D Surface...;
+  3D rendering runs while the 3D window is open (_three_d_active()); saved
+  3D views and session restore reopen the window; Viewer copy/save/drag and
+  multi-pane / X-Y Cut / control-width logic no longer depend on 3D; 3D
+  copy/save/drag use copy_3d_plot / save_3d_plot_dialog; 3D pages are bound
+  to localization before the window is first opened.
+- app/visualization3d/publication_style.py (new): journal-style export.
+  Surface family (incl. Dual, Waterfall lines, reference plane, floor
+  projection) and Trajectory/Scatter; camera follows the interactive view;
+  peak-preserving reduction to 60k faces; 300 dpi. Measured on 0908 X2
+  Flux-dep: PNG 4.7 s / 2.0 MB, PDF 5.6 s / 1.6 MB.
+- app/visualization3d/graphs_renderer.py: journal-like interactive styling
+  (serif labels, grey walls, softer lighting) and SI-scaled axis labels.
+- Settings: three_d_export_style (publication default / screen) under
+  Appearance > Advanced.
+- Localization: 3D control labels, reference plane options, export style;
+  scientific terms remain English.
+- app/theme.py: themed spin-box step arrows (spin_up/down light/dark SVG);
+  combo popups widened to their longest entry.
+- YIG export alignment: app/analysis/yig_fitting/ui/plots.py and
+  analysis_pane.py normalize selected pane rectangles to the image origin.
+
+Tests
+-----
+- New: tests/test_v018b_publication_and_ui.py (SI axes, publication PNG/PDF
+  for Surface and Waterfall, empty-scene error, YIG origin normalization,
+  themed spin arrows, export-style setting).
+- Updated for the separate 3D window: test_gui_nd_smoke, test_gui_linecut_smoke,
+  test_v016a_debug_surface, test_v016d_publication, test_v016d_corrections,
+  test_v017b_theme, test_v015e settings expectations, and tests that entered
+  3D through Plot Mode (now open_3d_window()).
+- Native checks: 0828 RSMEP_1 and 0908 X2 Flux-dep through the 3D window
+  (open, overlays, publication PNG/PDF, Waterfall, Scatter, Chinese UI, close);
+  YIG single-pane export size equals one pane at export density.
+- Full suite (offscreen, clean HOME, --tb=line): 812 passed, 17 failed,
+  3 skipped; 3 failures were tests asserting the old in-Viewer 3D layout
+  (analysis menu contents, 3-page Plot Settings stack, Viewer 3D save path)
+  and were updated for the 3D window, giving 815 passed / 14 failed. The 14
+  are the same pre-existing Mark-tool failures as v0.17D-v0.18A.
+
+
+============================================================
+v0.18C - SCREEN ANNOTATION (PEN / LASER / CLEAR)
+============================================================
+Date: 2026-09-26
+Folder operation: NEW folder LabLogViewer_v0.18C copied from v0.18B
+(v0.18B unchanged; LabLogViewer_v0.18B.zip created in 之前預存檔).
+__version__ = "0.18C".
+
+User decisions
+--------------
+- Strokes fixed to the screen; never stored, not exported, cleared on close.
+- Right-button drag draws; plot right-click menus pause while active.
+- Trajectory/Scatter supported with a floating transparent window.
+- No undo, no eraser.
+
+Implementation
+--------------
+- app/gui/annotation.py (new): AnnotationSession per host window,
+  AnnotationCanvas (child overlay, or floating tool window over native
+  OpenGL), AnnotationToolbar (GlassToolBar in the bottom toolbar area:
+  Pen / Laser / Clear, four color chips or the red laser chip, width
+  1–12 px or trail 0–1.50 s), ColorSwatch, Chaikin smoothing, halo outline,
+  laser tail on a Source-composited layer (no darker joints), and the
+  clear animation (_ClearAnimation: ink snapshot, genie funnel of 48
+  contiguous strips toward the button with a glass tint, droplet glow and
+  ripple; the real ink is removed before it starts). Input is routed by an
+  application event filter active only while Annotation is on.
+- Hosts: Viewer (toolbar next to Analysis; regions mode_stack +
+  multi_pane_splitter; locks Plot Mode, pane layout, Maximize, Reset Layout
+  and pane splitters), Database Browser (top-row right segment; region
+  Quick Preview), YIG Mirror Analysis (tab-bar corner; region tabs; locks
+  tabs, Grid/Focus/Reset Layout and splitters), 3D window (toolbar; region
+  3D plot page; floating sheet for the Data Visualization renderer; locks
+  Geometry).
+- Icons: annotate, pen, laser, clear. Localized (標註, 畫筆, 雷射筆, 清屏,
+  粗細, 拖尾, 紅/藍/黃/綠).
+
+Validation
+----------
+- Native macOS: Viewer (pen, laser trail and fade, clear animation frames,
+  lock/unlock, menu policy restore, left-drag pan while annotating, dark
+  theme), Browser Quick Preview, YIG Data Preview, 3D Surface (Qt Graphs)
+  and 3D Scatter (floating sheet over native OpenGL, verified in a screen
+  capture).
+- A native bug found and fixed: the floating sheet itself was the top-level
+  window under the cursor, so the right-click leaked to the 3D export menu.
+- tests/test_v018c_annotation.py: smoothing, display-only behavior (plot
+  range and data unchanged by right-drag), laser does not persist, clear,
+  lock/unlock and menu restore, color set, hosts wired.
+- Windows: floating sheet behavior NOT validated on Windows.
+- Reduce-motion system preference is not yet detected (animation always runs).
+- Full suite (offscreen, clean HOME, --tb=line): 818 passed, 15 failed,
+  3 skipped. One failure was the Browser glass capsule count (the Annotation
+  button had become its own capsule); it now shares the Appearance /
+  De-background capsule and the test passes, giving 819 passed / 14 failed.
+  The 14 are the same pre-existing Mark-tool failures as v0.17D-v0.18B.
+
+
+============================================================
+v0.18D - RESIDUAL COLOR, ANNOTATION PLACEMENT, PALETTE, ICONS, DATA FOLDER
+============================================================
+Date: 2026-09-26
+Folder operation: NEW folder LabLogViewer_v0.18D copied from v0.18C
+(v0.18C unchanged; LabLogViewer_v0.18C.zip created in 之前預存檔).
+__version__ = "0.18D".
+
+1. YIG Residual line
+- The Residual line is tagged as a foreground line and recolored to the
+  plot text color on appearance change (dark plots: light line), also in
+  exports that use a temporary appearance.
+
+2. Annotation button at the top right everywhere
+- Viewer / 3D toolbars: expanding spacer, then the button at the far right.
+- Browser: far right of the top row.
+- YIG Analysis: larger round button (36 px) in the tab-bar corner; the tab
+  row is taller so the corner widget is not clipped.
+
+3. Colors and icons
+- app/palette.py holds every color (12 sections). No color literals remain
+  in other modules. Tree / spin arrows are generated at runtime from
+  palette.ARROW (temp folder lablogviewer-glyphs), so the static
+  branch_* / spin_* SVGs were removed.
+- Icons moved from app/resources/icons to <version folder>/icons.
+  icon_directory() also checks sys._MEIPASS/icons for a future PyInstaller
+  build (datas=[("icons", "icons")]).
+
+4. One data folder for everything kept outside HDF5 (app/core/data_location.py)
+- Default: macOS ~/Documents/LabLogViewerData;
+  Windows C:\Users\<user>\LabLogViewerData (C:\Users itself is not writable
+  without administrator rights; user chose the user home folder).
+- Layout: state/ (settings, session, session_lifecycle, database_index,
+  stars, tags, comments, viewer_display_states, transforms, axis_presets,
+  overlays, marks, named_views, drag-share, received), fitting/ (YIG
+  sessions, formula library, formulas, params, fit_gui_session),
+  lablogviewer_data.json (marker + migration record), README.txt.
+- The matplotlib font cache moved to the OS cache folder (not history).
+- Pointer file remembering the location: macOS
+  ~/Library/Application Support/LabLogViewer/data_location.json; Windows
+  %APPDATA%\LabLogViewer\data_location.json.
+- Settings > General > Data Folder: Change Location... (folder browser),
+  Show Folder, Use Default. A move is scheduled and runs at the next launch
+  before any store opens: copy, verify every file and size, switch, then
+  delete the old folder (only if it carries our marker). On failure the old
+  folder stays in use and Settings shows the reason. A target that already
+  holds LabLogViewer data asks whether to use it (current folder unchanged).
+  A missing target (e.g. unplugged drive) falls back to the default without
+  creating a fake folder.
+- Public-test data: on first launch, ~/.lablogviewer and the old fitting
+  AppData folders (macOS ~/Library/Application Support/LabLogViewer/fitting;
+  Windows %APPDATA% and %LOCALAPPDATA%\LabLogViewer\fitting; also
+  ~/.lablogviewer/fitting) are COPIED in. Originals are kept as a backup;
+  existing files are never overwritten; the record lists copied / kept /
+  errors, and the migration is retried until it completes without errors.
+- Dry run on a copy of the developer's real data: 117 files copied, 0
+  errors, 17 tags and 9 YIG sessions read back; originals unchanged.
+- Windows paths are NOT validated on a Windows machine.
+
+5. 3D window tools and Settings everywhere
+- 3D window toolbar: Open HDF5... (Ctrl/Cmd+O; the window then shows the
+  new file's 3D surface), Copy / Save, Pointer / Drag to Share (own
+  toggle; the Viewer's toggle no longer changes the 3D window), export
+  style label, Annotation at the right.
+- Settings has a separate "3D" section (3D Performance, 3D Export Style),
+  moved out of General and Appearance.
+- One shared Settings dialog (show_settings) opened from a top "Settings"
+  menu (Settings... / Appearance... / 3D...) in the Browser, Viewer, 3D
+  window, YIG Mirror Analysis and Node/Antinode windows.
+- Fixes in this pass: Mark colors in palette.py restored to the original
+  lowercase hex (a 2D Mark test compares QColor.name()); a 3D test that
+  searched the source for "#f3f5f7" now checks the palette; the default
+  data folder no longer reports "not available" when ~/Documents is missing.
+
+6. One safe formula engine (Viewer + YIG) and trusted .py models
+- app/core/safe_expr.py: normalize (LaTeX \frac \sqrt \cdot \times \div
+  \pi \sin... \log_{10} \left|x\right| Greek letters and _{sub}; Viewer x^2
+  and |x|; Python x**2 and np.<func>; full-width − · × ÷ （） π), then an
+  AST whitelist (numbers, + - * / ** %, constants, variables, math
+  functions, np.<ufunc>/np.emath.<func>), then evaluation with numpy. No
+  eval/exec of user text anywhere.
+- Viewer X/Y Formula now uses it (also accepts x**2, np.log10(y),
+  arctan2(y, x)). 41 old inputs give identical values, previews, LaTeX and
+  errors compared with v0.18C.
+- YIG numeric fields (parameter p0/lo/hi, roll table, batch, phase, Load
+  Fit Settings JSON, builder p0): eval replaced; every value in existing
+  sessions (numbers, pi/4) gives the same result.
+- Formula Builder model and background expressions are whitelist-checked
+  before code generation (LaTeX input accepted; \ln written as log); the
+  generated code for every built-in example is byte-identical to v0.18C.
+  Fixed: a comment containing """ in the model text could close the
+  generated docstring and inject code.
+- .py model files (core/trust.py, ui/trust_dialog.py): static scan before
+  import. Blocked (never loaded, no trust button): os/sys/subprocess/
+  socket/urllib/ctypes/importlib/pickle/... imports, eval/exec/compile/
+  __import__/getattr/globals, np.load/save/fromfile/..., dunder attributes.
+  Otherwise trusted automatically when bundled, when exactly the Formula
+  Builder's output for its embedded spec, or when already used before
+  v0.18D (library + sessions, recorded once); any other file shows the code
+  with warnings and asks "Trust and Load" once per SHA-256 (asks again
+  after an edit). Enforced inside load_formula_module, so the fit
+  subprocess refuses untrusted files too. Store:
+  <data folder>/state/trusted_formulas.json.
+- Dry run on a copy of real data: all 6 existing session models and 3
+  library models trusted automatically (no prompt).
+- Not a sandbox: a user who trusts a malicious file that avoids the
+  blocked patterns can still run it.
+
+Validation (full suite, offscreen, clean HOME, --tb=line): 865 passed,
+14 failed, 3 skipped. The 14 are exactly the pre-existing Mark-tool
+failures of v0.17D-v0.18C; no new failures.
+
+7. Hand-written formula previews (app/gui/math_render.py)
+- matplotlib mathtext plus an own box layout: display-style fractions,
+  matrix / pmatrix / bmatrix / Bmatrix / vmatrix / Vmatrix / smallmatrix /
+  array{lcr} with drawn delimiters (also \left[ \begin{matrix} ... \right]),
+  cases, aligned / align / split / gathered, nested environments, several
+  equations; drawn at the screen pixel ratio. No LaTeX install or browser.
+- YIG FormulaImage (main window, Model Library): height follows the
+  equation (up to 60 % of the window, then scrolls); too-wide equations are
+  scaled down to 60 % at most, then scroll horizontally.
+- Viewer X/Y Formula preview is now typeset (FormulaPreviewLabel): long
+  formulas wrap at top-level + / − aligned under "=", 1e9 shows as 10^9,
+  parentheses only where precedence needs them ((x·y)^2 fixed).
+- Implicit multiplication (hand-written): 20\log_{10}|y|, 2\pi x, 3(x+1),
+  (a)(b), a b. Only positions that were syntax errors get "*"; 1e9, 2j and
+  function calls are unchanged; builder output for all examples still
+  byte-identical to v0.18C.
+- Screenshots: docs/screenshots_v018d/1-4.
+
+8. Crash isolation and unresponsiveness watchdog
+- 3D Surface runs in its own process (app/gui/three_d_process.py;
+  main.py --three-d-window). A crash or hang closes only the 3D window; the
+  Viewer shows "3D window closed" with "Reopen 3D". The 3D process follows
+  the Viewer's file changes, receives settings changes, sends Settings
+  requests to the main process, and saves its own view per Data in
+  state/three_d_states.json. It may not write any other shared record
+  (external_state.restrict_writes). LABLOGVIEWER_3D_PROCESS=0 keeps 3D in
+  the main process (tests and offscreen use in-process automatically).
+- app/core/watchdog.py: if the UI thread stops for 8 s, all thread stacks
+  are written to <data folder>/logs/unresponsive-*.txt and the status bar
+  reports it after recovery (main and 3D processes).
+- Measured on real data (Intel Mac): open file 0.5 s, 2D 0.7 s, 2x2 panes
+  2.3 s, YIG window 2.5 s; no operation blocks long enough to freeze, so no
+  further work was moved off the UI thread (widget construction must stay
+  on it).
+- Fixed: switching language after the Settings window was closed crashed
+  (deleted dialog still bound to the localizer).
+
+9. Platform check
+- Intel Mac (this machine, i7-8700B, macOS 15.8): native smoke run of 18
+  features passed (Browser scan/preview, Settings, Viewer 1D/2D/panes/
+  Formula/Copy-Save/Annotation, theme + language, 3D process + file follow
+  + clean close, YIG window, Library/Builder, Node/Antinode tab,
+  De-background, data folder).
+- Windows and Apple Silicon: NOT run (no such machine). Static check only:
+  every dependency has Windows x64 and macOS arm64 wheels; no Mac-only code
+  paths found. Risks are listed in the report to the user; nothing changed
+  for them yet.
+
+10. Windows text encoding (the old "cp950 codec can't decode" crash)
+- The reported crash (tags.json read with the Windows locale codec) was
+  already fixed: every app file read/write names its encoding.
+- New: JSON records are read as utf-8-sig (11 places), so a file saved as
+  "UTF-8 with BOM" (e.g. by Windows Notepad) loads instead of being treated
+  as corrupt and reset. tools/inspect_hdf5.py writes UTF-8 explicitly.
+- Verified on this Mac by simulating the Windows Chinese default encoding
+  (LC_ALL=zh_TW.BIG5, -X warn_default_encoding): a public tester's real
+  tags.json migrates and loads; tests/test_v018d_windows_encoding.py
+  reproduces the old failure mode and checks it no longer happens.
+
+Validation (this round): full suite run under the simulated Windows
+Chinese encoding (LC_ALL=zh_TW.BIG5, -X warn_default_encoding, offscreen,
+clean HOME): 879 passed, 16 failed, 3 skipped. 14 failures are the known
+Mark-tool failures; the other 2 were old tests requiring encoding == "utf-8"
+exactly, now accepting "utf-8-sig" too (they pass in both locales). No
+EncodingWarning came from app code. Native smoke run: 18/18 passed.
+
+11. Platform follow-ups (user decisions)
+- requirements.txt / requirements.lock: PySide6>=6.8 (Qt Graphs 3D).
+- Windows locked files: atomic JSON writes retry os.replace for ~1.5 s when
+  Windows reports the target in use (antivirus, OneDrive / indexer, the 3D
+  process reading it). Other platforms fail immediately as before.
+- Windows long paths: HDF5 files are opened through app/core/win_paths.py,
+  which adds the \\?\ (or \\?\UNC\) prefix to absolute paths of 248+
+  characters on Windows only (reader, comment writer, processing writer).
+  NOT verified on a Windows machine.
+- Qt Data Visualization (Trajectory / Scatter, OpenGL) on VMs / Remote
+  Desktop / old drivers: no change; failure is contained in the 3D process
+  and the existing availability probe.
+- Model .py files are decoded like Python's import (coding declaration /
+  BOM), so Big5 / cp950 models with "# -*- coding: cp950 -*-" load.
+- Windows on ARM (no imageio-ffmpeg wheel, no MP4 export): out of scope.
+
+Final validation (v0.18D): full suite, offscreen, clean HOME, --tb=line:
+887 passed, 14 failed, 3 skipped. The 14 are exactly the pre-existing
+Mark-tool failures of v0.17D-v0.18C; no new failures.
+
+
+============================================================
+v0.19A - NETWORK WORKSPACE (HOST / CLIENT)
+============================================================
+Date: 2026-09-26
+Folder operation: NEW folder LabLogViewer_v0.19A copied from v0.18D
+(v0.18D and LabLogViewer_v0.18D.zip unchanged). __version__ = "0.19A".
+
+User decisions
+--------------
+- Client follows the Host (mirror, view only; the whole Client app is
+  view-only while connected; only the Network panel and Leave work).
+- Join code only (6 digits, HMAC challenge; the code never crosses the
+  network; 5 wrong codes lock that address for 60 s).
+- Data source: a copy on the Client's "shared data folders" (same size and
+  SHA-256, e.g. shared storage) is used first; otherwise the Host sends it.
+- Permanent copy only when the Host sends it; otherwise received data lives
+  only in memory and is dropped on disconnect.
+- Quality minimum: RTT <= 200 ms and >= 1 MB/s (grades excellent / good /
+  fair / too poor; updated every 2 s on both sides).
+- Viewer (2nd window) and YIG Analysis are synced; 3D is not.
+- Entry at the very top of the Browser (status bar + panel).
+
+Design
+------
+- app/network/protocol.py: framed protocol (magic, version, CRC32,
+  optional zlib, size limits); values are JSON + numeric numpy arrays only.
+- app/network/remote_data.py: the Host sends the parser's Unified Data Model
+  as values (channels, active step axes, vector traces incl. every Sij that
+  exists, Empty / Function / Scalar semantics as parsed, metadata); the
+  Client rebuilds the same Experiment around a RemoteReader. Existing
+  Viewer / Transform / YIG code works unchanged; the GUI never uses h5py.
+  No Host absolute path is sent (file name / database-relative hint only).
+- host.py / client.py / transport.py: background threads; control frames
+  before bulk; 1 MB chunks with SHA-256; reconnect (1, 2, 4 s) and resume
+  of interrupted transfers; heartbeats every 2 s; 8 s idle timeout; Host
+  serves only datasets of the shared measurement.
+- discovery.py: UDP query / answer (name, session, clients, port).
+- workspace.py: HostPublisher (follows the Viewer in use; publishes view
+  state + the raw reads it needed, 2D zoom, YIG figures as data, pen / laser
+  strokes); ClientMirror (prefetch in background, then apply; mirror
+  Viewer with throwaway stores; YIG mirror; ink); view-only input filter.
+- figure_sync.py / yig_snapshot.py / yig_mirror.py: YIG figures as data
+  (lines <= 2000 points with peaks kept, images <= 480 px), tables as text;
+  only redrawn figures are resent. No code is ever sent.
+- Settings: network user name (asked on first use, any language),
+  session name, shared data folders.
+
+Virtual acceptance (127.0.0.1 only, sandbox HOME inside the project;
+no LAN, no NAS; LABLOGVIEWER_NET_SANDBOX=1)
+-----------------------------------------------------------------------
+- 126 / 126 parseable real files: remote structure and data identical to
+  local (3 files do not parse locally either).
+- tests/test_v019a_network.py (17): protocol checksum / version / no objects;
+  identical data incl. multi-Sij (S11 S12 S21 S22 S31 S42) and Function
+  dimension files; wrong code; 5-client limit; discovery on loopback;
+  poor quality refused (260 ms latency, 0.3 MB/s); cut mid-transfer ->
+  reconnect + resume + checksum; silent Host -> timeout -> disconnected;
+  Host unavailable; Host stop -> Clients disconnected; permanent copy
+  (SHA-256 equal); shared-folder copy used, tampered copy rejected.
+- tests/test_v019a_network_gui.py: real Host and Client processes: 1D mirror
+  pulls ~0.1 MB, 2D pulls the map, zoom / pen / YIG mirrored, clicks
+  blocked, Host stop -> Client disconnected cleanly.
+- 255 MB file: map transferred in the background; GUI stalls seen only
+  while windows are built (mirror Viewer ~2 s, YIG mirror ~0.3 s), never
+  from network I/O. Simulated shared folder: 0 bytes transferred.
+- Fixed during acceptance: wrong code was reported as "Host unavailable";
+  quitting a Client while connected was blocked by the mirror windows.
+
+Not verified / limits
+---------------------
+- No real LAN, second computer, Windows or NAS was used (by instruction).
+- Traffic is not encrypted (LAN only); the join code is not sent.
+- Some networks block UDP broadcast (e.g. guest Wi-Fi isolation); then
+  automatic search finds nothing.
+- Windows will show a firewall prompt the first time a computer hosts.
+- No N-D (2+ sweep) file exists in Data; N-D goes through the same generic
+  structure path but was not exercised with real data.
+
+Full suite (offscreen, sandbox HOME inside the project): 904 passed,
+16 failed, 3 skipped. 14 are the known Mark-tool failures. The other 2 were
+expected consequences, now updated and passing: the version test (0.19A)
+and the Browser layout test (the Network bar is now the first row).
+
+v0.19A follow-ups (same folder)
+-------------------------------
+- Manual address: the Client panel accepts "IP" or "IP:port" when search
+  finds nothing (some networks block broadcast).
+- Top menus in every window: "Network Workspace" then "Settings"; clicking
+  either opens its window at once (the drop-down closes immediately; one
+  same-named item stays as a fallback). The Settings sub-items (Appearance,
+  3D) were removed; the Settings window has those pages.
+- The Network Workspace status bar (Offline / Hosting / Following + quality)
+  is the first row of every window: Browser, Viewer, 3D (status relayed from
+  the main process; clicking asks the main process to open the panel),
+  YIG Analysis and Node / Antinode.
+- 3D rendering fix: turning the pen on squeezed the 3D plot to a third of
+  its width. The annotation sheet was created as a child of the window's
+  QSplitter, which made it a new pane. Sheets are now parented outside
+  splitters (fixes every window with a plot beside a splitter). No freeze
+  mode was needed; pen strokes draw over the live 3D view.
+- YIG mirror now rebuilds the Host's whole YIG window 1:1: the left settings
+  panel (data source, S parameter, slice, frequency range, preprocessing,
+  model, model function), tab bars, pane toolbars (icons as images), values,
+  check boxes, text, tables and figures; parts hidden by scroll areas stay
+  hidden. Only changed items are resent (about 30 KB for a full window).
+  Nothing is computed on the Client. Qt 6 note: findChildren(type, "") only
+  matches empty object names, so the walk uses children().
+- Test scripts live in lab browser/_sandbox (not packaged).
+
+Final validation (v0.19A, fresh sandbox HOME): 909 passed, 14 failed,
+3 skipped. The 14 are exactly the known Mark-tool failures. (An earlier run
+that reused a sandbox HOME showed 4 extra Mark failures caused by state left
+from previous runs; they pass with a fresh HOME, on v0.18D as well.)
+
+
+============================================================
+v0.19B - ENCRYPTION, PERSONAL, ZOOM, TRACKPAD, HELP, FIXES
+============================================================
+Date: 2026-09-27
+Folder operation: NEW folder LabLogViewer_v0.19B copied from v0.19A
+(v0.19A and its zip unchanged). __version__ = "0.19B".
+Key / lock features are in v0.19C (built on this version).
+
+1. Network encryption (protocol v2; v0.19A peers are refused as a
+   different version). cryptography 48 (X25519 + HKDF-SHA256 + AES-GCM),
+   installed into the project .venv as a wheel for Python 3.12.10 and added
+   to requirements. The join-code proof travels encrypted and binds both
+   public keys (no offline code guessing, no key swapping); records carry a
+   counter nonce (replay / tamper -> connection closed). Discovery replies
+   (host / session name, client count) stay plain.
+2. Windows firewall notice before the first hosting (Windows only, once).
+3. The 14 long-standing Mark test failures: not a Mark bug. Tests shared one
+   user data folder, so marks saved by one test were restored in the next.
+   tests/conftest.py gives every test its own empty home / data folder.
+4. YIG: a model file that no longer exists (e.g. a session from a deleted
+   version folder) falls back to the bundled model of the same name.
+5. Cloud-synced folders (iCloud Drive / Desktop & Documents sync, OneDrive,
+   Dropbox, Google Drive; matched by each service's folder names) are not
+   allowed for the data folder; moving there requires ticking "lost records
+   are my own responsibility; the developer has no right or ability to
+   recover them" (recorded with time). New installs whose Documents is
+   iCloud-synced use ~/LabLogViewerData.
+6. Content fingerprints (app/core/fingerprint.py): size, sampled and full
+   SHA-256, log name and creation time of every file opened, keyed by the
+   record identity (state/data_fingerprints.json), computed in background.
+   Basis for re-linking records after files move (tool in v0.19C).
+7. Settings > Personal: colours (light / dark theme, white / dark plots,
+   annotation pens) with a colour wheel (hue ring + saturation / value
+   square) or a colour code; live apply, reset one / group / all, low
+   contrast warning. Icons: replace any icon with a plain SVG (<=256 KB; no
+   scripts, event handlers, external links, embedded images, DTD/entities;
+   re-validated on every load), follow theme colour or keep own colours.
+8. Viewer rectangle Zoom tool (third button next to Pointer / Drag to
+   Share): left-drag a rectangle; right-click / Esc steps back to the view
+   before the first zoom.
+9. Mac trackpad: pinch = zoom, two-finger scroll = pan (1D / 2D, all
+   pyqtgraph views); 3D: two-finger scroll rotates, Shift pans, pinch zooms.
+   Mouse wheel unchanged. Verified with synthetic events (no real trackpad).
+10. Help (top menu "Help" right of Settings, F1 = page of the current
+   window): 12 categories / 32 articles in English and Chinese, foldable
+   categories, search, English screenshots (help/images, regenerated by
+   _sandbox/make_help_shots.py). "Export for AI" writes one Markdown guide
+   (optional state summary with home path / user name removed; no lock
+   internals). New features must add their Help page.
+Also: Personal page and Network panel widened (text no longer clipped).
+
+Validation (v0.19B): full suite 953 passed, 0 failed, 3 skipped (7 m 49 s)
+with per-test isolated data folders. All network tests loopback only.
+
+
+v0.19C - PERSONAL COLOUR LOCK, LICENCES, RE-LINK TOOL
+=====================================================
+Folder operation: NEW folder LabLogViewer_v0.19C copied from v0.19B; developer
+tool in the separate folder LabLogViewer_DevTools (not part of the app).
+
+Lock
+- Settings > Personal > Colours is read-only until 10 "data operation
+  experiences": distinct local measurement files on which the user placed a
+  Mark, chose a transform (user choice only), applied a formula, drew a Zoom
+  rectangle or finished a YIG fit. Opening does not count; the same file counts
+  once; Network Workspace mirrors do not count. Icons are never locked.
+- personal.set_color refuses while locked (ColorsLocked) and personal.effective
+  ignores stored overrides while locked, so editing personal.json by hand does
+  not bypass the lock. On the 10th experience the colours apply immediately.
+- state/experience.json keeps only HMAC tokens of the files (no paths), a
+  "latest time seen" and an HMAC bound to the machine code; an edited or copied
+  file is not trusted (count restarts).
+
+Licences
+- app/_guard/machine.py: machine code LLV-XXXX-XXXX-XXXX-XXXX from a hash of
+  IOPlatformUUID (macOS) / MachineGuid (Windows) / machine-id (Linux).
+- app/_guard/license.py: .llvkey = Ed25519-signed JSON payload (id, holder,
+  machine, features, issued, expires). Checks signature, machine, expiry and
+  clock rollback (the latest time seen is used when the clock is set back).
+  Installed copies live in <data folder>/licenses/.
+- Settings > About > Licences... (also on the Personal page): machine code with
+  Copy, installed licences with days left, Install / Remove.
+- LabLogViewer_DevTools/llv_devtools.py (+ window): create a password-protected
+  portable key file (developer_key.llvdev), change its password, install the
+  public key into a LabLogViewer folder (app/_guard/trusted_key.py), issue a
+  licence (default 60 days, no issue limit), show a licence.
+
+Re-link Moved Data (hidden; licence feature "relink")
+- app/core/relink.py + app/gui/relink_dialog.py. Lists old paths that still own
+  records but whose file is gone; searches a chosen folder: "Same content" =
+  full SHA-256 equal to the remembered fingerprint (ticked); "Same name and
+  size" when no fingerprint exists (not ticked). Moves the records in stars,
+  tags, comments, marks, viewer display states, overlays, named views, axis
+  presets, 3D views, fingerprints, session.json and YIG session files. Records
+  already at the new path are kept (reported). Backup in
+  <data folder>/relink_backups/<time>/; Undo Last Re-link restores it.
+  Viewers must be closed; Browser stores are reloaded afterwards.
+
+Packaging
+- build_guard.py <build copy>: embeds the public key into license.py, compiles
+  app/_guard/*.py with Cython to native modules and deletes the sources and
+  trusted_key.py from the copy. Verified in _sandbox/guard_build: universal2
+  .so files (arm64 + x86_64), licence check works in the compiled copy.
+  Must be run on Windows separately to get .pyd files.
+- The development folder keeps PUBLIC_KEY_HEX empty until the developer installs
+  the real public key with DevTools.
+
+Help: new page Settings > Licences (en/zh, English screenshot with a placeholder
+machine code); Personal colours page explains the unlock rule; F1 in the
+Licences and Re-link dialogs.
+
+Tests: tests/test_v019c_guard.py, tests/test_v019c_relink.py (temporary keys and
+homes only); v0.19B Personal tests run with the lock opened.
+
+
+Validation (v0.19C): full suite 974 passed, 0 failed, 3 skipped (7 m 33 s); test temp folders in _sandbox/pytest_tmp.
+Fix found while testing: Re-link search progress updated widgets from the worker thread (intermittent crash); now queued to the window thread.
+
+
+v0.19D - FIGURE BUILDER, LARGEST-FOLDER TAG SEARCH, MOTION, GLASS SCROLL BARS, HELP PICTURES
+===========================================================================================
+Folder operation: NEW folder LabLogViewer_v0.19D copied from v0.19C.
+New packages (wheels, Python 3.12): ezdxf 1.4.4, shapely 2.1.2, python-pptx 1.0.2.
+
+Scientific Figure Builder (app/figure_builder/)
+- Browser > Processing > Scientific Figure Builder... starts `main.py --figure-builder`
+  (own process + watchdog; a crash shows a message, the rest keeps running;
+  it writes no LabLogViewer records; follows theme / language from settings.json).
+- dxf_import.py: AutoCAD 2013 (AC1027) check (other versions: warning), layers
+  MS b/g/h, CPW db/ub/g/h/v (case-insensitive; CPW when db/ub/v exist).
+  LINE / LWPOLYLINE (bulges) / POLYLINE / CIRCLE / ARC / ELLIPSE / SPLINE.
+  Loose pieces: endpoints joined within max(0.002 mm, 2e-5 x drawing size),
+  linework split at crossings, faces kept by the even-odd rule (rings stay rings).
+  Checked on the three sample drawings (hex0531gap: 0.00125 mm gaps joined).
+- scene.py: layers stacked bottom-up (placement: on layer below / same level /
+  through all); defaults copper 0.032 mm, dielectric 0.813 mm (editable);
+  screw holes cut from every layer, vias cut from the others and drawn purple.
+  YIG (sphere on the surface below, spin arrows), Coil (turns under the board,
+  field arrow), Sine wave (box with free width / height), camera elevation /
+  rotation; save / load .llvfig; one orthographic projection for editor + PPTX.
+- render.py (QPainter): extruded layers (visible walls far-to-near, top face
+  even-odd), metallic coils, shaded YIG with spin glyphs, dashed waves.
+- window.py: drag YIG / coils on the board, move waves by their line and
+  resize with 8 handles (no locked ratio), drag empty space to orbit, layer
+  table (show, colour, thickness, placement, move up / down), property panel,
+  undo / redo (60 steps), Delete key, exports.
+- pptx_export.py: every layer a freeform group (holes as sub-paths) with
+  <a:scene3d> orthographic camera tilted by 90-elevation and <a:sp3d> depth =
+  thickness, material, extrusion colour; azimuth applied to the outlines so
+  all parts share one tilt and line up; YIG = oval with round top/bottom
+  bevels (3-D sphere) + spin shapes; coil = donut rings with round bevels +
+  up arrow; waves = open dashed freeforms. No pictures in the slide.
+  NOT verified in PowerPoint itself (not available here): please open the
+  exported file once and report how it looks.
+- PNG (3000 px) / SVG / PDF export from the same renderer.
+
+Largest data folder (Tag search)
+- Settings > General > Largest data folder (settings.json "tag_search_root").
+- Retrieve by Tags > Search in: Current database / Largest data folder.
+  app/core/master_search.py searches the Tag records of every database under
+  that folder (no disk walk), skips files that no longer exist, keeps each
+  result's own database (stars, Tags, comments, Rename work) and shows the
+  Source folder relative to the largest folder. Scope is kept in the session.
+- Automatic Tags (initialize_entries) only for files <= 4 folders below the
+  opened database (AUTO_TAG_MAX_DEPTH); deeper files keep what they had.
+
+Motion and glass (app/gui/effects.py, app/gui/glass_scrollbars.py)
+- Theme ripple: snapshot overlay per window, circle from the pressed button
+  (other windows: centre) to the farthest corner, 560 ms; same look ->
+  1150 ms "fight": edge pushed back twice, rival colour vs theme accent, theme
+  wins. Overlays ignore input; the new theme is live underneath.
+- Button spring (QPushButton / QToolButton): 0.96 with inner shadow while held,
+  damped spring with overshoot (~1.015) on release; drawn on an overlay from a
+  snapshot, clicks unaffected. LABLOGVIEWER_DISABLE_EFFECTS=1 turns both off.
+- Glass scroll bars (QProxyStyle): transient / overlapping bars, transparent
+  track, glass handle (7 px, 10 px on hover) refracting the real content
+  below with the toolbar glass kernel (vertical: quarter-turned backdrop);
+  refraction computed outside painting at most every 30 ms and cached.
+  Installed in the main, 3D and Figure Builder processes.
+
+Help: new pages Scientific Figure Builder, PowerPoint and image export,
+Search Tags in the largest folder, Theme ripple / button spring / glass scroll
+bars; Settings and Tags pages updated; every article (37) now has an English
+screenshot (_sandbox/make_help_shots_19d.py); F1 in the Figure Builder and the
+Retrieve by Tags dialog.
+
+Tests: test_v019d_figure_builder.py, test_v019d_tag_master_folder.py,
+test_v019d_effects.py (all in temporary folders inside _sandbox).
+
+
+Validation (v0.19D): full suite 993 passed, 0 failed, 3 skipped (11 m 48 s), temp folders in _sandbox/pytest_tmp.
+Fix found while testing: the button spring diverged when frames arrived late on a busy computer (scale 1.12 while held); now integrated in fixed 4 ms sub-steps and clamped.
+
+
+v0.19E - HELP REBUILT (TIPS STYLE, STEP-BY-STEP, VERIFIED AGAINST THE CODE)
+===========================================================================
+Folder operation: NEW folder LabLogViewer_v0.19E copied from v0.19D.
+
+Help window (app/gui/help_window.py, app/gui/help_content.py)
+- Home: large title, groups of rounded cards (coloured glyph tile, title, one-line
+  subtitle, chevron), floating search capsule, "Export for AI..." button.
+- Article: gradient hero (glyph, title, one-sentence purpose, round back button),
+  "Shortest procedure" card (numbered steps, thumbnail per step zoomed onto the
+  outlined control; click to enlarge), then folding sections. Esc returns home;
+  dark and light themes; F1 context pages kept.
+- Article format: "# title", "> summary", first "##" = numbered steps with one
+  picture each, further "##" = folding sections. index.json v2 = groups with icon,
+  tint, subtitle, keywords. AI export is built from the same files.
+
+Content (help/en, help/zh; 37 articles)
+- Depth by feature: simple tasks (entry, steps, where saved); plots/marks/export
+  (worked example, options, what you see, common problems); 3D / Formula /
+  De-background (+ data requirements, parameter meaning, effect on values);
+  YIG fit / Continuous Fit / Phase-Node (+ model assumptions, units, how to judge,
+  when not to trust, failure checks, advanced reference).
+- Corrected statements that did not match the program: the star button stars
+  (does not filter); Retrieve by Tags filters by Tags only; there is no Save
+  shortcut; plots save as PNG / SVG (3D publication also PDF); annotation has
+  Clear Screen (no eraser), its toolbar is at the bottom and it is never exported;
+  line cuts are in the toolbar Show menu; returning to 1 pane shows pane 1;
+  comments are written to Labber's own comment field (the only file write);
+  De-background output is float16-quantised (about 3 significant digits) and a
+  near-zero denominator blocks generation; De-background opens the new file.
+
+Pictures (help/images, English UI, shared by both languages)
+- _sandbox/make_help_shots_19e.py performs every step (real database, real
+  fits on 0828 X1 Flux-dep_debg, 3D, Figure Builder ...) and outlines the
+  control with an orange frame and numbers; menus are composited open.
+  _sandbox/make_help_shots_net_19e.py: Network pictures, two processes on
+  loopback only (LABLOGVIEWER_NET_SANDBOX=1). No De-background file is generated.
+- images/focus.json stores each picture's outlined area; thumbnails zoom onto it.
+- "Edit in PowerPoint" has no picture (PowerPoint is not available here).
+
+Program fixes found while writing Help
+- Continuous Fit: selecting a result row raised AttributeError ('map_pane') in the
+  All Parameters plot, so the selected point never updated. Fixed.
+- Continuous Fit: action buttons were squeezed and their labels cut off; they now
+  have their own row.
+- Viewer: after returning to 1 Pane the label still said "Active Pane: 2". Fixed.
+- Settings data-folder note said "HDF5 files are never modified"; now states that
+  measured values are never modified and comments may go to Labber's comment field.
+
+Help folder mode (app/gui/help_folders.py) - the default look
+- Folder home: one folder per topic, in three sections (Basics / Analysis and
+  figures / Sharing, settings and help). FolderWidget is a PySide6 port of rare-ui's
+  folder-component (swamimalode07/rare-ui, source read only): back plate, three paper
+  cards and a translucent flap tilted in 3-D (rotateX with perspective 800), hover
+  lifts the cards, click opens; same springs (stiffness 120, damping 13 / 14) and
+  per-card delays as the original.
+- Opening a folder: the cards fly out of the folder into a column, one after another.
+- CardStack: a cover card per guide, one card per step (picture first, taking most of
+  the card; click to enlarge), one card per section (options, what the result means,
+  if it does not work ...). Each card stops at the top and the next slides over it;
+  covered cards shrink and dim slightly, so the pile and the progress bar show how
+  far you are. Cards taller than the window stop higher so their end is readable.
+  Wheel, trackpad, arrow keys, Space, Page Up / Down, Home / End; Esc back.
+- Top search (both languages); glass tabs (one per topic, a glass pill slides to the
+  open one) whose popover lists the topic's guides and jumps to one.
+- Right rail (both looks): All topics, switch Folders / List (keeps the guide you are
+  reading), Copy all guides for an AI assistant (one click, includes the redacted
+  state summary, "Copied" toast), Export for AI dialog.
+- List look (previous Tips style) kept; step pictures 440 px wide instead of 190.
+- Help: Getting started gains "Reading this Help" (en / zh).
+
+Tests: tests/test_v019e_help.py (folder mode: one folder per topic, folder springs
+reach the component's open state, card kinds, pictures dominate step cards, tabs,
+jump across folders, covered cards shrink and dim, search, mode switch keeps the
+guide, copy for AI; list pictures >= 400 px wide; both languages parse, same steps and pictures,
+no unused pictures, scientific pages answer the hard questions, window home /
+article / search / context, AI export, the two program fixes).
+
+
+Validation (v0.19E): full suite 999 passed, 0 failed, 3 skipped (13 m 50 s), temp folders in _sandbox/pytest_tmp.
+Validation (v0.19E, with Help folder mode): full suite 1000 passed, 0 failed, 3 skipped (15 m 13 s), temp folders in _sandbox/pytest_full4.
+Benchmark (v0.19E): first open of a 1000-file database (APFS clones of the 129 real files, local SSD, Intel i7-8700B): list usable 1.3 s, all metadata 16.9 s in the background; second open 1.3 s / 1.8 s. NAS not measured.
+
+v0.19E (continued) - PLUGINS FOLDER, MIGRATOR, ISOLATION FIX
+=============================================================
+- LabLogViewer_DevTools moved to ../LabLogViewer_Plugins/DevTools (tests and messages
+  follow). ../LabLogViewer_Plugins/README.md lists every plugin.
+- New ../LabLogViewer_Plugins/Migrator (llv_migrator, run_migrator.py; window in
+  Chinese / English, command line): old data folder -> new data folder. Files the
+  records point to are found in the new database folders by SHA-256 (fingerprint
+  kept by LabLogViewer, or computed now when the old file still exists); same name
+  and size = a guess, not ticked; not found = kept under the old path. Records are
+  re-keyed (Stars / Tags / comments per database + relative path, the rest per full
+  path, YIG sessions renamed and rewritten) and merged: lists united, conflicts keep
+  the new folder's record (or the old one, if chosen), settings fill missing values.
+  The new folder is backed up to migration_backups/<time>/ with report.md; undo.
+  Records from a newer format are skipped and reported. 6 tests: records written and
+  read back by this version's own stores; shared storage simulated by a local folder.
+- Migrator manual pairing: choose the new file by hand for any row. compare_files():
+  "same content" (SHA-256), "same layout" (same dataset shapes and Labber channel
+  names, values differ) -> every record may move; "different" (or the old file is gone
+  and nothing can be compared) -> a disclaimer must be ticked and only stars, Tags and
+  comments move (SAFE_KINDS); the rest stays under the old path. Fingerprints move only
+  with identical content. The report lists manual pairings and the accepted disclaimer.
+  3 more tests (9 in total).
+- build_guard.py: forbidden_content(); compile_guard refuses a build copy containing
+  LabLogViewer_Plugins, DevTools, _sandbox or *.llvdev (test in test_v019c_guard.py).
+- data_location.legacy_sources(): Qt's AppDataLocation is used only when it is inside
+  the home in use. On macOS Qt asks the system for the real home and ignores $HOME, so
+  every sandboxed run since v0.18D had copied (read only) the real
+  ~/Library/Application Support/{LabLogViewer,Python}/fitting into its fake data folder.
+  Test: test_legacy_sources_stay_inside_the_home_in_use.
+- Help: Data folder gains "Moving history to a new LabLogViewer or computer" (en / zh).
+Validation (v0.19E, after plugins / Migrator / isolation fix): full suite 1002 passed, 0 failed, 3 skipped (15 m 15 s), temp folders in _sandbox/pytest_full5; Migrator tests 9 passed.
+
+v0.19E (continued) - BUTTON PRESS LOOK, PLATFORM CHECK
+======================================================
+- Button spring redrawn (app/gui/effects.py). Before: the ring uncovered by the smaller
+  button was filled with the colour of the button's top-left pixel and the "inner
+  shadow" was four rectangular strips, so glass / gradient toolbars showed a rectangle.
+  Now: _backdrop() renders what is really behind the button (each ancestor's own
+  painting; only windows and widgets that fill their background paint one - forcing
+  DrawWindowBackground on see-through containers had painted the window colour over the
+  glass capsule); _button_only() renders the button on transparency; the pressed shading
+  is applied only to the button's own pixels (SourceAtop), darker on light surfaces and
+  lighter on dark ones; icon-only tool buttons (< 35 % painted) get a soft round capsule;
+  the snapshot is refreshed on release so the spring back shows the new state.
+  Test: test_press_backdrop_shows_what_is_really_behind_the_button.
+- tools/platform_check.py: self-check to run on each computer (macOS Intel, Apple silicon,
+  Windows): environment incl. Rosetta detection, dependencies, windows + Figure Builder
+  helper process, full test suite; isolated home / temp folders, network kept on
+  127.0.0.1; writes a report. Audit for Windows: every text file access names UTF-8
+  (the default on Traditional Chinese Windows would be cp950); OS-specific branches
+  (data folder, machine code, shortcuts, firewall notice) reviewed.
+- Found by tools/platform_check.py on this Intel Mac: the 3D window's local channel failed
+  to listen when the temporary folder's path is long (macOS socket paths are limited to
+  about 104 bytes: "QLocalServer::listen: Name error"), so the 3D window could not start.
+  three_d_process.channel_name() now uses a full /tmp path when the normal one would be too
+  long; the socket is restricted to the current user (UserAccessOption). Windows uses
+  named pipes and is not affected. Test: test_3d_channel_fits_a_long_temporary_folder.
+- Test fix (not a program change): test_traffic_is_encrypted_on_the_wire looked for the
+  3 bytes "VNA" in ~1.07 MB of ciphertext, which occur by chance ~6 % of the time (a false
+  failure seen once). It now looks for '"trace_path"' and the full channel name. A
+  12-run loopback diagnosis found no plaintext after the ~310-byte handshake.
+Validation (v0.19E, tools/platform_check.py on macOS Intel i7-8700B, native): dependencies OK, windows + Figure Builder process OK, full suite 1004 passed, 0 failed, 3 skipped (16 m 13 s), isolated home/temp in _sandbox/platform_check_output. Apple silicon and Windows: to be run by the user on those computers.
+
+v0.19E (continued) - NETWORK WORKSPACE: MARKS NOW SYNC
+======================================================
+- Reported by the user after a real test: Marks did not appear on Clients. Cause: the Host
+  sent the Viewer's session state (display, traces, panes) but Marks live in their own
+  store; and each Mark's context starts with the Data key, which differs on the Client
+  (remote identity or local copy), so even sent Marks would have been rejected.
+- MainWindow.marks_payload(portable) / apply_marks_payload(): the named-view Mark format
+  with the Data key replaced by "@data"; the Host adds it (and "show values") to every
+  view message, the Client applies it after the view. Moving, deleting and clearing follow.
+  Named views use the same code (non-portable).
+- Test: the Host/Client acceptance (two processes, loopback) places a Point Mark and a
+  vertical line, then clears them; the Client shows the same x and then none.
+- Help (Hosting) wording made exact.
+Validation (v0.19E, after Mark sync): full suite 1004 passed, 0 failed, 3 skipped (15 m 33 s), temp folders in _sandbox/pytest_full6.
+- Licences: the public key was read once (first licence check) and kept; a key installed
+  with DevTools while LabLogViewer was open showed "no developer key installed" until a
+  restart. license._installed_key_hex() re-reads trusted_key.py when the file changed
+  (packaged builds use the embedded key). Test: test_key_installed_while_running_is_picked_up.
+- DevTools: new simple licence generator llv_keygen.py (Chinese window): remembered key file
+  and LabLogViewer folder; "用這台電腦" fills this computer's machine code (computed by that
+  LabLogViewer's own machine.py); tick features; 1 month - 1 year; Generate installs the
+  public key when missing (asks before replacing a different key), saves issued/<name>.llvkey,
+  logs issued/issued_log.csv, and installs a licence for this computer straight into this
+  computer's data folder. Password asked once per session, never stored. 5 tests.
+- Licences window: shows which LabLogViewer (version, folder) is running and whether its
+  developer public key is installed (short fingerprint); the "no developer key" message
+  names the folder that needs the key. Reported: a licence generated for v0.19E was refused
+  with "no developer key" - the running copy was evidently another folder or computer.
+  Test: test_licence_window_names_the_program_folder_and_key_status.
+
+v0.19E (continued) - APP ICON CHOICE
+====================================
+- Settings > Appearance > App icon: four designs (icons/app/app_icon_1..4.png, 1024 px,
+  from icom/app icom; also the source for the packaged .icns / .ico). No licence needed.
+  settings.json general.app_icon (1-4, default 4, also the packaged app's file icon). app/gui/app_icon.apply_app_icon() sets the
+  application and window icons; called by initialize_theme (main, 3D and Figure Builder
+  processes) and when the 3D process reloads settings. Help (Settings) updated. 3 tests.
+- DevTools simple generator: "更改密碼（交接用）…" changes the key file's password only (same key,
+  every issued licence stays valid); Plugins README gains a handover section (same key file,
+  never "create new key", keep a backup). Public key installed in v0.19E: c6ce…ff78.
+- build_guard.py also refuses .llvkey licence files in a build copy (a licence belongs to one person).
+
+v0.19E (continued) - RELEASE PACKAGING
+======================================
+- LabLogViewer --self-test (app/self_test.py): libraries bundled, bundled files (icons, Help,
+  YIG models), licence check (public key present), windows in both themes, Figure Builder
+  helper process; PASS/FAIL and exit code; LABLOGVIEWER_SELF_TEST_REPORT=<file> for windowed
+  Windows builds.
+- packaging/: requirements-build.txt (exact versions, identical on every platform),
+  prepare_build.py (clean copy + build_guard: licence code compiled, public key embedded),
+  make_icons.py (icon 4 -> .icns / .ico), lablogviewer.spec (PyInstaller; data files and
+  package metadata bundled - the first build's self-test caught missing imageio metadata),
+  merge_universal.py (lipo-joins the Intel and Apple silicon apps, ad-hoc signs, checks
+  every compiled file has both architectures), make_dmg.sh, installer.iss (Inno Setup,
+  per-user install, no administrator password).
+- .github/workflows/build.yml: Intel and Apple silicon Macs and Windows build, self-test on
+  their own chip, disk images per chip + universal, Windows setup.exe.
+- Private repository edison413220047-byte/LabLogViewer: program, Help, icons, tests, tools and
+  build scripts only (no measurement data, plugins, keys, licences or sandbox).
+- Local Intel build on the development Mac: self-test PASS; test disk image 345 MB.
+Validation (v0.19E, with app icon, licence window, self-test): full suite 1009 passed, 0 failed, 3 skipped (17 m 27 s), temp folders in _sandbox/pytest_full8; Migrator 9 and DevTools 7 tests passed.
+- First release builds (GitHub Actions, private repository): lab browser/setup/
+  LabLogViewer-macOS-Intel.dmg (340 MB), LabLogViewer-macOS-Apple-silicon.dmg (330 MB),
+  LabLogViewer-macOS-universal.dmg (594 MB), LabLogViewer-Windows-setup.exe (217 MB).
+  Self-test PASS on: GitHub Intel Mac, GitHub Apple silicon Mac, GitHub Windows (real display),
+  universal on Apple silicon natively and as Intel through Rosetta, and on the development Intel
+  Mac from the Intel and universal disk images. Fixed on the way: missing imageio metadata,
+  Cython bundled by mistake (blocked the universal merge), per-chip ffmpeg allowed, hdiutil
+  "Resource busy" retried. Not signed with an Apple Developer ID / Windows certificate.
+
+
+v1.01 - FIRST 1.x RELEASE (folder LabLogViewer_v1.01, copied from v0.19E)
+=========================================================================
+Version numbering: releases are now 1.x (the user's decision); v0.19E is not renamed.
+
+Auto refresh (app/core/change_watch.py, app/gui/auto_refresh.py)
+- Setting auto_refresh_seconds (0 / 1 / 2 / 5, default 2), Settings > General.
+- Every tick a background thread compares (size, mtime) of the folder on screen and the
+  folders written last (about 21 ms for 160 files); every 30 s the whole database
+  (136 ms for 1000 files, local) incl. empty folders. Only new / changed files are parsed.
+- Browser.apply_auto_refresh keeps selection and scroll; the tree is rebuilt only when
+  folders change; automatic Tags for new files; a changed selected file refreshes its
+  preview. Skipped while a scan runs, the window is hidden or a mouse button is held.
+- A file still being written is listed by name (mtime -1) and retried; an old unreadable
+  file is an error as before.
+- MainWindow.reload_keeping_view(): a Viewer on a changed file reloads it and restores its
+  session state; no fingerprint for live reloads (the growing file would be re-hashed).
+
+New Folder (Browser): File > New Folder... (Ctrl+Shift+N) and the Folders context menu;
+name checks; empty folders on disk are shown (disk_folders, found at scan end and by the
+30-s walk).
+
+Opening view: first open of a measurement -> 2D when a heatmap can be built (quiet check),
+else 1D; a remembered view (viewer_display_states) is read before showing the file and
+restored. Session restore and named views still win.
+
+First start after an update (app/core/app_update.py, app/gui/whats_new.py)
+- lablogviewer_data.json: last_app_version, data_format (1), versions_used.
+- UPGRADES steps run in order after a backup (update_backups/); failure restores it.
+- What's New once after an update (not on a fresh install; data from before 1.01 counts as
+  an update); older program on newer data: warning, nothing changed.
+- help/whats_new/<version>.<en|zh>.md; Settings > About > What's New...
+
+Data Transfer inside the app: app/core/migrate.py + app/gui/migrate_dialog.py (from the
+Migrator plugin, which was removed); licence feature "migrate" (gate.migrate_allowed,
+button in Licences); target fixed to data_root(); Browser databases as default roots;
+closes the Viewers, migrates, restricts record writes and restarts LabLogViewer.
+
+Licences: trusted_key.py PUBLIC_KEY_HEX + ADDITIONAL_KEYS; licence.parse accepts any trusted
+key; build_guard embeds all (comma separated); DevTools install_public_key(add=True) and the
+simple generator ask "add as another issuer" (recommended) or "replace".
+
+Speed: Viewer built ahead of time while idle (Browser._spare_viewer; opening 1.5 s -> 0.35 s
+from source); math_render loads Matplotlib lazily; theme event filter returns at once for
+unrelated events; packaged builds set MPLCONFIGDIR to a persistent per-copy cache
+(PyInstaller's pyi_rth_mplconfig used a new temporary folder on every start, so the font
+cache was rebuilt each time - the main slowdown of the packaged Viewer).
+
+Help (en / zh): Open and browse a database (auto refresh, new folder, first open 2D),
+Settings (auto refresh, What's New), Data folder (Data Transfer inside the app), Licences.
+Tests: test_v019f_auto_refresh (7), test_v019f_update (7), test_v019f_opening_view (1),
+test_v019f_migrate (10), licence issuers (2 + DevTools 1).
+- Found by the full suite: (1) tests written before v1.01 expect a new file in 1D; they now run
+  with LABLOGVIEWER_FIRST_OPEN_2D=0 (conftest), the 2D default has its own test. (2) Auto-refresh
+  timers do not start under pytest (tests tick by hand). (3) With Matplotlib loaded lazily, its
+  first use (formula labels when switching to 2D) could build the font cache mid-session on a
+  new computer: app/core/warmup.py loads it in the background 1.5 s after start and when a
+  network session starts; the network acceptance scripts load it before connecting, as the
+  program does. (4) System fixed-width font instead of "monospace"/"Consolas" (no 0.2 s font
+  scan). (5) Data Transfer manual-pair labels without markup strings (i18n check).
+Validation (v1.01): full suite 1036 passed, 0 failed, 3 skipped (19 m 36 s), temp folders in _sandbox/pytest_full101b.
+
+
+v1.0.3 - NAS WRITES, SAME-NAME QUESTION, RE-LINK THAT MERGES (folder LabLogViewer_v1.0.3, copied from v1.01)
+Version numbers now have three parts like the Lab APP release tags (Lab APP published v1.01 as v1.0.2).
+app_update.version_key reads two-part 1.x names as 1.0.x, so 1.01 < 1.0.2 < 1.0.3 < 1.0.10.
+Date: 2026-09-29
+
+Why
+---
+- De-background output on the lab NAS failed: "Could not safely publish without replacing an
+  existing file: [Errno 45] Operation not supported". The finished file is published with a
+  hard link (os.link, atomic and never overwrites); SMB shares have no hard links.
+- Re-link on the NAS left most records behind ("Kept unchanged (the new path already had
+  records)"): opening the new location had already created automatic tag states for every file,
+  and any record at the new path made the old one be skipped. Stars/tags were also filed under
+  the chosen folder rather than the database open in the Browser.
+- The user asked that every save next to an existing file of the same name ask first:
+  Overwrite or Keep Both.
+
+Changes
+-------
+- app/core/hdf5_processing_writer.py: publish_temporary falls back, when os.link fails with
+  any OSError other than FileExistsError, to "check the name is free, then os.rename" (same
+  pattern data_rename.py already used). An existing output is never replaced implicitly.
+- app/core/record_merge.py (new): merge_record(file, key, existing, incoming) -> (value, conflict).
+  Program-made records give way (automatic tag states, view snapshots, empty Marks, fingerprints
+  kept from the new file); user tags are joined (Flux vs BG = conflict), comments both kept,
+  named views/overlays/axis presets with the same name kept as "name (2)". Only two different
+  user records that cannot be combined are a conflict.
+- app/core/relink.py: _rewrite() shared by preview_conflicts() (dry run) and apply(prefer_old=...);
+  records at both paths are merged; stars need no comparison; several database roots (Browser's
+  open database first, then the chosen folder); YIG session replace uses os.replace.
+  New match_by_prefix() (old folder -> new folder, name + size only, reads nothing) and
+  suggest_old_prefixes() (the folder the missing files share and each folder above it).
+- app/gui/relink_dialog.py: "Old folder (quick, by path)" + Match by Path; before applying, real
+  conflicts are listed and the user chooses Overwrite with Old Records / Keep Current Records.
+- app/core/migrate.py (Data Transfer): uses merge_record for its keyed merges (automatic tags are
+  no longer conflicts); _merge_tag_lists now merges tag_categories as {tag: category} (it treated
+  them as {category: [tags]} and could add empty lists).
+- app/gui/save_target.py (new): numbered(), ask_existing() (Overwrite / Keep Both / Cancel,
+  Keep Both default), ask_keep_both() (Keep Both / Cancel), confirm_save().
+- app/localization/manager.py: the wrapper every QFileDialog.getSaveFileName already passes
+  through now sets DontConfirmOverwrite and asks the question above (adds the selected type's
+  extension first, also for names like "4.9~5.1GHz X2" whose Path suffix is not an extension).
+- De-background output question: Overwrite / Keep Both / Choose Another... / Cancel; a path
+  already confirmed in the save dialog is not asked again. Data export likewise.
+- Rename File and New Folder with a taken name (interactive): Keep Both or Cancel only.
+- What's New lists every version after the previous one (an update 0.19E -> 1.0.3 shows 1.0.3
+  and 1.01); Settings > About > What's New lists all.
+- Help (en/zh): licenses (re-link steps, Match by Path, what happens with existing records),
+  browser-debackground (same-name question, NAS output, errno 45), browser-database (Keep Both
+  for New Folder / Rename), data-safety (new section "Saving next to other files").
+- tests/test_v103_nas_relink.py (16 tests; the NAS is a folder whose os.link raises ENOTSUP),
+  test_v019c_relink conflict test now uses real Marks on both sides, test_v015b button text.
+- Nothing touched the real NAS or any network; all tests ran with HOME/TMPDIR in _sandbox.
+Validation (v1.0.3): full suite 1052 passed, 0 failed, 3 skipped (22 m 27 s), temp in _sandbox/pytest_full103;
+GitHub Actions run 36557905561: all four jobs (with each platform's --self-test) passed.

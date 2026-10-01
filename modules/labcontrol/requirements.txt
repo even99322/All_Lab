@@ -1,0 +1,10 @@
+# Lab Control 執行所需套件（Lab APP 以此建立虛擬環境；與 requirements.in 相同）
+numpy>=1.24
+scipy>=1.10
+h5py>=3.8
+pyyaml>=6.0
+ruamel.yaml>=0.17        # 編輯 instruments.yaml 時保留註解
+pyvisa>=1.13
+PyQt6>=6.5
+pyqtgraph>=0.13
+flask>=2.3
