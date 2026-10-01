@@ -2,8 +2,17 @@
 
 A lightweight native viewer for Labber HDF5/H5 measurement files.
 
-**Current version: v1.0.3.** v0.9D was cancelled and does not exist. The
+**Current version: v1.0.4.** v0.9D was cancelled and does not exist. The
 planned v0.9F and v0.9G work was completed as one consolidated batch.
+
+## v1.0.4
+
+Connected to the QEL Lab platform (communication module `labcomm`); no effect when run on its own.
+- Lab Control hands newly saved measurements to an open LabLogViewer (local IPC `open_file`).
+- Interfaces → Measurement sends the selected data to Lab Control, which loads that measurement's
+  scheme; Browser data rows can also be dragged onto the Lab Control window (the drag carries the file URL).
+- Interfaces → Online Paper Library lists papers for the selected data's tags.
+- Shared tags are merged into Tags (`app/interfaces/qel.py`, tests in `tests/test_qel_integration.py`).
 
 ## v1.0.3
 

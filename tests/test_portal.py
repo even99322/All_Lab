@@ -277,6 +277,10 @@ def test_events_and_handoff(portal):
     assert bo.events(after=start, wait=0, topics=["handoff"])["events"] == []
     with pytest.raises(CommError, match="app."):
         a.publish("dataset.created", {})
+    # 沒有任何數據相關模塊的人收不到數據事件
+    bo.api("PUT", "/admin/users/vic", {"access": {"paperlib": False, "lablogviewer": False, "labcontrol": False}})
+    v = client(portal, "vic", "vicpass12")
+    assert v.events(after=start, wait=0, topics=["dataset"])["events"] == []
     assert a.publish("app.test.ping", {"x": 1})["ok"]
 
 

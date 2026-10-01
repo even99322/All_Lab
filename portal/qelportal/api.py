@@ -683,7 +683,11 @@ def paper_link(app: Portal, req: Request, pid: str):
 @route("GET", V1 + r"/events")
 def events(app: Portal, req: Request):
     topics = [t for t in req.query.get("topics", "").split(",") if t]
-    return app.events_after(user(req)["username"], req.qint("after", -1, -1), req.qfloat("wait", 25, 0, 55), topics)
+    u = user(req)
+    r = app.events_after(u["username"], req.qint("after", -1, -1), req.qfloat("wait", 25, 0, 55), topics)
+    if not any(app.can(u, m) for m in DATA_MODULES + ("paperlib",)):      # 數據事件只給看得到數據的人
+        r["events"] = [e for e in r["events"] if not e["topic"].startswith("dataset.")]
+    return r
 
 
 @route("POST", V1 + r"/events")

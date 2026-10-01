@@ -82,3 +82,11 @@ Lab Control 存檔 ──(data.exported 事件)──▶ integrations/qel.py
 - 網頁：原生 JavaScript，不需要編譯；響應式版面，手機寬度沒有橫向捲動；PWA 可安裝（Android「安裝應用程式」、iOS「加入主畫面」）。
 - 桌面：Python 3.12＋Qt（Windows、macOS）。量測模塊用 PyQt6、其他用 PySide6，彼此是不同程序，不衝突。
 - 手機上不能控制儀器編輯方案（需要桌面版），但可以看量測進度、暫停／停止、看數據與論文、管理權限。
+
+## 七、安全注意事項
+
+- 大程式的 session token 只存雜湊；但為了代表使用者查論文，**論文庫的 session 會存在 `portal/data/portal.db`**。這個資料夾的權限比照論文庫的 `data/`（只有 NAS 管理員能讀）。
+- Hub 的共用 token 只寫在 NAS 的 `docker-compose.yml`；使用者、手機、網頁都不需要知道。量測電腦（節點）仍用它直接連 Hub。
+- 不要把 Hub（8765）與更新代理（8767）開到外網。更新代理掛載了 `docker.sock`，只接受站長登入或緊急 token。
+- 大程式預設信任 `X-Forwarded-For`（與論文庫的 `--forwarded-allow-ips *` 相同），論文庫的登入鎖定才看得到真正的來源 IP。若把大程式直接開到外網（沒有經過 Cloudflare 等反向代理），設 `QEL_TRUST_PROXY=0`。
+- 數據事件只送給有量測、讀檔或論文模塊的人；跨電腦傳遞（handoff）只送給本人。

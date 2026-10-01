@@ -1,7 +1,7 @@
 {
   "id": "lablogviewer",
   "name": "數據讀取模擬模塊",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "kind": "desktop",
   "entry": "main.py",
   "python": "3.12",
