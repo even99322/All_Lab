@@ -9,6 +9,8 @@
 ``show_papers``   {"tags": [標籤…]}
                   → 顯示這些標籤對應的論文。
 ``ping``          {} → {"module": ..., "version": ...}
+``launch``        {"module": 模塊, "action": 動作, "payload": {...}}（送給大程式 launcher）
+                  → 大程式開啟那個模塊（還沒開的話），再把動作轉過去。
 """
 from __future__ import annotations
 
@@ -16,8 +18,9 @@ OPEN_FILE = "open_file"
 APPLY_SCHEME = "apply_scheme"
 SHOW_PAPERS = "show_papers"
 PING = "ping"
+LAUNCH = "launch"
 
-ALL = (OPEN_FILE, APPLY_SCHEME, SHOW_PAPERS, PING)
+ALL = (OPEN_FILE, APPLY_SCHEME, SHOW_PAPERS, PING, LAUNCH)
 
 # 事件主題（經大程式廣播）
 TOPIC_DATASET_CREATED = "dataset.created"

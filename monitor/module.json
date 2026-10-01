@@ -1,0 +1,27 @@
+{
+  "id": "monitor",
+  "name": "QEL Lab 監控程式",
+  "version": "1.0.0",
+  "kind": "desktop",
+  "entry": "main.py",
+  "python": "3.12",
+  "requirements": "requirements.txt",
+  "platforms": [
+    "windows",
+    "macos"
+  ],
+  "version_from": {
+    "file": "qelmonitor/__init__.py",
+    "regex": "__version__\\s*=\\s*\"([^\"]+)\""
+  },
+  "package": {
+    "include": [
+      "qelmonitor",
+      "main.py",
+      "requirements.txt",
+      "QELMonitor-windows.bat",
+      "QELMonitor-mac.command",
+      "module.json"
+    ]
+  }
+}

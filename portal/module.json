@@ -1,0 +1,21 @@
+{
+  "id": "portal",
+  "name": "大程式網站",
+  "version": "1.0.0",
+  "kind": "service",
+  "service": {
+    "container": "qel-portal",
+    "code": "qelportal",
+    "health": "/api/v1/ping"
+  },
+  "version_from": {
+    "file": "qelportal/__init__.py",
+    "regex": "__version__\\s*=\\s*\"([^\"]+)\""
+  },
+  "package": {
+    "include": [
+      "qelportal",
+      "module.json"
+    ]
+  }
+}

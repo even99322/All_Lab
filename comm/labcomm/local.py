@@ -161,6 +161,25 @@ def send(module_id: str, action: str, payload: Optional[Dict[str, Any]] = None, 
     return reply.get("result")
 
 
+def deliver(module_id: str, action: str, payload: Optional[Dict[str, Any]] = None, sender: str = "") -> str:
+    """把動作交給某個模塊：開著就直接送；沒開就請大程式（launcher）開啟它再轉過去。
+
+    回傳 ``"sent"`` 或 ``"launching"``；兩者都不行時丟 CommError（訊息可直接顯示）。
+    """
+    try:
+        send(module_id, action, payload, sender=sender)
+        return "sent"
+    except CommError as e:
+        if endpoint_info(module_id) is not None and "沒有回應" not in str(e):
+            raise                                    # 模塊開著但拒絕（例如不支援、檔案不對）
+    try:
+        send("launcher", "launch", {"module": module_id, "action": action, "payload": payload or {}},
+             timeout=15, sender=sender)
+        return "launching"
+    except CommError:
+        raise CommError(f"{module_id} 沒有開著，也連不到 QEL Lab 大程式；請先從大程式開啟 {module_id}") from None
+
+
 def is_running(module_id: str, timeout: float = 1.5) -> bool:
     try:
         send(module_id, "ping", timeout=timeout)

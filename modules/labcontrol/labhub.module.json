@@ -1,0 +1,21 @@
+{
+  "id": "labhub",
+  "name": "量測中繼站（Lab Control Hub）",
+  "version": "0.0.12",
+  "kind": "service",
+  "service": {
+    "container": "labcontrol-hub",
+    "code": "labhub",
+    "health": "/api/ping"
+  },
+  "version_from": {
+    "file": "labhub/__init__.py",
+    "regex": "__version__\\s*=\\s*\"([^\"]+)\""
+  },
+  "package": {
+    "include": [
+      "labhub"
+    ],
+    "manifest_as": "module.json"
+  }
+}

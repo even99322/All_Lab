@@ -1,0 +1,36 @@
+{
+  "id": "lablogviewer",
+  "name": "數據讀取模擬模塊",
+  "version": "1.0.3",
+  "kind": "desktop",
+  "entry": "main.py",
+  "python": "3.12",
+  "requirements": "requirements.txt",
+  "platforms": [
+    "windows",
+    "macos"
+  ],
+  "comm": {
+    "actions": [
+      "open_file",
+      "show_papers",
+      "ping"
+    ]
+  },
+  "version_from": {
+    "file": "app/__init__.py",
+    "regex": "__version__\\s*=\\s*\"([^\"]+)\""
+  },
+  "package": {
+    "exclude": [
+      "tests",
+      "docs",
+      "packaging",
+      "tools",
+      "sample_reports",
+      "test_parser.py",
+      "build_guard.py",
+      ".github"
+    ]
+  }
+}

@@ -1,0 +1,356 @@
+"""大程式（桌面）的核心：安裝、更新、啟動各模塊（沒有畫面，方便測試）。
+
+資料夾（``QEL_HOME``，預設 ``~/QELLab``）::
+
+    modules/<模塊>/<版本>/      解壓縮後的模塊（含 module.json）
+    modules/<模塊>/current.json {"version": 目前使用的版本}
+    envs/<模塊>/                模塊自己的 Python 環境（venv），requirements 改變時才重裝
+    downloads/                  下載中的 zip
+    logs/<模塊>.log             模塊的輸出
+    run/                        開著的模塊（labcomm 本機傳遞）
+    session.json                登入狀態（各模塊共用）
+
+每個模塊各自一個版本資料夾與環境：更新量測模塊不會動到讀檔模塊，反之亦然。
+保留上一個版本，更新後打不開可以「換回上一版」。
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import threading
+import time
+import venv
+import zipfile
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
+
+from labcomm import PortalClient
+from labcomm.config import qel_home, save_session
+from labcomm.errors import CommError
+
+KEEP_VERSIONS = 2
+Progress = Callable[[str, float], None]          # (訊息, 0–1)
+
+
+def _noop(msg: str, frac: float) -> None:
+    pass
+
+
+def parse_version(v: str):
+    import re
+    return tuple((0, int(p)) if p.isdigit() else (-1, p) for p in re.findall(r"\d+|[a-z]+", str(v).lower()))
+
+
+def find_python(want: str = "") -> List[str]:
+    """模塊環境用的 Python。沒有打包時用目前的 Python；打包成 exe/app 時找系統上的 Python 3。"""
+    env = os.environ.get("QEL_PYTHON")
+    if env:
+        return [env]
+    if not getattr(sys, "frozen", False):
+        return [sys.executable]
+    cands: List[List[str]] = []
+    if sys.platform == "win32":
+        if want:
+            cands.append(["py", f"-{want}"])
+        cands += [["py", "-3"], ["python"]]
+    else:
+        if want:
+            cands.append([f"python{want}"])
+        cands += [["/usr/local/bin/python3"], ["/opt/homebrew/bin/python3"], ["python3"]]
+    for c in cands:
+        try:
+            r = subprocess.run(c + ["-c", "import sys; print(sys.version_info[:2] >= (3, 9))"],
+                               capture_output=True, text=True, timeout=20)
+            if r.returncode == 0 and r.stdout.strip() == "True":
+                return c
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+    raise CommError("找不到 Python 3.9 以上；請安裝 Python 3.12（python.org），或設定環境變數 QEL_PYTHON")
+
+
+class ModuleStore:
+    def __init__(self, home: Optional[Path] = None) -> None:
+        self.home = Path(home) if home else qel_home()
+        for d in ("modules", "envs", "downloads", "logs", "run"):
+            (self.home / d).mkdir(parents=True, exist_ok=True)
+
+    # ---- 查詢 ------------------------------------------------------------------
+    def mod_dir(self, mid: str) -> Path:
+        return self.home / "modules" / mid
+
+    def installed(self, mid: str) -> Optional[str]:
+        try:
+            v = json.loads((self.mod_dir(mid) / "current.json").read_text(encoding="utf-8"))["version"]
+            return v if (self.mod_dir(mid) / v).is_dir() else None
+        except (OSError, ValueError, KeyError):
+            return None
+
+    def versions(self, mid: str) -> List[str]:
+        d = self.mod_dir(mid)
+        if not d.exists():
+            return []
+        vs = [p.name for p in d.iterdir() if p.is_dir() and (p / "module.json").exists()]
+        return sorted(vs, key=parse_version, reverse=True)
+
+    def path(self, mid: str, version: Optional[str] = None) -> Optional[Path]:
+        v = version or self.installed(mid)
+        return self.mod_dir(mid) / v if v else None
+
+    def manifest(self, mid: str, version: Optional[str] = None) -> Dict[str, Any]:
+        p = self.path(mid, version)
+        if p is None:
+            return {}
+        try:
+            return json.loads((p / "module.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+
+    def set_current(self, mid: str, version: str) -> None:
+        p = self.mod_dir(mid) / "current.json"
+        p.write_text(json.dumps({"version": version, "time": time.time()}), encoding="utf-8")
+
+    # ---- 安裝 ------------------------------------------------------------------
+    def install_zip(self, mid: str, version: str, zip_path: Path, progress: Progress = _noop,
+                    sha256: str = "") -> Path:
+        if sha256:
+            h = hashlib.sha256()
+            with open(zip_path, "rb") as f:
+                for chunk in iter(lambda: f.read(1 << 20), b""):
+                    h.update(chunk)
+            if h.hexdigest() != sha256:
+                raise CommError("下載的檔案不完整（校驗碼不符），請再試一次")
+        progress("解壓縮", 0.6)
+        dst = self.mod_dir(mid) / version
+        tmp = self.mod_dir(mid) / f".{version}.tmp"
+        shutil.rmtree(tmp, ignore_errors=True)
+        tmp.mkdir(parents=True)
+        root = tmp.resolve()
+        with zipfile.ZipFile(zip_path) as z:
+            for m in z.infolist():
+                t = (root / m.filename).resolve()
+                if root not in t.parents and t != root:
+                    raise CommError(f"zip 內容不安全：{m.filename}")
+            z.extractall(root)
+        top = [p for p in root.iterdir() if p.name != "__MACOSX"]
+        base = top[0] if len(top) == 1 and top[0].is_dir() and not (root / "module.json").exists() else root
+        man_p = base / "module.json"
+        if not man_p.exists():
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise CommError("這個 zip 不是 QEL Lab 模塊（沒有 module.json）")
+        man = json.loads(man_p.read_text(encoding="utf-8-sig"))
+        if man.get("id") != mid or str(man.get("version")) != str(version):
+            shutil.rmtree(tmp, ignore_errors=True)
+            raise CommError(f"zip 內容是 {man.get('id')} v{man.get('version')}，不是 {mid} v{version}")
+        shutil.rmtree(dst, ignore_errors=True)
+        shutil.move(str(base), str(dst))
+        shutil.rmtree(tmp, ignore_errors=True)
+        return dst
+
+    def prepare_env(self, mid: str, version: str, progress: Progress = _noop) -> Optional[Path]:
+        """建立 / 更新模塊的 Python 環境；requirements 沒變就不重裝。函式庫（labcomm）不需要環境。"""
+        man = self.manifest(mid, version)
+        if man.get("kind") == "library" or not man.get("entry"):
+            return None
+        mdir = self.mod_dir(mid) / version
+        req = mdir / man.get("requirements", "requirements.txt")
+        env = self.home / "envs" / mid
+        py = env_python(env)
+        want = hashlib.sha256((req.read_bytes() if req.exists() else b"") + str(man.get("python", "")).encode()).hexdigest()
+        stamp = env / ".qel-requirements"
+        if py.exists() and stamp.exists() and stamp.read_text().strip() == want:
+            return py
+        progress("建立 Python 環境", 0.7)
+        if not py.exists():
+            base = find_python(str(man.get("python", "")))
+            if base == [sys.executable] and not getattr(sys, "frozen", False):
+                venv.EnvBuilder(with_pip=True, clear=True).create(str(env))
+            else:
+                subprocess.run(base + ["-m", "venv", "--clear", str(env)], check=True, capture_output=True,
+                               timeout=600)
+        if req.exists() and req.read_text(encoding="utf-8").strip():
+            progress("安裝套件（第一次會比較久）", 0.8)
+            r = subprocess.run([str(py), "-m", "pip", "install", "--disable-pip-version-check", "-r", str(req)],
+                               capture_output=True, text=True, timeout=3600, cwd=str(mdir))
+            (self.home / "logs" / f"{mid}-pip.log").write_text(r.stdout + "\n" + r.stderr, encoding="utf-8")
+            if r.returncode != 0:
+                raise CommError(f"安裝 {mid} 需要的套件失敗，詳見 {self.home / 'logs' / f'{mid}-pip.log'}")
+        stamp.write_text(want)
+        return py
+
+    def install(self, client: PortalClient, mid: str, version: str, progress: Progress = _noop,
+                sha256: str = "", with_env: bool = True) -> Path:
+        z = self.home / "downloads" / f"{mid}_v{version}.zip"
+        progress(f"下載 {mid} v{version}", 0.05)
+        client.download_release(mid, version, z,
+                                lambda done, total: progress("下載中", 0.05 + 0.5 * (done / total if total else 0)))
+        try:
+            dst = self.install_zip(mid, version, z, progress, sha256)
+        finally:
+            if z.exists():
+                z.unlink()
+        if with_env:
+            self.prepare_env(mid, version, progress)
+        self.set_current(mid, version)
+        self.prune(mid)
+        progress("完成", 1.0)
+        return dst
+
+    def prune(self, mid: str) -> None:
+        cur = self.installed(mid)
+        for v in self.versions(mid)[KEEP_VERSIONS:]:
+            if v != cur:
+                shutil.rmtree(self.mod_dir(mid) / v, ignore_errors=True)
+
+    def rollback(self, mid: str) -> Optional[str]:
+        cur = self.installed(mid)
+        older = [v for v in self.versions(mid) if v != cur and (cur is None or parse_version(v) < parse_version(cur))]
+        if not older:
+            return None
+        self.set_current(mid, older[0])
+        return older[0]
+
+    def uninstall(self, mid: str) -> None:
+        shutil.rmtree(self.mod_dir(mid), ignore_errors=True)
+        shutil.rmtree(self.home / "envs" / mid, ignore_errors=True)
+
+
+def env_python(env: Path) -> Path:
+    return env / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+
+
+class Launcher:
+    """登入、檢查更新、啟動模塊。畫面（window.py）與測試都用這個。"""
+
+    def __init__(self, client: PortalClient, store: Optional[ModuleStore] = None) -> None:
+        self.client = client
+        self.store = store or ModuleStore()
+        self.user: Optional[Dict[str, Any]] = None
+        self.modules: List[Dict[str, Any]] = []
+        self.procs: Dict[str, subprocess.Popen] = {}
+        self._lock = threading.Lock()
+
+    def login(self, username: str, password: str, code: str = "") -> Dict[str, Any]:
+        r = self.client.login(username, password, code)
+        if r.get("need_2fa"):
+            return r
+        self.user = r["user"]
+        save_session(self.client.urls, self.client.token, self.user)
+        return r
+
+    def resume(self) -> bool:
+        if not self.client.token:
+            return False
+        try:
+            self.user = self.client.me()
+        except CommError:
+            return False
+        save_session(self.client.urls, self.client.token, self.user)
+        return True
+
+    def logout(self) -> None:
+        from labcomm.config import clear_session
+        try:
+            self.client.logout()
+        except CommError:
+            pass
+        clear_session()
+        self.user = None
+
+    def refresh(self) -> List[Dict[str, Any]]:
+        mods = self.client.modules()
+        for m in mods:
+            m["installed"] = self.store.installed(m["id"])
+            m["update"] = bool(m.get("latest") and m["installed"] and
+                               parse_version(m["latest"]) > parse_version(m["installed"]))
+            m["running"] = self.running(m["id"])
+        self.modules = mods
+        return mods
+
+    def release(self, mid: str, version: str) -> Dict[str, Any]:
+        for r in self.client.releases(mid):
+            if r["version"] == version:
+                return r
+        raise CommError(f"大程式上沒有 {mid} v{version}")
+
+    def install_latest(self, mid: str, progress: Progress = _noop) -> str:
+        m = next((x for x in (self.modules or self.refresh()) if x["id"] == mid), None)
+        if m is not None and not m.get("allowed", True):
+            raise CommError("站長還沒有開放這個模塊給你")
+        if m is None or not m.get("latest"):
+            raise CommError(f"{mid} 還沒有發佈版本")
+        rel = self.release(mid, m["latest"])
+        self.store.install(self.client, mid, m["latest"], progress, rel.get("sha256", ""))
+        return m["latest"]
+
+    def ensure_labcomm(self, progress: Progress = _noop) -> Optional[str]:
+        """通信模塊自動安裝與更新（不需要使用者按）。"""
+        m = next((x for x in (self.modules or self.refresh()) if x["id"] == "labcomm"), None)
+        if not m or not m.get("latest"):
+            return self.store.installed("labcomm")
+        cur = self.store.installed("labcomm")
+        if cur is None or parse_version(m["latest"]) > parse_version(cur):
+            self.store.install(self.client, "labcomm", m["latest"], progress, with_env=False)
+        return self.store.installed("labcomm")
+
+    # ---- 啟動 ------------------------------------------------------------------
+    def running(self, mid: str) -> bool:
+        p = self.procs.get(mid)
+        return p is not None and p.poll() is None
+
+    def command(self, mid: str, extra: Optional[List[str]] = None) -> Dict[str, Any]:
+        """組出啟動指令與環境變數（測試會直接檢查）。"""
+        version = self.store.installed(mid)
+        if version is None:
+            raise CommError(f"{mid} 還沒有安裝")
+        man = self.store.manifest(mid, version)
+        mdir = self.store.mod_dir(mid) / version
+        entry = man.get("entry") or "main.py"
+        py = env_python(self.store.home / "envs" / mid)
+        if not py.exists():
+            py = Path(find_python()[0])
+        env = dict(os.environ)
+        paths = []
+        lc = self.store.path("labcomm")
+        if lc is not None:
+            paths.append(str(lc))                   # 模塊 zip 根目錄就是 labcomm/ 的上一層
+        if env.get("PYTHONPATH"):
+            paths.append(env["PYTHONPATH"])
+        env.update(QEL_HOME=str(self.store.home), QEL_PORTAL_URL=", ".join(self.client.urls),
+                   QEL_TOKEN=self.client.token, QEL_MODULE_ID=mid, QEL_MODULE_VERSION=version,
+                   PYTHONPATH=os.pathsep.join(paths))
+        return {"cmd": [str(py), str(mdir / entry), *(man.get("args") or []), *(extra or [])], "cwd": str(mdir),
+                "env": env}
+
+    def launch(self, mid: str, extra: Optional[List[str]] = None) -> subprocess.Popen:
+        with self._lock:
+            if self.running(mid):
+                return self.procs[mid]
+            c = self.command(mid, extra)
+            log = open(self.store.home / "logs" / f"{mid}.log", "ab")
+            log.write(f"\n==== {time.strftime('%Y-%m-%d %H:%M:%S')} 開啟 {mid} ====\n".encode("utf-8"))
+            log.flush()
+            kw: Dict[str, Any] = {}
+            if sys.platform == "win32":
+                kw["creationflags"] = 0x08000000           # CREATE_NO_WINDOW（不跳出黑色視窗）
+            p = subprocess.Popen(c["cmd"], cwd=c["cwd"], env=c["env"], stdout=log, stderr=subprocess.STDOUT, **kw)
+            log.close()
+            self.procs[mid] = p
+            return p
+
+    def deliver_after_launch(self, mid: str, action: str, payload: Dict[str, Any], timeout: float = 90) -> None:
+        """開啟模塊後，等它的本機傳遞埠準備好再把動作送過去。"""
+        from labcomm import local
+        self.launch(mid)
+        t0 = time.time()
+        while time.time() - t0 < timeout:
+            if local.is_running(mid):
+                local.send(mid, action, payload, sender="launcher")
+                return
+            if not self.running(mid):
+                raise CommError(f"{mid} 開啟後馬上結束了，請看 {self.store.home / 'logs' / f'{mid}.log'}")
+            time.sleep(0.5)
+        raise CommError(f"{mid} 開太久，動作沒有送出")

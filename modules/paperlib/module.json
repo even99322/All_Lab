@@ -1,0 +1,24 @@
+{
+  "id": "paperlib",
+  "name": "論文模塊",
+  "version": "1.5.1",
+  "kind": "service",
+  "service": {
+    "container": "paperlib",
+    "code": "app",
+    "health": "/api/site"
+  },
+  "version_from": {
+    "file": "app/config.py",
+    "regex": "VERSION\\s*=\\s*\"([^\"]+)\""
+  },
+  "package": {
+    "include": [
+      "app",
+      "seed",
+      "requirements.txt",
+      "Dockerfile",
+      "module.json"
+    ]
+  }
+}

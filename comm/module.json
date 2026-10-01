@@ -1,0 +1,17 @@
+{
+  "id": "labcomm",
+  "name": "通信模塊",
+  "version": "1.0.0",
+  "kind": "library",
+  "description": "所有模塊之間的通信：大程式 API、共用標籤、本機傳遞、數據檔↔量測設置。",
+  "version_from": {
+    "file": "labcomm/__init__.py",
+    "regex": "__version__\\s*=\\s*\"([^\"]+)\""
+  },
+  "package": {
+    "include": [
+      "labcomm",
+      "module.json"
+    ]
+  }
+}

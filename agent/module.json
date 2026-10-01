@@ -1,0 +1,20 @@
+{
+  "id": "agent",
+  "name": "更新代理",
+  "version": "1.0.0",
+  "kind": "service",
+  "service": {
+    "container": "qel-agent",
+    "code": "qelagent"
+  },
+  "version_from": {
+    "file": "qelagent/__init__.py",
+    "regex": "__version__\\s*=\\s*\"([^\"]+)\""
+  },
+  "package": {
+    "include": [
+      "qelagent",
+      "module.json"
+    ]
+  }
+}

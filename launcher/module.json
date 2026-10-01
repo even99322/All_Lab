@@ -1,0 +1,27 @@
+{
+  "id": "launcher",
+  "name": "QEL Lab 大程式（桌面）",
+  "version": "1.0.0",
+  "kind": "desktop",
+  "entry": "main.py",
+  "python": "3.12",
+  "requirements": "requirements.txt",
+  "platforms": [
+    "windows",
+    "macos"
+  ],
+  "version_from": {
+    "file": "qellauncher/__init__.py",
+    "regex": "__version__\\s*=\\s*\"([^\"]+)\""
+  },
+  "package": {
+    "include": [
+      "qellauncher",
+      "main.py",
+      "requirements.txt",
+      "QELLab-windows.bat",
+      "QELLab-mac.command",
+      "module.json"
+    ]
+  }
+}
