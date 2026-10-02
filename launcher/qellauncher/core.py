@@ -269,7 +269,7 @@ class ModuleStore:
 
     def install(self, client: PortalClient, mid: str, version: str, progress: Progress = _noop,
                 sha256: str = "", with_env: bool = True) -> Path:
-        z = self.home / "downloads" / f"{mid}_v{version}.zip"
+        z = self.home / "downloads" / f"{mid}_v{version}.{os.getpid()}.{threading.get_ident()}.zip"
         progress(f"下載 {mid} v{version}", 0.05)
         client.download_release(mid, version, z,
                                 lambda done, total: progress("下載中", 0.05 + 0.5 * (done / total if total else 0)))
@@ -318,6 +318,12 @@ class Launcher:
         self.modules: List[Dict[str, Any]] = []
         self.procs: Dict[str, subprocess.Popen] = {}
         self._lock = threading.Lock()
+        self._install_locks: Dict[str, threading.Lock] = {}
+
+    def _install_lock(self, mid: str) -> threading.Lock:
+        """同一個模塊一次只裝一個（背景自動更新和使用者按的不會撞在一起）。"""
+        with self._lock:
+            return self._install_locks.setdefault(mid, threading.Lock())
 
     def login(self, username: str, password: str, code: str = "") -> Dict[str, Any]:
         r = self.client.login(username, password, code)
@@ -368,8 +374,10 @@ class Launcher:
             raise CommError("站長還沒有開放這個模塊給你")
         if m is None or not m.get("latest"):
             raise CommError(f"{mid} 還沒有發佈版本")
-        rel = self.release(mid, m["latest"])
-        self.store.install(self.client, mid, m["latest"], progress, rel.get("sha256", ""))
+        with self._install_lock(mid):
+            if self.store.installed(mid) != m["latest"]:
+                rel = self.release(mid, m["latest"])
+                self.store.install(self.client, mid, m["latest"], progress, rel.get("sha256", ""))
         return m["latest"]
 
     def ensure_labcomm(self, progress: Progress = _noop) -> Optional[str]:
@@ -377,9 +385,10 @@ class Launcher:
         m = next((x for x in (self.modules or self.refresh()) if x["id"] == "labcomm"), None)
         if not m or not m.get("latest"):
             return self.store.installed("labcomm")
-        cur = self.store.installed("labcomm")
-        if cur is None or parse_version(m["latest"]) > parse_version(cur):
-            self.store.install(self.client, "labcomm", m["latest"], progress, with_env=False)
+        with self._install_lock("labcomm"):
+            cur = self.store.installed("labcomm")           # 等鎖的時候別人可能已經裝好了
+            if cur is None or parse_version(m["latest"]) > parse_version(cur):
+                self.store.install(self.client, "labcomm", m["latest"], progress, with_env=False)
         return self.store.installed("labcomm")
 
     # ---- 啟動 ------------------------------------------------------------------
@@ -418,7 +427,7 @@ class Launcher:
         if self.store.installed("labcomm") is None and self.user is not None:
             try:
                 self.ensure_labcomm()               # 第一次：先裝通信模塊（裝不到就用大程式自己帶的）
-            except CommError:
+            except (CommError, OSError):
                 pass
         with self._lock:
             if self.running(mid):

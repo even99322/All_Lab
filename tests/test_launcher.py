@@ -158,3 +158,27 @@ def test_window_launch_request_from_other_module(portal, published, qel_home, tm
     assert json.loads(out.read_text().splitlines()[0])["payload"] == {"path": "/d/a.hdf5"}
     L.procs["lablogviewer"].terminate()
     w.close()
+
+
+def test_concurrent_installs_do_not_collide(portal, published, qel_home):
+    """背景自動安裝通信模塊的同時使用者按「開啟」：同一個模塊同時只裝一次。"""
+    import threading
+    L = make_launcher(portal, qel_home)
+    L.login("amy", "amypass12")
+    L.refresh()
+    errors = []
+
+    def go():
+        try:
+            assert L.ensure_labcomm() == "1.0.0"
+            L.install_latest("lablogviewer")
+        except Exception as e:  # noqa: BLE001
+            errors.append(repr(e))
+    ts = [threading.Thread(target=go) for _ in range(4)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(120)
+    assert errors == []
+    assert L.store.installed("labcomm") == "1.0.0" and L.store.installed("lablogviewer") == "1.0.0"
+    assert list((qel_home / "downloads").glob("*.zip")) == []
