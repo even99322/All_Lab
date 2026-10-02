@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import re
 import json
 import os
 import shutil
@@ -20,6 +21,7 @@ from conftest import ROOT, free_port, wait_http
 from fake_docker import FakeDocker
 from qelagent.agent import Agent, Service, load_services, read_version
 from qelagent.docker import Docker, demux
+from qelportal import __version__ as PORTAL_V
 from qelagent.server import Auth, make_server
 
 EMERGENCY = "emergency-token"
@@ -35,7 +37,7 @@ def portal_zip(version: str, broken: bool = False) -> bytes:
                 rel = "portal/qelportal/" + p.relative_to(src).as_posix()
                 data = p.read_bytes()
                 if p.name == "__init__.py" and p.parent == src:
-                    data = data.replace(b'__version__ = "1.0.0"', f'__version__ = "{version}"'.encode())
+                    data = re.sub(rb'__version__ = "[^"]+"', f'__version__ = "{version}"'.encode(), data)
                 if broken and p.name == "__main__.py":
                     data = b"raise SystemExit(3)\n"
                 z.writestr(rel, data)
@@ -108,29 +110,29 @@ def test_auth(stack):
 def test_status_and_logs(stack):
     st = call(stack["base"], "GET", "/api/agent")
     by = {s["id"]: s for s in st["services"]}
-    assert by["portal"]["online"] and by["portal"]["running_version"] == "1.0.0"
-    assert by["portal"]["code_version"] == "1.0.0" and by["portal"]["container"]["running"]
+    assert by["portal"]["online"] and by["portal"]["running_version"] == PORTAL_V
+    assert by["portal"]["code_version"] == PORTAL_V and by["portal"]["container"]["running"]
     assert by["agent"]["self"] and by["agent"]["code_version"] == "1.0.0"
     logs = call(stack["base"], "GET", "/api/agent/services/portal/logs?tail=10")["text"]
     assert "ready" in logs and "\x01" not in logs
 
 
 def test_update_then_failed_update_rolls_back_then_rollback(stack):
-    j = run_job(stack["base"], "portal", "update", portal_zip("1.0.1"))
+    j = run_job(stack["base"], "portal", "update", portal_zip("9.0.1"))
     assert j["ok"], j["result"]
     assert [s["status"] for s in j["steps"]] == ["ok"] * 7
-    assert online_version(stack) == "1.0.1" and read_version(stack["agent"].services["portal"]) == "1.0.1"
-    assert json.loads((stack["stack"] / "portal" / "module.json").read_text())["version"] == "1.0.1"
+    assert online_version(stack) == "9.0.1" and read_version(stack["agent"].services["portal"]) == "9.0.1"
+    assert json.loads((stack["stack"] / "portal" / "module.json").read_text())["version"] == "9.0.1"
     # 壞掉的新版：自動換回 1.0.1
-    j = run_job(stack["base"], "portal", "update", portal_zip("1.0.2", broken=True))
-    assert not j["ok"] and "已換回 v1.0.1" in j["result"]
-    assert online_version(stack) == "1.0.1"
-    # 回到最早的備份（1.0.0）
+    j = run_job(stack["base"], "portal", "update", portal_zip("9.0.2", broken=True))
+    assert not j["ok"] and "已換回 v9.0.1" in j["result"]
+    assert online_version(stack) == "9.0.1"
+    # 回到最早的備份（目前的版本）
     backups = call(stack["base"], "GET", "/api/agent")["services"][0]["backups"]
-    first = [b for b in backups if b["version"] == "1.0.0"][0]["name"]
+    first = [b for b in backups if b["version"] == PORTAL_V][0]["name"]
     j = run_job(stack["base"], "portal", "rollback", backup=first)
     assert j["ok"], j["result"]
-    assert online_version(stack) == "1.0.0"
+    assert online_version(stack) == PORTAL_V
 
 
 def test_rejects_bad_zips(stack):
@@ -146,7 +148,7 @@ def test_rejects_bad_zips(stack):
         z.writestr("labhub/server.py", "x=1\n")
     j = run_job(stack["base"], "portal", "update", buf.getvalue())
     assert not j["ok"] and "找不到 qelportal/" in j["result"]
-    assert online_version(stack) == "1.0.0"          # 都沒有動到正在跑的版本
+    assert online_version(stack) == PORTAL_V          # 都沒有動到正在跑的版本
 
 
 def test_restart_stop_start(stack):
@@ -154,7 +156,7 @@ def test_restart_stop_start(stack):
     assert run_job(stack["base"], "portal", "stop")["ok"]
     assert online_version(stack) is None
     assert run_job(stack["base"], "portal", "start")["ok"]
-    assert online_version(stack) == "1.0.0"
+    assert online_version(stack) == PORTAL_V
 
 
 def test_self_update(stack):

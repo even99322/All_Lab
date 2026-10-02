@@ -37,6 +37,9 @@ def _bundled_version() -> str:
 
 
 def main() -> int:
+    if getattr(sys, "frozen", False):                # 打包好的 exe／App：程式都在裡面，新版用網站下載的安裝檔更新
+        from qellauncher.app import main as run
+        return run()
     base = HERE
     v, d = _installed("launcher")
     if v and d and (d / "qellauncher").is_dir() and _ver(v) > _ver(_bundled_version()) \

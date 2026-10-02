@@ -423,18 +423,38 @@ async function command(node, cmd) {
 }
 
 // ---------------------------------------------------------------- 下載
+function myPlatform() {
+  const ua = navigator.userAgent, pf = navigator.platform || "";
+  if (/iPhone|iPad|iPod/i.test(ua)) return "ios";
+  if (/Android/i.test(ua)) return "android";
+  if (/Win/i.test(pf)) return "windows";
+  if (/Mac/i.test(pf)) return "macos";
+  return "";
+}
 async function viewDownloads(view) {
-  const mods = (await api("/modules")).modules.filter((m) => m.kind === "desktop" && m.allowed);
-  const os = /Mac/i.test(navigator.platform) ? "macOS" : /Win/i.test(navigator.platform) ? "Windows" : /Android/i.test(navigator.userAgent) ? "Android" : /iPhone|iPad/i.test(navigator.userAgent) ? "iOS" : "";
+  const all = (await api("/modules")).modules.filter((m) => m.kind === "desktop" && m.allowed);
+  const apps = all.filter((m) => m.id === "launcher" || m.id === "monitor");
+  const mods = all.filter((m) => !apps.includes(m));
+  const me = myPlatform();
+  const appCard = (m) => {
+    const inst = Object.entries(m.installers || {}).sort(([a], [b]) => Number(!!me && b.startsWith(me)) - Number(!!me && a.startsWith(me)));   // 自己的平台排第一
+    return h("div", { class: "card" }, h("h3", null, icon(m.icon), m.name), h("p", { class: "desc" }, m.description),
+      inst.length ? h("div", { class: "row" }, inst.map(([pf, x], i) => h("a", { class: `btn ${i === 0 ? "primary" : ""}`, href: x.url },
+        icon("download"), `${x.label}${x.version ? " v" + x.version : ""}（${size(x.size)}）`)))
+        : h("p", { class: "muted" }, "站長還沒有上傳安裝檔。"),
+      inst.length ? h("p", { class: "muted", style: "font-size:13px;margin-top:10px" },
+        "Windows：下載後直接雙擊（第一次若出現「Windows 已保護您的電腦」，按「其他資訊 → 仍要執行」）。macOS：解壓縮後把 App 拖到「應用程式」，第一次在 App 上按右鍵 →「打開」。不需要先安裝 Python。") : null);
+  };
   view.replaceChildren(h("h1", null, "下載與安裝"),
     h("div", { class: "card" }, h("h3", null, icon("home"), "手機、平板（Android、iPhone、iPad）"),
-      h("p", { class: "desc" }, "直接用這個網站。可以安裝成 App：Android（Chrome）選單 →「安裝應用程式 / 加到主畫面」；iPhone、iPad（Safari）分享 →「加入主畫面」。"),
-      os === "Android" || os === "iOS" ? h("p", null, "你現在用的是 ", os, "。") : null),
+      h("p", { class: "desc" }, "直接用這個網站。可以安裝成 App：Android（Chrome）選單 →「安裝應用程式 / 加到主畫面」；iPhone、iPad（Safari）分享 →「加入主畫面」。")),
     h("h2", null, "電腦（Windows、macOS）"),
-    h("p", { class: "muted" }, "先安裝「QEL Lab 大程式（桌面）」，登入後它會自動安裝、更新你有權限的模塊（量測、讀檔、通信），每個模塊各自更新。"),
-    h("div", { class: "grid" }, mods.map((m) => h("div", { class: "card" }, h("h3", null, icon(m.icon), m.name), h("p", { class: "desc" }, m.description),
-      m.latest ? h("a", { class: "btn primary", href: `/api/v1/modules/${m.id}/releases/${encodeURIComponent(m.latest)}.zip` }, icon("download"), `下載 v${m.latest}`)
-        : h("span", { class: "muted" }, "還沒有發佈版本")))));
+    h("p", { class: "muted" }, "只要下載「QEL Lab 大程式」。登入後它會自動安裝、更新你有權限的模塊（量測、讀檔、通信），每個模塊各自更新。"),
+    h("div", { class: "grid" }, apps.map(appCard)),
+    mods.length ? h("details", { style: "margin-top:18px" }, h("summary", { class: "muted" }, "進階：手動下載模塊 zip（一般不需要）"),
+      h("div", { class: "grid", style: "margin-top:10px" }, mods.map((m) => h("div", { class: "card" }, h("h3", null, icon(m.icon), m.name),
+        m.latest ? h("a", { class: "btn", href: `/api/v1/modules/${m.id}/releases/${encodeURIComponent(m.latest)}.zip` }, icon("download"), `v${m.latest}.zip`)
+          : h("span", { class: "muted" }, "還沒有發佈版本"))))) : null);
 }
 
 // ---------------------------------------------------------------- 管理（站長）
@@ -478,8 +498,7 @@ async function adminUsers(body) {
 }
 async function adminReleases(body) {
   const mods = (await api("/modules")).modules.filter((m) => m.kind === "desktop" || m.kind === "library");
-  const sel = h("select", { name: "module" }, mods.map((m) => h("option", { value: m.id }, `${m.name}（${m.id}）`)));
-  const ver = h("input", { name: "version", placeholder: "版本，例如 1.0.4", required: true, pattern: "[0-9][0-9A-Za-z.+-]*" });
+  // 模塊發佈：模塊與版本直接讀 zip 裡的 module.json
   const notes = h("input", { name: "notes", placeholder: "版本說明（選填）", style: "flex:1;min-width:160px" });
   const file = h("input", { type: "file", accept: ".zip", required: true });
   const err = h("p", { class: "err" });
@@ -488,13 +507,38 @@ async function adminReleases(body) {
     const f = file.files[0]; if (!f) return;
     const btn = form.querySelector("button"); btn.disabled = true; btn.textContent = "上傳中…";
     try {
-      await api(`/modules/${sel.value}/releases/${encodeURIComponent(ver.value.trim())}?notes=${encodeURIComponent(notes.value)}`, { method: "PUT", raw: f, type: "application/zip" });
-      toast("已發佈，桌面大程式會提示更新"); adminReleases(body);
+      const r = await api(`/releases?notes=${encodeURIComponent(notes.value)}`, { method: "PUT", raw: f, type: "application/zip" });
+      toast(`已發佈 ${r.name} v${r.version}，桌面大程式會提示更新`); adminReleases(body);
     } catch (ex) { err.textContent = ex.message; btn.disabled = false; btn.textContent = "發佈"; }
-  } }, h("div", { class: "row" }, sel, ver, notes), h("div", { class: "row", style: "margin-top:10px" }, file, h("button", { class: "btn primary" }, "發佈")), err,
-  h("p", { class: "muted", style: "font-size:13px" }, "zip 的模塊根目錄要有 module.json，id 與版本必須和這裡一致。已發佈的版本不能覆寫。NAS 上的服務（大程式網站、論文庫、Hub）用監控程式更新。"));
+  } }, h("div", { class: "row" }, file, notes, h("button", { class: "btn primary" }, "發佈")), err,
+  h("p", { class: "muted", style: "font-size:13px" }, "選模塊的 zip 就好：是哪個模塊、哪一版，直接讀 zip 裡的 module.json（用 tools/package.py 打包，或 GitHub Actions 自動產生）。已發佈的版本不能覆寫。NAS 上的服務（大程式網站、論文庫、Hub）用監控程式更新。"));
+  // 安裝檔：桌面大程式、監控程式的 .exe / macOS App
+  const apps = mods.filter((m) => m.id === "launcher" || m.id === "monitor");
+  const iMod = h("select", null, apps.map((m) => h("option", { value: m.id }, m.name)));
+  const iPf = h("select", null, h("option", { value: "windows" }, "Windows（.exe）"), h("option", { value: "macos" }, "macOS Apple 晶片（.zip）"),
+    h("option", { value: "macos-intel" }, "macOS Intel（.zip）"));
+  const iVer = h("input", { placeholder: "版本（選填）", style: "width:120px" });
+  const iFile = h("input", { type: "file", accept: ".exe,.zip,.dmg,.pkg,.msi", required: true });
+  const iErr = h("p", { class: "err" });
+  const iForm = h("form", { onsubmit: async (e) => {
+    e.preventDefault(); iErr.textContent = "";
+    const f = iFile.files[0]; if (!f) return;
+    const btn = iForm.querySelector("button"); btn.disabled = true; btn.textContent = "上傳中…";
+    try {
+      await api(`/modules/${iMod.value}/installers/${iPf.value}?name=${encodeURIComponent(f.name)}&version=${encodeURIComponent(iVer.value.trim())}`,
+        { method: "PUT", raw: f, type: "application/octet-stream" });
+      toast("安裝檔已上傳，大家可以在「下載」頁下載"); adminReleases(body);
+    } catch (ex) { iErr.textContent = ex.message; btn.disabled = false; btn.textContent = "上傳"; }
+  } }, h("div", { class: "row" }, iMod, iPf, iVer), h("div", { class: "row", style: "margin-top:10px" }, iFile, h("button", { class: "btn primary" }, "上傳")), iErr,
+  h("p", { class: "muted", style: "font-size:13px" }, "安裝檔由 GitHub Actions「build-desktop」在 Windows、macOS 上自動打包（QELLab-windows.exe、QELLab-macos.zip…），下載後在這裡上傳。"),
+  h("div", null, apps.map((m) => h("div", { class: "row", style: "margin-top:6px" }, h("b", null, m.name), ...Object.entries(m.installers || {}).map(([pf, x]) =>
+    h("span", { class: "chip" }, `${x.label}：${x.name}（${size(x.size)}，${when(x.uploaded_at)}）`, h("span", { class: "x", title: "刪除", onclick: async () => {
+      if (!confirm(`刪除 ${m.name} 的 ${x.label} 安裝檔？`)) return;
+      await api(`/modules/${m.id}/installers/${pf}`, { method: "DELETE" }); adminReleases(body);
+    } }, "×")))))));
   const lists = await Promise.all(mods.map((m) => api(`/modules/${m.id}/releases`).then((r) => [m, r.releases])));
-  body.replaceChildren(h("div", { class: "card" }, h("h3", null, "發佈新版本"), form),
+  body.replaceChildren(h("div", { class: "card" }, h("h3", null, "發佈模塊新版本"), form),
+    h("div", { class: "card", style: "margin-top:14px" }, h("h3", null, "安裝檔（給大家下載的 .exe／App）"), iForm),
     ...lists.map(([m, rels]) => h("div", null, h("h2", null, m.name),
       rels.length ? h("div", { class: "tablewrap" }, h("table", null, h("tbody", null, rels.map((r) => h("tr", { class: r.withdrawn ? "off" : null },
         h("td", null, h("b", null, `v${r.version}`), r.withdrawn ? h("span", { class: "muted" }, "（已撤回）") : null),

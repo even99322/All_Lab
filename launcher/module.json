@@ -1,7 +1,7 @@
 {
   "id": "launcher",
   "name": "QEL Lab 大程式（桌面）",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "kind": "desktop",
   "entry": "main.py",
   "python": "3.12",

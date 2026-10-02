@@ -366,12 +366,19 @@ class MainWindow(QtWidgets.QMainWindow):
             self.grid.addWidget(card, i // 2, i % 2)
         me = next((m for m in mods if m["id"] == "launcher"), None)
         if me and me.get("latest") and parse_version(me["latest"]) > parse_version(__version__):
-            self.banner.setText(f"大程式有新版 v{me['latest']}（目前 v{__version__}）。<a href='update'>立即更新</a>")
+            if getattr(sys, "frozen", False):
+                self.banner.setText(f"大程式有新版 v{me['latest']}（目前 v{__version__}）。"
+                                    f"<a href='download'>到網站下載新的安裝檔</a>")
+            else:
+                self.banner.setText(f"大程式有新版 v{me['latest']}（目前 v{__version__}）。<a href='update'>立即更新</a>")
             self.banner.show()
         else:
             self.banner.hide()
 
     def _banner_link(self, link: str) -> None:
+        if link == "download":
+            self.open_web("/#/downloads")
+            return
         if link == "update":
             self.banner.setText("下載中…")
             run_bg(lambda emit: self.launcher.install_latest("launcher", emit),

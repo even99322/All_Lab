@@ -43,7 +43,7 @@
 | `modules/labcontrol/` | 量測模塊（原 Lab Control 0.0.12，含 Hub 與 Monitor；加上大程式整合） |
 | `modules/lablogviewer/` | 數據讀取模擬模塊（原 LabLogViewer 1.0.3；加上大程式整合） |
 | `deploy/` | NAS 的 `docker-compose.yml` |
-| `tools/` | `package.py`（打包各模塊）、`make_nas_bundle.py`（NAS 第一次安裝）、`dev_stack.py`（本機開發） |
+| `tools/` | `package.py`（打包各模塊）、`build_desktop.py`（exe／App 安裝檔）、`make_nas_bundle.py`（NAS 第一次安裝）、`dev_stack.py`（本機開發） |
 | `docs/` | 架構、通信協定、部署、模塊規範 |
 
 ## 快速開始
@@ -51,7 +51,8 @@
 **NAS（第一次）**：`python tools/make_nas_bundle.py` → 把 `dist/qel-nas/` 放到 NAS → 照 [docs/DEPLOY.md](docs/DEPLOY.md)。
 已經在用的論文庫與 Hub 資料（帳號、論文、量測檔）直接沿用。
 
-**電腦**：大程式網頁「下載」→ QEL Lab 大程式 → 解壓縮 → 雙擊 `QELLab-windows.bat`（Windows）或 `QELLab-mac.command`（macOS）→ 用論文庫帳號登入 → 安裝要用的模塊。
+**電腦**：大程式網頁「下載」→ QEL Lab 大程式（Windows `.exe`／macOS App，不需要先裝 Python）→ 用論文庫帳號登入 → 安裝要用的模塊。
+安裝檔由 GitHub Actions「build-desktop」自動打包，站長在「管理 → 模塊發佈 → 安裝檔」上傳。
 
 **手機、平板**：瀏覽器開 `http://<NAS>:8090/` → 登入 → 加到主畫面。
 

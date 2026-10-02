@@ -55,8 +55,8 @@ def parse_version(v: str) -> Tuple:
 
 def find_manifest(z: zipfile.ZipFile) -> Tuple[str, Dict[str, Any]]:
     """在 zip 第一層或第二層找 module.json。"""
-    cands = [n for n in z.namelist() if n.endswith("module.json") and n.count("/") <= 1
-             and not n.startswith("__MACOSX")]
+    cands = [n for n in z.namelist() if n.rsplit("/", 1)[-1] == "module.json" and n.count("/") <= 1
+             and not n.startswith("__MACOSX")]                 # 只認 module.json（不含 labhub.module.json 等）
     if not cands:
         raise ValueError("zip 裡找不到 module.json（模塊根目錄必須有 module.json）")
     name = sorted(cands, key=lambda n: n.count("/"))[0]
@@ -88,6 +88,14 @@ def inspect_release(path: Path, module_id: str, version: str) -> Dict[str, Any]:
     if str(man.get("version")) != version:
         raise ValueError(f"module.json 的版本是 {man.get('version')!r}，不是 {version!r}")
     return man
+
+
+def read_manifest(path: Path) -> Dict[str, Any]:
+    try:
+        with zipfile.ZipFile(path) as z:
+            return find_manifest(z)[1]
+    except zipfile.BadZipFile:
+        raise ValueError("不是 zip 檔") from None
 
 
 def sha256_file(path: Path) -> str:

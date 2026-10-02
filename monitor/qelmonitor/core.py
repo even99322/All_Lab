@@ -145,7 +145,7 @@ class AgentClient:
 def read_module_zip(path: Path) -> Dict[str, Any]:
     """讀出模塊 zip 的 module.json（第一層或第二層）。"""
     with zipfile.ZipFile(path) as z:
-        cands = sorted((n for n in z.namelist() if n.endswith("module.json") and n.count("/") <= 1),
+        cands = sorted((n for n in z.namelist() if n.rsplit("/", 1)[-1] == "module.json" and n.count("/") <= 1),
                        key=lambda n: n.count("/"))
         if not cands:
             raise ValueError("zip 裡找不到 module.json")

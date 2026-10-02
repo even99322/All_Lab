@@ -47,8 +47,11 @@
 
 1. 改程式，把程式裡的版本號與 `module.json` 的 `version` 一起遞增。
 2. 測試（各模塊自己的 `pytest`；平台在根目錄 `python -m pytest tests comm/tests`）。
-3. `python tools/package.py <id>` → `dist/<id>_v<版本>.zip`。
-4. 桌面模塊：監控程式「模塊發佈」或網頁「管理 → 模塊發佈」；NAS 服務：監控程式「服務更新」。
+3. `python tools/package.py <id>` → `dist/<id>_v<版本>.zip`（或 GitHub Actions「build-desktop」的 `module-packages`）。
+   直接把模塊資料夾壓縮成 zip 也可以，只要根目錄（或第一層資料夾）有 `module.json`。
+4. 桌面模塊：網頁「管理 → 模塊發佈」或監控程式「模塊發佈」，**只要選 zip**，模塊與版本讀 `module.json`；
+   NAS 服務：監控程式「服務更新」。
+5. 大程式本體、監控程式另外有安裝檔（exe／App）：`tools/build_desktop.py`，見 DEPLOY.md「安裝檔從哪裡來」。
 5. 已發佈的版本不能覆寫；有問題就撤回，再發佈下一個版本號。
 
 更新一個模塊**不需要**同時更新其他模塊。只有協定不相容（`PROTOCOL` 遞增）時才需要一起更新，而這種改動要避免。

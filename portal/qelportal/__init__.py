@@ -9,6 +9,6 @@
 
 只用 Python 標準函式庫；用官方 python 映像直接執行，不需要 build。
 """
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 MODULE_ID = "portal"
 PROTOCOL = 1

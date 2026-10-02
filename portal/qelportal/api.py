@@ -11,12 +11,12 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from . import PROTOCOL, __version__
 from .app import Portal
 from .httpd import HTTPError, Request, Response, make_router
-from .modules import BUILTIN, BY_ID, ID_RE, VERSION_RE, inspect_release, latest, parse_version, sha256_file
+from .modules import BUILTIN, BY_ID, ID_RE, VERSION_RE, inspect_release, latest, parse_version, read_manifest, sha256_file
 from .paperlib import PaperlibError
 from .store import loads
 
@@ -174,6 +174,7 @@ def modules(app: Portal, req: Request):
             continue
         rels = _releases(app, m["id"])
         out.append(dict(m, allowed=app.can(u, m["id"]), latest=rels[0]["version"] if rels else None,
+                        installers=_installers(app, m["id"]) if m["kind"] == "desktop" else {},
                         latest_notes=rels[0]["notes"] if rels else "",
                         url=paperlib_public(app, req) if m["id"] == "paperlib" else ""))
     return {"modules": out}
@@ -195,25 +196,44 @@ def release_zip(app: Portal, req: Request, mid: str, ver: str):
     return Response.download(p, f"{mid}_v{ver}.zip", "application/zip")
 
 
-@route("PUT", V1 + r"/modules/([a-z0-9_-]+)/releases/([^/]+)", auth="owner")
-def publish_release(app: Portal, req: Request, mid: str, ver: str):
-    if not ID_RE.match(mid) or mid not in BY_ID:
-        raise HTTPError(404, f"沒有模塊 {mid}")
-    if not VERSION_RE.match(ver):
-        raise HTTPError(400, "版本號格式不對（例如 1.0.3）")
-    if app.store.one("SELECT 1 FROM releases WHERE module=? AND version=?", (mid, ver)):
-        raise HTTPError(409, f"{mid} v{ver} 已經發佈過；已發佈的版本不能覆寫，請用新的版本號")
-    d = app.cfg.data_dir / "releases" / mid
+def _receive_zip(app: Portal, req: Request) -> Tuple[Path, int]:
+    d = app.cfg.data_dir / "releases" / ".incoming"
     d.mkdir(parents=True, exist_ok=True)
     fd, tmp = tempfile.mkstemp(dir=str(d), suffix=".part")
     os.close(fd)
     tmp_p = Path(tmp)
     try:
-        size = req.save_body(tmp_p, app.cfg.max_release_mb << 20)
+        return tmp_p, req.save_body(tmp_p, app.cfg.max_release_mb << 20)
+    except BaseException:
+        tmp_p.unlink(missing_ok=True)
+        raise
+
+
+def _store_release(app: Portal, req: Request, tmp_p: Path, size: int, mid: Optional[str] = None,
+                   ver: Optional[str] = None) -> Dict[str, Any]:
+    """檢查 zip 並登錄發佈。mid／ver 沒給時以 zip 裡的 module.json 為準。"""
+    try:
+        try:
+            man = read_manifest(tmp_p)
+        except ValueError as e:
+            raise HTTPError(400, str(e)) from None
+        mid = mid or str(man.get("id") or "")
+        ver = ver or str(man.get("version") or "")
+        if not ID_RE.match(mid) or mid not in BY_ID:
+            raise HTTPError(400, f"module.json 的 id「{mid}」不是大程式認得的模塊")
+        if BY_ID[mid]["kind"] == "service":
+            raise HTTPError(400, f"「{BY_ID[mid]['name']}」是 NAS 上的服務，請用監控程式「服務更新」更新")
+        if not VERSION_RE.match(ver):
+            raise HTTPError(400, f"版本號「{ver}」格式不對（例如 1.0.3）")
+        if app.store.one("SELECT 1 FROM releases WHERE module=? AND version=?", (mid, ver)):
+            raise HTTPError(409, f"{BY_ID[mid]['name']} v{ver} 已經發佈過；已發佈的版本不能覆寫，請把程式與 module.json "
+                                 f"的版本號加一再發佈")
         try:
             man = inspect_release(tmp_p, mid, ver)
         except ValueError as e:
             raise HTTPError(400, str(e)) from None
+        d = app.cfg.data_dir / "releases" / mid
+        d.mkdir(parents=True, exist_ok=True)
         name = f"{mid}_v{ver}.zip"
         os.replace(tmp_p, d / name)
     finally:
@@ -226,7 +246,83 @@ def publish_release(app: Portal, req: Request, mid: str, ver: str):
                                                 json.dumps(man, ensure_ascii=False), user(req)["username"], time.time()))
     app.store.audit(user(req)["username"], "release", f"{mid} v{ver}", req.ip)
     app.publish("modules.changed", {"module": mid, "version": ver}, user(req)["username"])
-    return {"ok": True, "module": mid, "version": ver, "size": size}
+    return {"ok": True, "module": mid, "name": BY_ID[mid]["name"], "version": ver, "size": size}
+
+
+@route("PUT", V1 + r"/releases", auth="owner")
+def publish_auto(app: Portal, req: Request):
+    """發佈：模塊與版本直接讀 zip 裡的 module.json（網頁「模塊發佈」用這個）。"""
+    tmp_p, size = _receive_zip(app, req)
+    return _store_release(app, req, tmp_p, size)
+
+
+@route("PUT", V1 + r"/modules/([a-z0-9_-]+)/releases/([^/]+)", auth="owner")
+def publish_release(app: Portal, req: Request, mid: str, ver: str):
+    if not ID_RE.match(mid) or mid not in BY_ID:
+        raise HTTPError(404, f"沒有模塊 {mid}")
+    tmp_p, size = _receive_zip(app, req)
+    return _store_release(app, req, tmp_p, size, mid, ver)
+
+
+# ---- 安裝檔（Windows .exe、macOS app）：站長上傳，大家從「下載」頁下載 -----------------------
+PLATFORMS = {"windows": "Windows", "macos": "macOS（Apple 晶片）", "macos-intel": "macOS（Intel）"}
+INSTALLER_EXT = (".exe", ".zip", ".dmg", ".pkg", ".msi")
+FILE_RE = re.compile(r"^[A-Za-z0-9._ ()+-]{1,120}$")
+
+
+def _installers(app: Portal, mid: str) -> Dict[str, Any]:
+    return {r["platform"]: {"name": r["file"], "size": r["size"], "sha256": r["sha256"], "version": r["version"],
+                            "uploaded_at": r["uploaded_at"], "label": PLATFORMS.get(r["platform"], r["platform"]),
+                            "url": f"/api/v1/modules/{mid}/installers/{r['platform']}"}
+            for r in app.store.q("SELECT * FROM installers WHERE module=?", (mid,))}
+
+
+@route("PUT", V1 + r"/modules/([a-z0-9_-]+)/installers/([a-z-]+)", auth="owner")
+def upload_installer(app: Portal, req: Request, mid: str, platform: str):
+    if mid not in BY_ID or BY_ID[mid]["kind"] != "desktop":
+        raise HTTPError(400, "只有桌面程式有安裝檔")
+    if platform not in PLATFORMS:
+        raise HTTPError(400, f"平台只能是：{'、'.join(PLATFORMS)}")
+    name = Path(req.query.get("name", "") or "").name
+    if not FILE_RE.match(name) or not name.lower().endswith(INSTALLER_EXT):
+        raise HTTPError(400, f"檔名要是 {'、'.join(INSTALLER_EXT)} 其中一種")
+    tmp_p, size = _receive_zip(app, req)
+    d = app.cfg.data_dir / "installers" / mid / platform
+    try:
+        if d.exists():
+            shutil.rmtree(d)
+        d.mkdir(parents=True)
+        os.replace(tmp_p, d / name)
+    finally:
+        if tmp_p.exists():
+            tmp_p.unlink()
+    ver = req.query.get("version", "")[:40]
+    with app.store.tx() as c:
+        c.execute("INSERT INTO installers(module, platform, file, size, sha256, version, uploaded_by, uploaded_at) "
+                  "VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(module, platform) DO UPDATE SET file=excluded.file, "
+                  "size=excluded.size, sha256=excluded.sha256, version=excluded.version, "
+                  "uploaded_by=excluded.uploaded_by, uploaded_at=excluded.uploaded_at",
+                  (mid, platform, name, size, sha256_file(d / name), ver, user(req)["username"], time.time()))
+    app.store.audit(user(req)["username"], "installer", f"{mid} {platform} {name}", req.ip)
+    return {"ok": True, "module": mid, "platform": platform, "name": name, "size": size}
+
+
+@route("GET", V1 + r"/modules/([a-z0-9_-]+)/installers/([a-z-]+)")
+def download_installer(app: Portal, req: Request, mid: str, platform: str):
+    _release_access(app, req, mid)
+    r = app.store.one("SELECT file FROM installers WHERE module=? AND platform=?", (mid, platform))
+    p = app.cfg.data_dir / "installers" / mid / platform / (r["file"] if r else "-")
+    if r is None or not p.is_file():
+        raise HTTPError(404, "還沒有這個平台的安裝檔")
+    return Response.download(p, r["file"])
+
+
+@route("DELETE", V1 + r"/modules/([a-z0-9_-]+)/installers/([a-z-]+)", auth="owner")
+def delete_installer(app: Portal, req: Request, mid: str, platform: str):
+    with app.store.tx() as c:
+        c.execute("DELETE FROM installers WHERE module=? AND platform=?", (mid, platform))
+    shutil.rmtree(app.cfg.data_dir / "installers" / mid / platform, ignore_errors=True)
+    return {"ok": True}
 
 
 @route("DELETE", V1 + r"/modules/([a-z0-9_-]+)/releases/([^/]+)", auth="owner")

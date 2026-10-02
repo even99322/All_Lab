@@ -33,6 +33,8 @@ c.papers_for_tags(["BIC", "Mirror"])
 | GET | `/modules/<id>/releases/<ver>.zip` | 該模塊 | 下載 |
 | PUT | `/modules/<id>/releases/<ver>?notes=` | 站長 | body＝zip（根目錄或第一層要有 `module.json`，id、版本一致） |
 | DELETE | `/modules/<id>/releases/<ver>` | 站長 | 撤回 |
+| PUT | `/releases?notes=` | 站長 | body＝zip；模塊與版本讀 zip 裡的 `module.json`（網頁發佈用這個） |
+| PUT / GET / DELETE | `/modules/<id>/installers/<windows\|macos\|macos-intel>[?name=&version=]` | 站長上傳；有該模塊權限可下載 | 桌面程式的安裝檔（exe／App zip） |
 | GET | `/tags` | 登入 | `{categories, tags:[{name, category, color, description, aliases, papers, paper_count, datasets}]}` |
 | POST | `/tags` | 登入 | 新增標籤；修改分類等只有站長或建立的人 |
 | POST | `/tags/<name>/rename` | 站長 | 改名（數據上的標籤一起改，舊名變別名） |

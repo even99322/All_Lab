@@ -87,7 +87,10 @@ def build(mid: str, out_dir: Path) -> Path:
                 rel = f.relative_to(base).as_posix()
                 if rel in ("module.json", "labhub.module.json") or _skip(rel, exclude):
                     continue
-                z.write(f, f"{mid}/{rel}")
+                if f.suffix.lower() in (".bat", ".cmd"):          # Windows 的批次檔一定要 CRLF，不管在哪裡打包
+                    z.writestr(f"{mid}/{rel}", f.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+                else:
+                    z.write(f, f"{mid}/{rel}")
                 n += 1
     print(f"{dst}：{n} 個檔案，{dst.stat().st_size / 1e6:.1f} MB")
     return dst

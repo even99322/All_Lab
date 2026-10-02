@@ -1,7 +1,7 @@
 {
   "id": "monitor",
   "name": "QEL Lab 監控程式",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "kind": "desktop",
   "entry": "main.py",
   "python": "3.12",

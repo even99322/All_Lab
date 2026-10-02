@@ -26,13 +26,28 @@
 
 ## 二、各電腦
 
-1. 大程式網頁「下載」→ QEL Lab 大程式 → 解壓縮到任意位置。
-2. 需要 Python 3.12（python.org；macOS 也可以用 Homebrew）。
-3. Windows 雙擊 `QELLab-windows.bat`、macOS 雙擊 `QELLab-mac.command`（第一次會建立環境）。
-4. 大程式網址填 `192.168.50.2:8090, 100.114.33.20:8090`（內網、VPN 依序嘗試），用論文庫帳號登入。
-5. 安裝要用的模塊；之後有新版會在卡片上出現「更新到 vX」。
+1. 大程式網頁「下載」→ **QEL Lab 大程式** → 下載自己平台的安裝檔：
+   - Windows：`QELLab-windows.exe`，直接雙擊（第一次若出現「Windows 已保護您的電腦」，按「其他資訊 → 仍要執行」）；
+   - macOS：`QELLab-macos.zip`（Apple 晶片）或 `QELLab-macos-intel.zip`，解壓縮後把 App 拖到「應用程式」，第一次按右鍵 →「打開」。
+2. **不需要先安裝 Python**：第一次安裝模塊時，大程式會自動下載可攜版 Python 3.12（約 30 MB，放在 `QELLab/python`，免系統管理員權限）。
+   實驗室電腦沒有外網時：把同一個檔案放到 NAS，設定環境變數 `QEL_PYTHON_URL` 指向它；或照舊安裝 Python 3.12。
+3. 大程式網址填 `192.168.50.2:8090, 100.114.33.20:8090`（內網、VPN 依序嘗試），用論文庫帳號登入。
+4. 安裝要用的模塊；之後有新版會在卡片上出現「更新到 vX」。
 
 量測電腦原本的 `LAB/` 設定資料夾（`settings.yaml`、`instruments.yaml`、方案）完全沿用。原本「Hub 連線設定」也照舊（量測節點仍直接連 Hub）。
+
+### 安裝檔從哪裡來（站長）
+
+NAS 是 Linux，沒辦法直接產生 Windows 的 exe；安裝檔由 GitHub Actions 在 Windows 與 macOS 上自動打包：
+
+1. GitHub → Actions →「build-desktop」→「Run workflow」（改到大程式、監控程式、通信模塊時也會自動執行）。
+2. 完成後在那次執行的 Artifacts 下載：`installers-windows`、`installers-macos`、`installers-macos-intel`（安裝檔），
+   `module-packages`（各模塊的發佈 zip）。推 `desktop-v1.0.1` 這種標籤時會另外建立 GitHub Release。
+3. 大程式網頁「管理 → 模塊發佈」：
+   - 「安裝檔」：選大程式／監控程式與平台，上傳 exe 或 zip；
+   - 「發佈模塊新版本」：只要選模塊 zip，模塊與版本直接讀 zip 裡的 `module.json`。
+
+也可以在自己的 Windows／Mac 上打包：`pip install pyinstaller PySide6 pillow`，`python tools/build_desktop.py launcher`。
 
 ## 三、監控程式（站長）
 

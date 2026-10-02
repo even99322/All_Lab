@@ -355,3 +355,56 @@ def test_register_forwards_to_paperlib(portal):
         c.login("newbie", "newbiepass1")
     with pytest.raises(CommError, match="已經有人使用"):
         c.register("newbie", "newbiepass1", "新人", "newbie@example.com")
+
+
+def test_publish_reads_module_json(portal):
+    """網頁「模塊發佈」：不用輸入模塊與版本，直接讀 zip 的 module.json。"""
+    bo = boss(portal)
+    # 使用者自己壓縮 modules/labcontrol 資料夾：裡面同時有 module.json 與 labhub.module.json
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("labcontrol/labhub.module.json", json.dumps({"id": "labhub", "version": "0.0.13"}))
+        z.writestr("labcontrol/module.json", json.dumps({"id": "labcontrol", "version": "0.0.13"}))
+        z.writestr("labcontrol/main.py", "print(1)\n")
+    r = bo.api("PUT", "/releases", raw=buf.getvalue(), content_type="application/zip", query={"notes": "x"})
+    assert r["module"] == "labcontrol" and r["version"] == "0.0.13" and r["name"] == "量測模塊"
+    # 舊的指定版本方式也一樣不會被 labhub.module.json 搞混
+    buf2 = io.BytesIO()
+    with zipfile.ZipFile(buf2, "w") as z:
+        z.writestr("labhub.module.json", json.dumps({"id": "labhub", "version": "0.0.14"}))
+        z.writestr("module.json", json.dumps({"id": "labcontrol", "version": "0.0.14"}))
+    assert bo.publish_release("labcontrol", "0.0.14", buf2.getvalue())["version"] == "0.0.14"
+    with pytest.raises(CommError, match="監控程式"):
+        bo.api("PUT", "/releases", raw=zip_with_manifest("portal", "9.9.9"), content_type="application/zip")
+    with pytest.raises(CommError, match="版本號加一"):
+        bo.api("PUT", "/releases", raw=buf.getvalue(), content_type="application/zip")
+    with pytest.raises(CommError, match="不是 zip"):
+        bo.api("PUT", "/releases", raw=b"nope", content_type="application/zip")
+    with pytest.raises(PermissionDenied):
+        amy(portal).api("PUT", "/releases", raw=buf.getvalue(), content_type="application/zip")
+
+
+def test_installers(portal, tmp_path):
+    bo = boss(portal)
+    exe = b"MZ fake exe" * 100
+    r = bo.api("PUT", "/modules/launcher/installers/windows", raw=exe,
+               query={"name": "QELLab-windows.exe", "version": "1.0.1"})
+    assert r["size"] == len(exe)
+    with pytest.raises(CommError, match="檔名"):
+        bo.api("PUT", "/modules/launcher/installers/windows", raw=exe, query={"name": "../evil.sh"})
+    with pytest.raises(CommError, match="平台"):
+        bo.api("PUT", "/modules/launcher/installers/linux", raw=exe, query={"name": "a.exe"})
+    with pytest.raises(CommError, match="桌面程式"):
+        bo.api("PUT", "/modules/portal/installers/windows", raw=exe, query={"name": "a.exe"})
+    a = amy(portal)
+    with pytest.raises(PermissionDenied):
+        a.api("PUT", "/modules/launcher/installers/macos", raw=exe, query={"name": "a.zip"})
+    inst = {m["id"]: m for m in a.modules()}["launcher"]["installers"]
+    assert inst["windows"]["name"] == "QELLab-windows.exe" and inst["windows"]["version"] == "1.0.1"
+    out = a.download("/modules/launcher/installers/windows", tmp_path / "x.exe")
+    assert out.read_bytes() == exe
+    bo.api("PUT", "/modules/monitor/installers/windows", raw=exe, query={"name": "QELMonitor-windows.exe"})
+    with pytest.raises(PermissionDenied):                      # 監控程式只給站長
+        a.download("/modules/monitor/installers/windows", tmp_path / "m.exe")
+    bo.api("DELETE", "/modules/launcher/installers/windows")
+    assert {m["id"]: m for m in a.modules()}["launcher"]["installers"] == {}

@@ -28,7 +28,8 @@ def agent(portal, tmp_path):
     fd = FakeDocker()
     fd.add("qel-portal", [sys.executable, "-c", "import time; time.sleep(600)"], str(tmp_path), dict(os.environ)).start()
     (tmp_path / "stack" / "portal" / "qelportal").mkdir(parents=True)
-    (tmp_path / "stack" / "portal" / "qelportal" / "__init__.py").write_text('__version__ = "1.0.0"\n')
+    from qelportal import __version__ as portal_version
+    (tmp_path / "stack" / "portal" / "qelportal" / "__init__.py").write_text(f'__version__ = "{portal_version}"\n')
     svcs = [Service("portal", "大程式網站", "qel-portal", tmp_path / "stack" / "portal", "qelportal",
                     portal["base"] + "/api/v1/ping")]
     ag = Agent(svcs, Docker(fd.url), tmp_path / "stack" / "backups")

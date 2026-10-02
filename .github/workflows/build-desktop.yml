@@ -1,0 +1,80 @@
+name: build-desktop
+
+# 打包「不需要 Python」的桌面安裝檔（Windows .exe、macOS App），以及每個模塊的發佈 zip。
+# 完成後到 Actions → 這次執行 → Artifacts 下載：
+#   installers-windows / installers-macos / installers-macos-intel → 網頁「管理 → 模塊發佈 → 安裝檔」上傳
+#   module-packages（labcontrol_v*.zip、lablogviewer_v*.zip…）     → 網頁「管理 → 模塊發佈」上傳
+# 推送 desktop-v* 標籤（例如 desktop-v1.0.1）時，另外建立一個 GitHub Release 附上全部檔案。
+on:
+  workflow_dispatch:
+  push:
+    branches: ["**"]          # 分支：只有改到下面這些檔案才打包
+    tags: ["desktop-v*"]      # 標籤：一律打包並建立 Release
+    paths:
+      - "launcher/**"
+      - "monitor/**"
+      - "comm/**"
+      - "modules/**/module.json"
+      - "tools/build_desktop.py"
+      - "tools/package.py"
+      - ".github/workflows/build-desktop.yml"
+
+jobs:
+  installers:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            tag: windows
+          - os: macos-14
+            tag: macos
+          - os: macos-15-intel
+            tag: macos-intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 套件
+        run: python -m pip install pyinstaller PySide6 pillow
+      - name: 打包大程式
+        run: python tools/build_desktop.py launcher --out dist/installers
+      - name: 打包監控程式
+        run: python tools/build_desktop.py monitor --out dist/installers
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ matrix.tag }}
+          path: dist/installers/*
+
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 模塊 zip
+        run: python tools/package.py --out dist/packages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: module-packages
+          path: dist/packages/*.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    needs: [installers, packages]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            out/*.exe
+            out/*.zip

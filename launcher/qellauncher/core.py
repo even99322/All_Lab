@@ -45,13 +45,75 @@ def parse_version(v: str):
     return tuple((0, int(p)) if p.isdigit() else (-1, p) for p in re.findall(r"\d+|[a-z]+", str(v).lower()))
 
 
-def find_python(want: str = "") -> List[str]:
-    """模塊環境用的 Python。沒有打包時用目前的 Python；打包成 exe/app 時找系統上的 Python 3。"""
-    env = os.environ.get("QEL_PYTHON")
-    if env:
-        return [env]
-    if not getattr(sys, "frozen", False):
-        return [sys.executable]
+# 打包成 exe／App 時，模塊用的 Python：自動下載可攜版 Python 3.12（python-build-standalone，免安裝、不需要系統管理員）
+PORTABLE_TAG = "20241016"
+PORTABLE_VERSION = "3.12.7"
+PORTABLE_TARGETS = {("win32", "AMD64"): "x86_64-pc-windows-msvc", ("darwin", "arm64"): "aarch64-apple-darwin",
+                    ("darwin", "x86_64"): "x86_64-apple-darwin", ("linux", "x86_64"): "x86_64-unknown-linux-gnu"}
+
+
+def portable_python_url() -> Optional[str]:
+    if os.environ.get("QEL_PYTHON_URL"):
+        return os.environ["QEL_PYTHON_URL"]            # 沒有外網時：放在 NAS 上的同一個檔案
+    import platform
+    target = PORTABLE_TARGETS.get((sys.platform, platform.machine()))
+    if target is None:
+        return None
+    return (f"https://github.com/astral-sh/python-build-standalone/releases/download/{PORTABLE_TAG}/"
+            f"cpython-{PORTABLE_VERSION}+{PORTABLE_TAG}-{target}-install_only.tar.gz")
+
+
+def portable_python_exe(home: Path) -> Path:
+    base = home / "python"
+    return base / "python.exe" if sys.platform == "win32" else base / "bin" / "python3"
+
+
+def ensure_portable_python(home: Path, progress: Progress = _noop) -> Path:
+    """QEL_HOME/python 沒有 Python 時下載解壓縮（約 30 MB，只有第一次）。"""
+    exe = portable_python_exe(home)
+    if exe.exists():
+        return exe
+    url = portable_python_url()
+    if url is None:
+        raise CommError("這種電腦沒有可攜版 Python，請安裝 Python 3.12（python.org）或設定 QEL_PYTHON")
+    import tarfile
+    import urllib.request
+    dl = home / "downloads" / "python-portable.tar.gz"
+    dl.parent.mkdir(parents=True, exist_ok=True)
+    progress("下載 Python（只有第一次）", 0.1)
+    try:
+        with urllib.request.urlopen(url, timeout=60) as r, open(dl, "wb") as f:
+            total = int(r.headers.get("Content-Length") or 0)
+            done = 0
+            while True:
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                f.write(chunk)
+                done += len(chunk)
+                progress("下載 Python（只有第一次）", 0.1 + 0.4 * (done / total if total else 0))
+    except OSError as e:
+        raise CommError(f"下載 Python 失敗（{e}）。沒有外網時，請站長把 Python 檔放到 NAS 並設定 QEL_PYTHON_URL，"
+                        f"或在這台電腦安裝 Python 3.12") from None
+    progress("解壓縮 Python", 0.55)
+    tmp = home / ".python.tmp"
+    shutil.rmtree(tmp, ignore_errors=True)
+    with tarfile.open(dl) as t:
+        root = tmp.resolve()
+        for m in t.getmembers():
+            if root not in (root / m.name).resolve().parents and (root / m.name).resolve() != root:
+                raise CommError(f"Python 壓縮檔內容不安全：{m.name}")
+        t.extractall(tmp)
+    shutil.rmtree(home / "python", ignore_errors=True)
+    shutil.move(str(tmp / "python"), str(home / "python"))
+    shutil.rmtree(tmp, ignore_errors=True)
+    dl.unlink(missing_ok=True)
+    if not exe.exists():
+        raise CommError("Python 解壓縮後找不到執行檔")
+    return exe
+
+
+def _system_python(want: str) -> Optional[List[str]]:
     cands: List[List[str]] = []
     if sys.platform == "win32":
         if want:
@@ -69,7 +131,29 @@ def find_python(want: str = "") -> List[str]:
                 return c
         except (OSError, subprocess.TimeoutExpired):
             continue
-    raise CommError("找不到 Python 3.9 以上；請安裝 Python 3.12（python.org），或設定環境變數 QEL_PYTHON")
+    return None
+
+
+def find_python(want: str = "", home: Optional[Path] = None, progress: Progress = _noop) -> List[str]:
+    """模塊環境用的 Python。
+
+    * 環境變數 QEL_PYTHON；
+    * 沒有打包（用 .bat／.command 執行）：目前的 Python；
+    * 打包成 exe／App：QEL_HOME/python 的可攜版（沒有就自動下載），下載不到才找系統上的 Python。
+    """
+    env = os.environ.get("QEL_PYTHON")
+    if env:
+        return [env]
+    if not getattr(sys, "frozen", False):
+        return [sys.executable]
+    home = home or qel_home()
+    try:
+        return [str(ensure_portable_python(home, progress))]
+    except CommError as e:
+        sysp = _system_python(want)
+        if sysp:
+            return sysp
+        raise e
 
 
 class ModuleStore:
@@ -165,12 +249,14 @@ class ModuleStore:
             return py
         progress("建立 Python 環境", 0.7)
         if not py.exists():
-            base = find_python(str(man.get("python", "")))
+            base = find_python(str(man.get("python", "")), self.home, progress)
             if base == [sys.executable] and not getattr(sys, "frozen", False):
                 venv.EnvBuilder(with_pip=True, clear=True).create(str(env))
             else:
-                subprocess.run(base + ["-m", "venv", "--clear", str(env)], check=True, capture_output=True,
-                               timeout=600)
+                r = subprocess.run(base + ["-m", "venv", "--clear", str(env)], capture_output=True, text=True,
+                                   timeout=600)
+                if r.returncode != 0:
+                    raise CommError(f"建立 {mid} 的 Python 環境失敗：{(r.stderr or r.stdout).strip()[-400:]}")
         if req.exists() and req.read_text(encoding="utf-8").strip():
             progress("安裝套件（第一次會比較久）", 0.8)
             r = subprocess.run([str(py), "-m", "pip", "install", "--disable-pip-version-check", "-r", str(req)],
@@ -311,7 +397,7 @@ class Launcher:
         entry = man.get("entry") or "main.py"
         py = env_python(self.store.home / "envs" / mid)
         if not py.exists():
-            py = Path(find_python()[0])
+            py = Path(find_python(home=self.store.home)[0])
         env = dict(os.environ)
         paths = []
         lc = self.store.path("labcomm")
