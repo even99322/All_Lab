@@ -68,46 +68,107 @@ def portable_python_exe(home: Path) -> Path:
     return base / "python.exe" if sys.platform == "win32" else base / "bin" / "python3"
 
 
+OK_MARK = ".qel-ok"                       # 解壓縮並檢查過才寫；沒有它的 python 資料夾視為壞掉（例如裝到一半）
+_PY_LOCK = threading.Lock()
+
+
+class _FileLock:
+    """跨程序的簡單鎖（同一台電腦同時開兩個大程式也不會一起裝）。超過 stale 秒的舊鎖視為殘留。"""
+
+    def __init__(self, path: Path, timeout: float = 1800, stale: float = 1200) -> None:
+        self.path, self.timeout, self.stale = path, timeout, stale
+
+    def __enter__(self) -> "_FileLock":
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        t0 = time.time()
+        while True:
+            try:
+                fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                os.write(fd, str(os.getpid()).encode())
+                os.close(fd)
+                return self
+            except FileExistsError:
+                try:
+                    if time.time() - self.path.stat().st_mtime > self.stale:
+                        self.path.unlink()
+                        continue
+                except OSError:
+                    continue
+                if time.time() - t0 > self.timeout:
+                    raise CommError("等太久：另一個大程式正在安裝 Python，請稍後再試") from None
+                time.sleep(0.5)
+
+    def __exit__(self, *exc) -> None:
+        try:
+            self.path.unlink()
+        except OSError:
+            pass
+
+
+def _python_ok(home: Path) -> bool:
+    return portable_python_exe(home).exists() and (home / "python" / OK_MARK).exists()
+
+
 def ensure_portable_python(home: Path, progress: Progress = _noop) -> Path:
-    """QEL_HOME/python 沒有 Python 時下載解壓縮（約 30 MB，只有第一次）。"""
+    """QEL_HOME/python 沒有（或壞掉）時下載解壓縮（約 30 MB，只有第一次）。
+
+    同時有好幾個模塊在安裝時只會有一個在下載，其他的等它裝好直接用。
+    """
     exe = portable_python_exe(home)
-    if exe.exists():
+    if _python_ok(home):
         return exe
-    url = portable_python_url()
-    if url is None:
-        raise CommError("這種電腦沒有可攜版 Python，請安裝 Python 3.12（python.org）或設定 QEL_PYTHON")
-    import tarfile
-    import urllib.request
-    dl = home / "downloads" / "python-portable.tar.gz"
-    dl.parent.mkdir(parents=True, exist_ok=True)
-    progress("下載 Python（只有第一次）", 0.1)
-    try:
-        with urllib.request.urlopen(url, timeout=60) as r, open(dl, "wb") as f:
-            total = int(r.headers.get("Content-Length") or 0)
-            done = 0
-            while True:
-                chunk = r.read(1 << 20)
-                if not chunk:
-                    break
-                f.write(chunk)
-                done += len(chunk)
-                progress("下載 Python（只有第一次）", 0.1 + 0.4 * (done / total if total else 0))
-    except OSError as e:
-        raise CommError(f"下載 Python 失敗（{e}）。沒有外網時，請站長把 Python 檔放到 NAS 並設定 QEL_PYTHON_URL，"
-                        f"或在這台電腦安裝 Python 3.12") from None
-    progress("解壓縮 Python", 0.55)
-    tmp = home / ".python.tmp"
-    shutil.rmtree(tmp, ignore_errors=True)
-    with tarfile.open(dl) as t:
-        root = tmp.resolve()
-        for m in t.getmembers():
-            if root not in (root / m.name).resolve().parents and (root / m.name).resolve() != root:
-                raise CommError(f"Python 壓縮檔內容不安全：{m.name}")
-        t.extractall(tmp)
-    shutil.rmtree(home / "python", ignore_errors=True)
-    shutil.move(str(tmp / "python"), str(home / "python"))
-    shutil.rmtree(tmp, ignore_errors=True)
-    dl.unlink(missing_ok=True)
+    with _PY_LOCK, _FileLock(home / "python.lock"):
+        if _python_ok(home):                                   # 等鎖的時候別人已經裝好了
+            return exe
+        url = portable_python_url()
+        if url is None:
+            raise CommError("這種電腦沒有可攜版 Python，請安裝 Python 3.12（python.org）或設定 QEL_PYTHON")
+        import tarfile
+        import urllib.request
+        tag = f"{os.getpid()}.{threading.get_ident()}"
+        dl = home / "downloads" / f"python-portable.{tag}.tar.gz"
+        tmp = home / f".python.{tag}.tmp"
+        dl.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            progress("下載 Python（只有第一次）", 0.1)
+            try:
+                with urllib.request.urlopen(url, timeout=60) as r, open(dl, "wb") as f:
+                    total = int(r.headers.get("Content-Length") or 0)
+                    done = 0
+                    while True:
+                        chunk = r.read(1 << 20)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        done += len(chunk)
+                        progress("下載 Python（只有第一次）", 0.1 + 0.4 * (done / total if total else 0))
+            except OSError as e:
+                raise CommError(f"下載 Python 失敗（{e}）。沒有外網時，請站長把 Python 檔放到 NAS 並設定 "
+                                f"QEL_PYTHON_URL，或在這台電腦安裝 Python 3.12") from None
+            progress("解壓縮 Python", 0.55)
+            shutil.rmtree(tmp, ignore_errors=True)
+            try:
+                with tarfile.open(dl) as t:
+                    root = tmp.resolve()
+                    for m in t.getmembers():
+                        target = (root / m.name).resolve()
+                        if root not in target.parents and target != root:
+                            raise CommError(f"Python 壓縮檔內容不安全：{m.name}")
+                    t.extractall(tmp)
+            except (tarfile.TarError, EOFError) as e:
+                raise CommError(f"下載的 Python 檔不完整（{e}），請再試一次") from None
+            new_exe = portable_python_exe(tmp)
+            r = subprocess.run([str(new_exe), "-c", "import ensurepip, venv, ssl; print('ok')"],
+                               capture_output=True, text=True, timeout=120)
+            if r.returncode != 0 or "ok" not in r.stdout:
+                raise CommError(f"下載的 Python 無法執行：{(r.stderr or r.stdout).strip()[-300:]}")
+            shutil.rmtree(home / "python", ignore_errors=True)       # 舊的（壞掉或裝到一半）換掉
+            shutil.move(str(tmp / "python"), str(home / "python"))
+            (home / "python" / OK_MARK).write_text(PORTABLE_VERSION, encoding="utf-8")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+            if dl.exists():
+                dl.unlink()
     if not exe.exists():
         raise CommError("Python 解壓縮後找不到執行檔")
     return exe
@@ -248,22 +309,27 @@ class ModuleStore:
         if py.exists() and stamp.exists() and stamp.read_text().strip() == want:
             return py
         progress("建立 Python 環境", 0.7)
-        if not py.exists():
+        if not _env_healthy(py):                      # 沒有環境，或上次建到一半（有 python 沒有 pip）
             base = find_python(str(man.get("python", "")), self.home, progress)
+            log = self.home / "logs" / f"{mid}-env.log"
             if base == [sys.executable] and not getattr(sys, "frozen", False):
                 venv.EnvBuilder(with_pip=True, clear=True).create(str(env))
             else:
                 r = subprocess.run(base + ["-m", "venv", "--clear", str(env)], capture_output=True, text=True,
                                    timeout=600)
-                if r.returncode != 0:
-                    raise CommError(f"建立 {mid} 的 Python 環境失敗：{(r.stderr or r.stdout).strip()[-400:]}")
+                log.write_text(f"{base}\n{r.stdout}\n{r.stderr}", encoding="utf-8")
+                if r.returncode != 0 or not _env_healthy(py):
+                    shutil.rmtree(env, ignore_errors=True)  # 下次從頭建，不留半套環境
+                    raise CommError(f"建立 {mid} 的 Python 環境失敗：{_tail(r.stderr or r.stdout)}"
+                                    f"（完整訊息：{log}）")
         if req.exists() and req.read_text(encoding="utf-8").strip():
             progress("安裝套件（第一次會比較久）", 0.8)
             r = subprocess.run([str(py), "-m", "pip", "install", "--disable-pip-version-check", "-r", str(req)],
                                capture_output=True, text=True, timeout=3600, cwd=str(mdir))
             (self.home / "logs" / f"{mid}-pip.log").write_text(r.stdout + "\n" + r.stderr, encoding="utf-8")
             if r.returncode != 0:
-                raise CommError(f"安裝 {mid} 需要的套件失敗，詳見 {self.home / 'logs' / f'{mid}-pip.log'}")
+                raise CommError(f"安裝 {mid} 需要的套件失敗：{_tail(r.stderr or r.stdout)}"
+                                f"（完整訊息：{self.home / 'logs' / f'{mid}-pip.log'}）")
         stamp.write_text(want)
         return py
 
@@ -302,6 +368,21 @@ class ModuleStore:
     def uninstall(self, mid: str) -> None:
         shutil.rmtree(self.mod_dir(mid), ignore_errors=True)
         shutil.rmtree(self.home / "envs" / mid, ignore_errors=True)
+
+
+def _env_healthy(py: Path) -> bool:
+    if not py.exists():
+        return False
+    try:
+        r = subprocess.run([str(py), "-c", "import pip"], capture_output=True, timeout=60)
+        return r.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _tail(text: str, n: int = 300) -> str:
+    lines = [x for x in (text or "").strip().splitlines() if x.strip()]
+    return " / ".join(lines[-3:])[-n:] or "（沒有訊息）"
 
 
 def env_python(env: Path) -> Path:

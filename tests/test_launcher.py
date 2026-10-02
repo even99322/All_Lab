@@ -182,3 +182,73 @@ def test_concurrent_installs_do_not_collide(portal, published, qel_home):
     assert errors == []
     assert L.store.installed("labcomm") == "1.0.0" and L.store.installed("lablogviewer") == "1.0.0"
     assert list((qel_home / "downloads").glob("*.zip")) == []
+
+
+def _fake_python_tarball(tmp_path):
+    """假的可攜版 Python：python/bin/python3 轉呼叫目前的 Python（Linux 測試用）。"""
+    import tarfile
+    src = tmp_path / "pysrc" / "python" / "bin"
+    src.mkdir(parents=True)
+    exe = src / "python3"
+    exe.write_text(f'#!/bin/sh\nexec "{sys.executable}" "$@"\n')
+    exe.chmod(0o755)
+    tgz = tmp_path / "python.tar.gz"
+    with tarfile.open(tgz, "w:gz") as t:
+        t.add(tmp_path / "pysrc" / "python", arcname="python")
+    return tgz
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="假 Python 用 shell script")
+def test_portable_python_concurrent_and_repair(qel_home, tmp_path, monkeypatch):
+    """好幾個模塊同時安裝：只下載一次、彼此不刪掉對方的檔案；壞掉的 python 資料夾會自動重裝。"""
+    import threading
+    from qellauncher import core
+    tgz = _fake_python_tarball(tmp_path)
+    monkeypatch.setenv("QEL_PYTHON_URL", tgz.as_uri())
+    downloads = []
+    import urllib.request
+    orig = urllib.request.urlopen
+
+    def counting(url, *a, **k):
+        downloads.append(url)
+        return orig(url, *a, **k)
+    monkeypatch.setattr(urllib.request, "urlopen", counting)
+    (qel_home / "downloads").mkdir(parents=True, exist_ok=True)
+    # 上次失敗留下的半套 python（沒有完成標記）
+    (qel_home / "python" / "bin").mkdir(parents=True)
+    (qel_home / "python" / "bin" / "python3").write_text("broken")
+    results, errors = [], []
+
+    def go():
+        try:
+            results.append(core.ensure_portable_python(qel_home))
+        except Exception as e:  # noqa: BLE001
+            errors.append(repr(e))
+    ts = [threading.Thread(target=go) for _ in range(5)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(120)
+    assert errors == [] and len(set(results)) == 1 and len(downloads) == 1
+    assert (qel_home / "python" / core.OK_MARK).exists()
+    assert list((qel_home / "downloads").iterdir()) == [] and not list(qel_home.glob(".python.*"))
+    assert not (qel_home / "python.lock").exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="假 Python 用 shell script")
+def test_half_built_env_is_rebuilt(qel_home, tmp_path, monkeypatch):
+    """上次建到一半的環境（有 python、沒有 pip）不會被沿用，會重建。打包版（frozen）用可攜版 Python。"""
+    from qellauncher import core
+    monkeypatch.setenv("QEL_PYTHON_URL", _fake_python_tarball(tmp_path).as_uri())
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    store = core.ModuleStore(qel_home)
+    z = tmp_path / "m.zip"
+    z.write_bytes(fake_module("1.0.0"))
+    store.install_zip("lablogviewer", "1.0.0", z)
+    env = qel_home / "envs" / "lablogviewer" / "bin"
+    env.mkdir(parents=True)
+    (env / "python").write_text("#!/bin/sh\nexit 1\n")
+    (env / "python").chmod(0o755)
+    py = store.prepare_env("lablogviewer", "1.0.0")
+    assert core._env_healthy(py)
+    assert (qel_home / "python" / core.OK_MARK).exists()

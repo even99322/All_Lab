@@ -17,6 +17,7 @@ on:
       - "modules/**/module.json"
       - "tools/build_desktop.py"
       - "tools/package.py"
+      - "tools/smoke_portable_python.py"
       - ".github/workflows/build-desktop.yml"
 
 jobs:
@@ -42,6 +43,8 @@ jobs:
           python-version: "3.12"
       - name: 套件
         run: python -m pip install pyinstaller PySide6 pillow
+      - name: 第一次安裝流程（可攜版 Python → 模塊環境 → pip，3 個模塊同時）
+        run: python tools/smoke_portable_python.py
       - name: 打包大程式
         run: python tools/build_desktop.py launcher --out dist/installers
       - name: 打包監控程式
