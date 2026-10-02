@@ -80,6 +80,11 @@ def build(app: str, out: Path) -> Path:
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):             # Windows 主控台預設 cp1252／cp950：中文訊息不要讓打包失敗
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
     ap = argparse.ArgumentParser()
     ap.add_argument("app", choices=list(APPS))
     ap.add_argument("--out", default=str(ROOT / "dist" / "installers"))
