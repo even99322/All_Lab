@@ -443,7 +443,7 @@ async function viewDownloads(view) {
         icon("download"), `${x.label}${x.version ? " v" + x.version : ""}（${size(x.size)}）`)))
         : h("p", { class: "muted" }, "站長還沒有上傳安裝檔。"),
       inst.length ? h("p", { class: "muted", style: "font-size:13px;margin-top:10px" },
-        "Windows：下載後直接雙擊（第一次若出現「Windows 已保護您的電腦」，按「其他資訊 → 仍要執行」）。macOS：解壓縮後把 App 拖到「應用程式」，第一次在 App 上按右鍵 →「打開」。不需要先安裝 Python。") : null);
+        "Windows：Edge 若顯示「不常下載」，在該項目按「⋯ → 保留 → 仍要保留」（實驗室自己打包、沒有向微軟買簽章，所以會這樣）；下載後雙擊，若出現「Windows 已保護您的電腦」，按「其他資訊 → 仍要執行」。macOS：解壓縮後把 App 拖到「應用程式」，第一次在 App 上按右鍵 →「打開」。不需要先安裝 Python。") : null);
   };
   view.replaceChildren(h("h1", null, "下載與安裝"),
     h("div", { class: "card" }, h("h3", null, icon("home"), "手機、平板（Android、iPhone、iPad）"),

@@ -141,15 +141,18 @@ class ModuleCard(QtWidgets.QFrame):
         self.win, self.m = win, m
         self.setObjectName("card")
         self.setMinimumWidth(280)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        # 高度至少要放得下換行後的文字（Maximum 會被壓扁，中文 Windows 放大 125%／150% 時文字疊在一起）
+        self.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Minimum)
         v = QtWidgets.QVBoxLayout(self)
         t = QtWidgets.QLabel(f"<b style='font-size:15px'>{m['name']}</b>")
+        t.setWordWrap(True)
         v.addWidget(t)
         d = QtWidgets.QLabel(m.get("description", ""))
         d.setWordWrap(True)
         d.setStyleSheet(f"color:{MUTED}")
         v.addWidget(d)
         self.info = QtWidgets.QLabel()
+        self.info.setWordWrap(True)
         self.info.setStyleSheet(f"color:{MUTED};font-size:12px")
         v.addWidget(self.info)
         self.bar = QtWidgets.QProgressBar()
@@ -163,8 +166,10 @@ class ModuleCard(QtWidgets.QFrame):
         if m["id"] in DROP_ACTION and m.get("allowed"):
             self.setAcceptDrops(True)
             self.drop_hint = QtWidgets.QLabel(DROP_ACTION[m["id"]][1])
+            self.drop_hint.setWordWrap(True)
             self.drop_hint.setStyleSheet(f"color:{MUTED};font-size:12px;border:1px dashed {MUTED};border-radius:6px;padding:4px")
             v.addWidget(self.drop_hint)
+        v.addStretch(1)                               # 同一列另一張卡片比較高時，內容靠上
         self.render()
 
     def render(self) -> None:
@@ -312,8 +317,7 @@ class MainWindow(QtWidgets.QMainWindow):
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
         self.grid_host = QtWidgets.QWidget()
-        self.grid = QtWidgets.QGridLayout(self.grid_host)
-        self.grid.setAlignment(Qt.AlignTop)
+        self.grid = QtWidgets.QGridLayout(self.grid_host)   # 不設 AlignTop：那樣卡片只拿到估計高度，換行的文字會被壓扁
         scroll.setWidget(self.grid_host)
         mv.addWidget(scroll, 1)
         self.stack.addWidget(self.main_page)
@@ -364,6 +368,9 @@ class MainWindow(QtWidgets.QMainWindow):
             card = ModuleCard(self, m)
             self.cards[m["id"]] = card
             self.grid.addWidget(card, i // 2, i % 2)
+        for r in range(self.grid.rowCount()):
+            self.grid.setRowStretch(r, 0)
+        self.grid.setRowStretch((len(shown) + 1) // 2, 1)   # 多的空間留在最下面
         me = next((m for m in mods if m["id"] == "launcher"), None)
         if me and me.get("latest") and parse_version(me["latest"]) > parse_version(__version__):
             if getattr(sys, "frozen", False):

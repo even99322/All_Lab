@@ -1,7 +1,7 @@
 {
   "id": "portal",
   "name": "大程式網站",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "kind": "service",
   "service": {
     "container": "qel-portal",

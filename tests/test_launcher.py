@@ -252,3 +252,40 @@ def test_half_built_env_is_rebuilt(qel_home, tmp_path, monkeypatch):
     py = store.prepare_env("lablogviewer", "1.0.0")
     assert core._env_healthy(py)
     assert (qel_home / "python" / core.OK_MARK).exists()
+
+
+def test_child_python_runs_in_utf8():
+    """中文 Windows 預設 cp950：pip 讀含「—」的 requirements.txt 會 UnicodeDecodeError，子程序一律 UTF-8。"""
+    from qellauncher import core
+    r = core._run([sys.executable, "-c", "import sys, locale; print(sys.flags.utf8_mode, locale.getpreferredencoding(False));"
+                   "sys.stdout.flush(); sys.stdout.buffer.write(b'\\xff\\xfe')"], 30)
+    assert r.returncode == 0 and r.stdout.splitlines()[0].replace("-", "").upper() == "1 UTF8"
+
+
+def test_cards_not_squeezed(qel_home, monkeypatch):
+    """卡片高度放得下換行後的文字（Windows 放大 125%／150% 時文字不會疊在一起）。"""
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6 import QtWidgets
+    from qellauncher.window import MainWindow
+    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    w = MainWindow(Launcher(PortalClient("http://127.0.0.1:9"), ModuleStore(qel_home)))
+    mods = [{"id": "paperlib", "name": "論文模塊", "kind": "web", "allowed": True, "description": "論文庫：上傳、分類、閱讀、標註。"},
+            {"id": "labcontrol", "name": "量測模塊", "kind": "desktop", "allowed": True, "latest": "0.0.13",
+             "description": "Lab Control：儀器控制、流程圖量測、遠端量測節點（實驗控制硬體，預設不開放）。"},
+            {"id": "lablogviewer", "name": "數據讀取模擬模塊", "kind": "desktop", "allowed": True, "latest": "1.0.4",
+             "description": "LabLogViewer：讀 Labber / HDF5 數據、分析、擬合、3D。"}]
+    w.stack.setCurrentWidget(w.main_page)
+    w._show_modules(mods)
+    w.cards["lablogviewer"]._progress("解壓縮 Python", 0.55)
+    w.show()
+    for width in (1160, 800, 620):
+        w.resize(width, 700)
+        for _ in range(20):
+            app.processEvents()
+        for mid, card in w.cards.items():
+            for lab in card.findChildren(QtWidgets.QLabel):
+                if lab.isVisible() and lab.wordWrap():
+                    assert lab.height() >= lab.heightForWidth(lab.width()), (width, mid, lab.text())
+        cards = list(w.cards.values())
+        assert not any(a.geometry().intersects(b.geometry()) for a in cards for b in cards if a is not b)
+    w.close()

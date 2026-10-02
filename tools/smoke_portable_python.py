@@ -27,7 +27,7 @@ def install(mid):
             zz.writestr(f"{mid}/module.json", json.dumps({"id": mid, "version": "1.0.0", "kind": "desktop",
                                                          "entry": "main.py"}))
             zz.writestr(f"{mid}/main.py", "import yaml\nprint('ok')\n")
-            zz.writestr(f"{mid}/requirements.txt", "pyyaml\n")
+            zz.writestr(f"{mid}/requirements.txt", "# 中文註解 — 和 LabLogViewer 一樣（cp950 會解不開）\npyyaml\n")
         store.install_zip(mid, "1.0.0", z)
         py = store.prepare_env(mid, "1.0.0")
         import subprocess

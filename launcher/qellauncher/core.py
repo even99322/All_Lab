@@ -36,6 +36,23 @@ KEEP_VERSIONS = 2
 Progress = Callable[[str, float], None]          # (訊息, 0–1)
 
 
+def _child_env(extra: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    """子程序（Python、venv、pip）一律用 UTF-8：中文 Windows 預設 cp950，
+    pip 讀到含「—」等字元的 requirements.txt 會 UnicodeDecodeError。"""
+    env = dict(os.environ)
+    env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PIP_NO_INPUT="1")
+    env.update(extra or {})
+    return env
+
+
+def _run(cmd: List[str], timeout: float, **kw: Any) -> "subprocess.CompletedProcess[str]":
+    """執行 Python 子程序並收集輸出（UTF-8、解不開的字元換掉；Windows 不跳出黑色視窗）。"""
+    if sys.platform == "win32":
+        kw.setdefault("creationflags", 0x08000000)          # CREATE_NO_WINDOW
+    return subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                          timeout=timeout, env=_child_env(), **kw)
+
+
 def _noop(msg: str, frac: float) -> None:
     pass
 
@@ -158,8 +175,7 @@ def ensure_portable_python(home: Path, progress: Progress = _noop) -> Path:
             except (tarfile.TarError, EOFError) as e:
                 raise CommError(f"下載的 Python 檔不完整（{e}），請再試一次") from None
             new_exe = portable_python_exe(tmp)
-            r = subprocess.run([str(new_exe), "-c", "import ensurepip, venv, ssl; print('ok')"],
-                               capture_output=True, text=True, timeout=120)
+            r = _run([str(new_exe), "-c", "import ensurepip, venv, ssl; print('ok')"], 120)
             if r.returncode != 0 or "ok" not in r.stdout:
                 raise CommError(f"下載的 Python 無法執行：{(r.stderr or r.stdout).strip()[-300:]}")
             shutil.rmtree(home / "python", ignore_errors=True)       # 舊的（壞掉或裝到一半）換掉
@@ -186,8 +202,7 @@ def _system_python(want: str) -> Optional[List[str]]:
         cands += [["/usr/local/bin/python3"], ["/opt/homebrew/bin/python3"], ["python3"]]
     for c in cands:
         try:
-            r = subprocess.run(c + ["-c", "import sys; print(sys.version_info[:2] >= (3, 9))"],
-                               capture_output=True, text=True, timeout=20)
+            r = _run(c + ["-c", "import sys; print(sys.version_info[:2] >= (3, 9))"], 20)
             if r.returncode == 0 and r.stdout.strip() == "True":
                 return c
         except (OSError, subprocess.TimeoutExpired):
@@ -315,8 +330,7 @@ class ModuleStore:
             if base == [sys.executable] and not getattr(sys, "frozen", False):
                 venv.EnvBuilder(with_pip=True, clear=True).create(str(env))
             else:
-                r = subprocess.run(base + ["-m", "venv", "--clear", str(env)], capture_output=True, text=True,
-                                   timeout=600)
+                r = _run(base + ["-m", "venv", "--clear", str(env)], 600)
                 log.write_text(f"{base}\n{r.stdout}\n{r.stderr}", encoding="utf-8")
                 if r.returncode != 0 or not _env_healthy(py):
                     shutil.rmtree(env, ignore_errors=True)  # 下次從頭建，不留半套環境
@@ -324,8 +338,8 @@ class ModuleStore:
                                     f"（完整訊息：{log}）")
         if req.exists() and req.read_text(encoding="utf-8").strip():
             progress("安裝套件（第一次會比較久）", 0.8)
-            r = subprocess.run([str(py), "-m", "pip", "install", "--disable-pip-version-check", "-r", str(req)],
-                               capture_output=True, text=True, timeout=3600, cwd=str(mdir))
+            r = _run([str(py), "-m", "pip", "install", "--disable-pip-version-check", "-r", str(req)], 3600,
+                     cwd=str(mdir))
             (self.home / "logs" / f"{mid}-pip.log").write_text(r.stdout + "\n" + r.stderr, encoding="utf-8")
             if r.returncode != 0:
                 raise CommError(f"安裝 {mid} 需要的套件失敗：{_tail(r.stderr or r.stdout)}"
@@ -374,7 +388,7 @@ def _env_healthy(py: Path) -> bool:
     if not py.exists():
         return False
     try:
-        r = subprocess.run([str(py), "-c", "import pip"], capture_output=True, timeout=60)
+        r = _run([str(py), "-c", "import pip"], 60)
         return r.returncode == 0
     except (OSError, subprocess.TimeoutExpired):
         return False
@@ -500,7 +514,7 @@ class Launcher:
             paths.append(env["PYTHONPATH"])
         env.update(QEL_HOME=str(self.store.home), QEL_PORTAL_URL=", ".join(self.client.urls),
                    QEL_TOKEN=self.client.token, QEL_MODULE_ID=mid, QEL_MODULE_VERSION=version,
-                   PYTHONPATH=os.pathsep.join(paths))
+                   PYTHONPATH=os.pathsep.join(paths), PYTHONIOENCODING="utf-8")
         return {"cmd": [str(py), str(mdir / entry), *(man.get("args") or []), *(extra or [])], "cwd": str(mdir),
                 "env": env}
 

@@ -27,7 +27,7 @@
 ## 二、各電腦
 
 1. 大程式網頁「下載」→ **QEL Lab 大程式** → 下載自己平台的安裝檔：
-   - Windows：`QELLab-windows.exe`，直接雙擊（第一次若出現「Windows 已保護您的電腦」，按「其他資訊 → 仍要執行」）；
+   - Windows：`QELLab-windows.exe`，直接雙擊（Edge 顯示「不常下載」時按「⋯ → 保留 → 仍要保留」；第一次執行若出現「Windows 已保護您的電腦」，按「其他資訊 → 仍要執行」）；
    - macOS：`QELLab-macos.zip`（Apple 晶片）或 `QELLab-macos-intel.zip`，解壓縮後把 App 拖到「應用程式」，第一次按右鍵 →「打開」。
 2. **不需要先安裝 Python**：第一次安裝模塊時，大程式會自動下載可攜版 Python 3.12（約 30 MB，放在 `QELLab/python`，免系統管理員權限）。
    實驗室電腦沒有外網時：把同一個檔案放到 NAS，設定環境變數 `QEL_PYTHON_URL` 指向它；或照舊安裝 Python 3.12。
