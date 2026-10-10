@@ -59,7 +59,7 @@ jobs:
         run: |
           VERSION=$(python3 -c "import re;print(re.search(r'__version__ = \"(.+)\"', open('app/__init__.py').read()).group(1))")
           NAME=$([ "${{ matrix.arch }}" = "arm64" ] && echo "arm64" || echo "x86_64")
-          packaging/make_dmg.sh dist/LabLogViewer.app "LabLogViewer_v${VERSION}_macos-$NAME.dmg"
+          bash packaging/make_dmg.sh dist/LabLogViewer.app "LabLogViewer_v${VERSION}_macos-$NAME.dmg"
       - uses: actions/upload-artifact@v5
         with:
           name: LabLogViewer-macOS-${{ matrix.arch }}-dmg
@@ -95,7 +95,7 @@ jobs:
       - name: Disk image
         run: |
           VERSION=$(python3 -c "import re;print(re.search(r'__version__ = \"(.+)\"', open('app/__init__.py').read()).group(1))")
-          packaging/make_dmg.sh LabLogViewer.app "LabLogViewer_v${VERSION}_macos-universal.dmg"
+          bash packaging/make_dmg.sh LabLogViewer.app "LabLogViewer_v${VERSION}_macos-universal.dmg"
       - uses: actions/upload-artifact@v5
         with:
           name: LabLogViewer-macOS-universal
