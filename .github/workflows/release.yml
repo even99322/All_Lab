@@ -1,0 +1,56 @@
+# 把某次打包（Build Lab Control / Build LabLogViewer）產生的 .exe / .dmg 放到 GitHub Releases：
+# 不用登入就能下載、不會被包成 zip，下載後直接拖進平台網頁「控制台」→「全部發佈」。
+# Actions → Publish release → Run workflow：填打包那次的 run id 與 tag（例如 labcontrol-v0.0.27）。
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "打包那次執行的 run id（網址 /actions/runs/<這個數字>）"
+        required: true
+      tag:
+        description: "Release 的 tag，例如 labcontrol-v0.0.27、lablogviewer-v2.1.2"
+        required: true
+      title:
+        description: "Release 標題（空白 = 用 tag）"
+        required: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          path: artifacts
+          merge-multiple: true
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TITLE: ${{ inputs.title }}
+        run: |
+          ls -la artifacts
+          mkdir files
+          find artifacts -type f \( -name "*.exe" -o -name "*.dmg" \) -exec cp {} files/ \;
+          ls -la files
+          test -n "$(ls files)"
+          {
+            echo "下載後直接拖進平台網頁「控制台」→「全部發佈」。"
+            echo
+            echo "| 檔案 | 大小 | sha256 |"
+            echo "|---|---|---|"
+            for f in files/*; do echo "| $(basename "$f") | $(( $(stat -c %s "$f") / 1048576 )) MB | \`$(sha256sum "$f" | cut -c1-16)…\` |"; done
+          } > notes.md
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" files/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" files/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "${TITLE:-$TAG}" --notes-file notes.md
+          fi
