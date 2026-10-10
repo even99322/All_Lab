@@ -1,0 +1,38 @@
+# 範本方案：編輯器「範本」選單列出 LAB/templates/ 內所有 *.scheme.yaml。
+# 可直接修改或另存新檔；run: 沒寫的欄位使用 settings.yaml run_defaults。
+# 2D 電流異步：與舊 sweep_main「DC 異步」相同。兩台交錯設定電流：
+#   DC3 +步進 → 量測 → DC4 +步進 → 量測 → DC3 +步進 …（每一點只有一台前進，平均電流每點走步進的一半）
+# step = 每台每次前進的電流（interleave: true）。
+scheme: 1
+name: 2D 電流異步（兩台交錯設定電流 → 量測 VNA）
+blocks:
+- kind: set
+  id: a3set001
+  target: magnet_A
+  mode: sweep
+  start: 150
+  stop: 152
+  step: 0.01
+  unit: mA
+  settle: 0.1
+  axis_name: Average Current
+  interleave: true
+  children:
+  - kind: measure
+    id: a3meas01
+    instrument: VNA1
+    traces:
+    - S21
+    settings:
+      start_freq: 5.0198 GHz
+      stop_freq: 5.0298 GHz
+      points: 501
+      power: -10 dBm
+      if_bw: 10 kHz
+      averages: 1
+- kind: save
+  id: a3save01
+  file_name: 2D_async.hdf5
+  formats:
+  - labber
+  collision: underscore

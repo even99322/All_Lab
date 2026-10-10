@@ -1,0 +1,19 @@
+# 只忽略專案根目錄的 data/（不可寫成 data/，否則會連 labcontrol/data 套件一起排除）
+__pycache__/
+*.pyc
+.pytest_cache/
+/.venv/
+/*_venv/
+*.egg-info/
+/data/
+*.lm.h5
+
+# Lab Control Hub 在本機執行時的資料
+/labhub-data/
+/deploy/hub/data/
+
+# PyInstaller（Lab Control Monitor exe）
+/build/
+/dist/
+/deploy/monitor/build_log.txt
+*.spec

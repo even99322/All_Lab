@@ -1,0 +1,79 @@
+# 量子工程平台：NAS 上「一個專案、三個容器」
+#
+#   paperlib               論文庫網站            http://<NAS>:8080
+#   labcontrol-hub         Hub（平台入口、量測中繼）http://<NAS>:8765
+#   labcontrol-hub-agent   控制代理（更新 Hub 與論文庫，Monitor「發佈中心」用）  :8766
+#
+# 三個容器在同一個 Docker 網路，彼此用容器名稱連線（Hub → http://paperlib:8080），不經過 NAS 的 IP。
+# 資料都留在原本的資料夾：/volume1/docker/paperlib/data、/volume1/docker/LabControlHub/data。
+#
+# Synology：把這個檔放在 /volume1/docker/QELPlatform/，Container Manager → 專案 → 新增
+#   → 專案名稱 qelplatform、路徑選 docker/QELPlatform、來源「使用現有的 docker-compose.yml」→ 建置。
+# 路徑以 /volume1/docker 為準；你的 docker 共用資料夾在別的磁碟區時，把下面所有 /volume1/docker 改掉。
+name: qelplatform
+
+services:
+  paperlib:
+    build: /volume1/docker/paperlib          # 論文庫程式（Dockerfile、app/…）；發佈中心更新時由控制代理重新建置
+    image: qel-paperlib
+    container_name: paperlib
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PAPERLIB_SITE_NAME: "LAB-QEL論文庫"
+      PAPERLIB_MAX_UPLOAD_MB: "300"
+      PAPERLIB_CROSSREF_MAILTO: ""
+      # ↑ 原本論文庫 docker-compose.yml 的 environment 還有其他設定（例如 AI 金鑰）的話，整段照抄到這裡
+      TZ: Asia/Taipei
+    volumes:
+      - /volume1/docker/paperlib/data:/data           # 論文、PDF、資料庫（不會被更新動到）
+      - /volume1/docker/paperlib/import:/import:ro
+
+  labhub:
+    image: python:3.12-slim
+    container_name: labcontrol-hub
+    restart: unless-stopped
+    working_dir: /app
+    command: ["python", "-m", "labhub"]
+    ports:
+      - "8765:8765"
+    environment:
+      LABHUB_DATA: /data
+      LABHUB_RELEASES: /releases
+      LABHUB_TOKEN: "CHANGE_ME"                       # 量測電腦用的裝置 token（各電腦 settings.yaml remote.token 相同）
+      LABHUB_PAPERLIB_URL: "http://paperlib:8080"     # Hub 連論文庫：同一個專案，用容器名稱
+      LABHUB_AGENT_URL: "http://labcontrol-hub-agent:8766"   # 網頁控制台用它更新 Hub 與論文庫（不寫也是這個）
+      LABHUB_PAPERLIB_PUBLIC: "http://192.168.50.2:8080,http://100.114.33.20:8080"   # 給瀏覽器開論文（內網、VPN）
+      # 專案資料夾（data/projects）在各電腦上的位置；不寫 = 依上面的內網位址自動推（\\192.168.50.2\docker\…、/Volumes/docker/…）
+      # LABHUB_PROJECTS_SHARE: '\\192.168.50.2\docker\LabControlHub\data\projects,/Volumes/docker/LabControlHub/data/projects'
+      TZ: Asia/Taipei
+    volumes:
+      - /volume1/docker/LabControlHub/labhub:/app/labhub:ro
+      - /volume1/docker/LabControlHub/data:/data
+      # ↓ 量測節點從 Lab APP 發佈資料夾更新（不需要的話保持註解；發佈中心上傳的版本不需要這行）
+      # - /volume1/ccuqel/Releases:/releases:ro
+    depends_on:
+      - paperlib
+
+  agent:
+    image: python:3.12-slim
+    container_name: labcontrol-hub-agent
+    restart: unless-stopped
+    working_dir: /hubdir
+    command: ["python", "-m", "labhub.agent"]
+    ports:
+      - "8766:8766"
+    environment:
+      LABHUB_TOKEN: "CHANGE_ME"
+      HUB_CONTAINER: labcontrol-hub
+      HUB_URL: http://labcontrol-hub:8765
+      HUB_DIR: /hubdir
+      PAPERLIB_DIR: /stacks/paperlib
+      PAPERLIB_CONTAINER: paperlib
+      PAPERLIB_URL: http://paperlib:8080
+      TZ: Asia/Taipei
+    volumes:
+      - /volume1/docker/LabControlHub:/hubdir                 # Hub 程式、資料、備份
+      - /volume1/docker/paperlib:/stacks/paperlib             # 論文庫程式（更新時換程式、建置映像）
+      - /var/run/docker.sock:/var/run/docker.sock             # 停止 / 建置 / 重建 / 啟動容器

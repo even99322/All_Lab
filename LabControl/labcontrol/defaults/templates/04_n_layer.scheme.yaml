@@ -1,0 +1,63 @@
+# 範本方案：編輯器「範本」選單列出 LAB/templates/ 內所有 *.scheme.yaml。
+# 可直接修改或另存新檔；run: 沒寫的欄位使用 settings.yaml run_defaults。
+# N 層量測（3 層範例）：磁鐵 A（外）× 磁鐵 B × VNA 功率（內）→ 量測 VNA。
+# 要加層：從儀器參數拖一個參數到流程圖、接在迴圈的「每一點 ⟲」裡；要減層：刪掉那個掃描節點。
+# 兩個 Data：
+#   第一個接在磁鐵 A 的迴圈裡 → 每個 A 值存一個檔（檔名在右下「檔案設置」）；
+#   第二個接在所有迴圈之後 → 另外存一個完整的檔（雙擊 Data 改檔名 / 格式）。
+scheme: 1
+name: N 層量測（磁鐵 A × 磁鐵 B × VNA 功率）
+blocks:
+- kind: set
+  id: a4set001
+  target: magnet_A
+  mode: sweep
+  start: 50
+  stop: 60
+  step: 1
+  unit: mA
+  settle: 0.1
+  children:
+  - kind: set
+    id: a4set002
+    target: magnet_B
+    mode: sweep
+    start: 100
+    stop: 110
+    step: 1
+    unit: mA
+    settle: 0.1
+    children:
+    - kind: set
+      id: a4set003
+      target: VNA1.power
+      mode: sweep
+      start: 0
+      stop: -20
+      step: 5
+      unit: dBm
+      children:
+      - kind: measure
+        id: a4meas01
+        instrument: VNA1
+        traces:
+        - S21
+        settings:
+          start_freq: 5.0198 GHz
+          stop_freq: 5.0298 GHz
+          points: 501
+          power: -10 dBm
+          if_bw: 10 kHz
+          averages: 1
+  - kind: save
+    id: a4save01
+    file_name: N_layer.hdf5
+    formats:
+    - labber
+    collision: underscore
+- kind: save
+  id: a4save02
+  file_name: N_layer_all.hdf5
+  formats:
+  - labber
+  collision: underscore

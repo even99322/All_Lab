@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>下載量子工程平台程式</title>
+<link rel="icon" href="/icon.svg">
+<style>
+:root { --bg:#f3f5f8; --panel:#fff; --ink:#18202b; --muted:#5e6878; --line:#dde2ea; --accent:#1f5fae; --on:#fff; --warn:#8a5a00; --warnbg:#fff6e0; }
+@media (prefers-color-scheme: dark) { :root { --bg:#12161c; --panel:#1a2029; --ink:#e5e9ef; --muted:#98a3b3; --line:#2b3340; --accent:#4d8fe0; --on:#fff; --warn:#f0c060; --warnbg:#2a2414; color-scheme: dark; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 "Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif; }
+main { max-width:760px; margin:0 auto; padding:40px 16px; display:flex; flex-direction:column; gap:20px; }
+.brand { display:flex; align-items:center; gap:12px; }
+.brand img { width:48px; height:48px; }
+h1 { font-size:1.6rem; margin:0; }
+h2 { font-size:1.15rem; margin:0; }
+.sub { color:var(--muted); margin:0; }
+.apps { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:16px; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:10px; }
+.big { display:flex; align-items:center; justify-content:center; gap:10px; background:var(--accent); color:var(--on); text-decoration:none;
+  font-size:1.05rem; font-weight:700; padding:12px 16px; border-radius:10px; text-align:center; }
+.big small { font-weight:400; opacity:.85; }
+.alt { display:flex; flex-wrap:wrap; gap:6px 14px; font-size:.88rem; }
+.alt a, .links a, .muted a { color:var(--accent); }
+.muted { color:var(--muted); font-size:.88rem; margin:0; }
+.ver { color:var(--muted); font-size:.85rem; }
+ol { margin:0; padding-left:1.3em; font-size:.92rem; }
+ol li { margin:2px 0; }
+.links { display:flex; flex-wrap:wrap; gap:8px 18px; font-size:.95rem; }
+.empty { color:var(--muted); }
+.note { background:var(--warnbg); color:var(--ink); border:1px solid var(--line); border-left:4px solid var(--warn); border-radius:10px; padding:12px 14px; font-size:.9rem; }
+.note b { color:var(--warn); }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand"><img src="/icon.svg" alt=""><div><h1>量子工程平台</h1><p class="sub">量測與讀檔程式下載。裝好之後程式會自己更新，不用再回來下載。</p></div></div>
+  <div class="apps" id="apps"><section class="card"><p class="empty">讀取中…</p></section></div>
+  <section class="card">
+    <h2>第一次安裝</h2>
+    <ol id="steps"></ol>
+    <div class="note" id="warn"></div>
+  </section>
+  <div class="links"><a href="/portal">平台網頁（數據、標籤、專案）</a><a id="pl" href="#" hidden>論文庫</a></div>
+</main>
+<script>
+"use strict";
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const mb = n => (n / 1048576).toFixed(0) + " MB";
+const ua = navigator.userAgent;
+const OS = /Windows/i.test(ua) ? "windows" : /iPhone|iPad|Android/i.test(ua) ? "mobile" : /Mac/i.test(ua) ? "macos" : "other";
+const ARCH = {universal2: "Apple 晶片與 Intel", arm64: "Apple 晶片（M1–M4）", x86_64: "Intel"};
+const label = f => f.platform === "windows" ? "Windows" : "Mac" + (f.arch ? "・" + ARCH[f.arch] : "");
+// Mac：universal 最優先，再來 Apple 晶片
+const rank = f => f.platform !== "macos" ? 0 : ({universal2: 0, arm64: 1, x86_64: 2}[f.arch] ?? 3);
+const steps = {
+  windows: [
+    "按上面的「下載 Windows 版」。",
+    "下載完打開它。量測（Lab Control）是單一 .exe，放在桌面或任何資料夾直接執行；讀檔（LabLogViewer）是安裝程式，照畫面按「下一步」。",
+    "如果出現「Windows 已保護您的電腦」：按「其他資訊」→「仍要執行」。",
+    "第一次開啟後用論文庫的帳號登入（量測：工具列「平台 ▾ → 登入」）。之後有新版，程式會自己提示並更新。",
+  ],
+  macos: [
+    "按上面的「下載 Mac 版」，打開 .dmg，把 App 拖到「應用程式」。",
+    "第一次開啟：在「應用程式」裡按右鍵 →「打開」→「打開」（之後直接點兩下就可以）。",
+    "第一次開啟後用論文庫的帳號登入。之後有新版，程式會自己提示並更新。",
+  ],
+};
+const warn = {
+  windows: `<b>瀏覽器說「不常下載，開啟前請確定您信任…」？</b>這是實驗室自己做的程式、沒有向微軟買程式碼簽章，下載的人少，瀏覽器就會這樣提醒，檔案本身沒有問題。<br>
+    Edge：在下載清單把滑鼠移到這個檔案 →「…」→「保留」→「顯示更多」→「仍要保留」。Chrome：「保留」。<br>
+    只有第一次會遇到：裝好之後的更新由程式自己下載，不會再經過瀏覽器。`,
+  macos: `<b>Mac 說「無法打開，因為無法驗證開發者」？</b>在「應用程式」裡按右鍵 →「打開」，或到「系統設定 → 隱私權與安全性」按「強制打開」。只有第一次需要。`,
+};
+fetch("/get/info").then(r => r.json()).then(info => {
+  const apps = info.apps || [];
+  let h = "";
+  for (const a of apps) {
+    const dl = (a.downloads || []).slice().sort((x, y) => rank(x) - rank(y));
+    const mine = dl.filter(f => f.platform === OS);
+    const other = dl.filter(f => f.platform !== OS || mine.indexOf(f) > 0);
+    h += `<section class="card"><div><h2>${esc(a.name)}　<span class="ver">${esc(a.app)}${a.version ? " · " + esc(a.version) : ""}</span></h2>
+      <p class="muted">${esc(a.description)}</p></div>`;
+    if (OS === "mobile") h += `<p class="muted">手機請用<a href="/portal">平台網頁</a>。程式要在 Windows 或 Mac 上下載。</p>`;
+    else if (mine.length) h += `<a class="big" href="${esc(mine[0].url)}">⬇ 下載 ${esc(label(mine[0]))} 版 <small>${esc(mine[0].version)} · ${mb(mine[0].size)}</small></a>`;
+    else h += `<p class="empty">這個作業系統的版本還沒有上傳。</p>`;
+    if (other.length) h += `<div class="alt">其他版本：${other.map(f => `<a href="${esc(f.url)}" title="${esc(f.name)}">${esc(label(f))}（${esc(f.version)}）</a>`).join("")}</div>`;
+    h += `</section>`;
+  }
+  if (!apps.some(a => (a.downloads || []).length)) h = `<section class="card"><p class="empty">站長還沒有上傳程式。</p></section>`;
+  document.getElementById("apps").innerHTML = h;
+  document.getElementById("steps").innerHTML = (steps[OS] || steps.windows).map(s => `<li>${esc(s)}</li>`).join("");
+  document.getElementById("warn").innerHTML = warn[OS] || warn.windows;
+  const pl = (info.paperlib || "").split(",")[0];
+  if (pl) { const a = document.getElementById("pl"); a.href = pl + "/"; a.hidden = false; }
+}).catch(() => { document.getElementById("apps").innerHTML = `<section class="card"><p class="empty">連不到平台，請稍後再試。</p></section>`; });
+</script>
+</body>
+</html>

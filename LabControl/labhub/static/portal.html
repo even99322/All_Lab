@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16181d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="量子工程">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<title>量子工程平台</title>
+<style>
+  :root {
+    --bg:#f4f5f7; --card:#fff; --soft:#f0f2f5; --text:#1f2328; --muted:#6b7280; --border:#e1e4e8;
+    --accent:#1971c2; --accent-soft:#e7f1fb; --ok:#2b8a3e; --warn:#e67700; --err:#e03131;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#111317; --card:#1b1e24; --soft:#23272e; --text:#e9ecef; --muted:#9097a0; --border:#2f333a;
+      --accent:#4dabf7; --accent-soft:#1d2d3d; --ok:#51cf66; --warn:#ffa94d; --err:#ff6b6b;
+    }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.5 "Segoe UI","Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,sans-serif; }
+  a { color:var(--accent); text-decoration:none; }
+  header { position:sticky; top:0; z-index:5; background:var(--card); border-bottom:1px solid var(--border);
+           padding:10px 16px; padding-top:max(10px, env(safe-area-inset-top)); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  header .brand { display:flex; align-items:center; gap:8px; font-weight:700; font-size:17px; }
+  header .brand img { width:26px; height:26px; }
+  nav { display:flex; gap:4px; flex-wrap:wrap; }
+  nav a { padding:6px 12px; border-radius:8px; color:var(--muted); font-weight:600; }
+  nav a.on { background:var(--accent-soft); color:var(--accent); }
+  header .sp { flex:1; }
+  header .who { color:var(--muted); font-size:13px; display:flex; gap:8px; align-items:center; }
+  .badge { font-size:11px; padding:1px 7px; border-radius:6px; background:var(--accent); color:#fff; font-weight:700; }
+  main { max-width:1200px; margin:0 auto; padding:16px; padding-bottom:max(40px, env(safe-area-inset-bottom)); }
+  h2 { font-size:16px; margin:18px 0 10px; display:flex; align-items:center; gap:8px; }
+  h2 .n { color:var(--muted); font-weight:400; font-size:13px; }
+  .muted { color:var(--muted); }
+  .small { font-size:12px; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:12px; }
+  .tile { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:6px; min-height:140px; }
+  .tile.off { opacity:.5; }
+  .tile .t { font-size:16px; font-weight:700; }
+  .tile .d { color:var(--muted); font-size:13px; flex:1; }
+  .tile .k { font-size:11px; color:var(--muted); }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:7px 12px; border-radius:8px;
+         border:1px solid var(--border); background:var(--soft); color:var(--text); font:inherit; font-weight:600; cursor:pointer; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.small { padding:3px 9px; font-size:12px; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  input, select, textarea { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--border); border-radius:8px; padding:7px 10px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:12px; }
+  .bar input[type=search] { flex:1; min-width:180px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { display:inline-flex; align-items:center; gap:4px; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:600;
+          border:1px solid var(--border); background:var(--soft); color:var(--text); cursor:pointer; user-select:none; white-space:nowrap; }
+  .chip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .chip .c { width:8px; height:8px; border-radius:50%; display:inline-block; }
+  .chip .x { opacity:.7; margin-left:2px; }
+  .chip small { font-weight:400; opacity:.8; }
+  .layout { display:grid; grid-template-columns:minmax(0,1fr) 380px; gap:14px; align-items:start; }
+  @media (max-width:900px) { .layout { grid-template-columns:1fr; } }
+  .list { background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .item { padding:10px 14px; border-bottom:1px solid var(--border); cursor:pointer; display:grid; gap:4px; }
+  .item:last-child { border-bottom:0; }
+  .item:hover, .item.sel { background:var(--soft); }
+  .item .nm { font-weight:600; overflow-wrap:anywhere; }
+  .item .mt { color:var(--muted); font-size:12px; display:flex; gap:10px; flex-wrap:wrap; }
+  .panel { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px; position:sticky; top:72px; }
+  .panel h3 { margin:0 0 6px; font-size:15px; overflow-wrap:anywhere; }
+  .kv { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; font-size:12px; margin:8px 0; }
+  .kv b { color:var(--muted); font-weight:400; }
+  .paper { padding:7px 0; border-bottom:1px dashed var(--border); font-size:13px; }
+  .paper:last-child { border-bottom:0; }
+  .paper .a { color:var(--muted); font-size:12px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  th, td { padding:8px 10px; border-bottom:1px solid var(--border); text-align:left; font-size:13px; vertical-align:middle; }
+  th { color:var(--muted); font-weight:600; background:var(--soft); }
+  .scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .sw { position:relative; display:inline-block; width:36px; height:20px; }
+  .sw input { opacity:0; width:0; height:0; }
+  .sw span { position:absolute; inset:0; background:var(--border); border-radius:20px; transition:.15s; cursor:pointer; }
+  .sw span::before { content:""; position:absolute; width:14px; height:14px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.15s; }
+  .sw input:checked + span { background:var(--ok); }
+  .sw input:checked + span::before { transform:translateX(16px); }
+  .sw input:disabled + span { opacity:.45; cursor:default; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; }
+  .stat { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; }
+  .stat .v { font-size:20px; font-weight:700; }
+  .stat .k { color:var(--muted); font-size:12px; }
+  .ok { color:var(--ok); } .err { color:var(--err); } .warn { color:var(--warn); }
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--text); color:var(--bg);
+           padding:8px 16px; border-radius:10px; font-weight:600; opacity:0; transition:.2s; pointer-events:none; z-index:20; max-width:90vw; }
+  .toast.show { opacity:.95; }
+  .empty { padding:30px; text-align:center; color:var(--muted); }
+  .drop { border:2px dashed var(--border); border-radius:12px; padding:22px; text-align:center; color:var(--muted); cursor:pointer; }
+  .drop.on { border-color:var(--accent); color:var(--accent); }
+  .pub td { vertical-align:middle; }
+  .pub .st { min-width:180px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); margin-right:6px; }
+  .dot.on { background:var(--ok); }
+  .cat { margin-bottom:14px; }
+  .cat h4 { margin:0 0 6px; font-size:13px; color:var(--muted); }
+  .drag-hint { font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><img src="/icon.svg" alt="">量子工程平台</div>
+  <nav id="nav">
+    <a href="#/" data-v="home">模塊</a>
+    <a href="#/projects" data-v="projects">專案</a>
+    <a href="#/data" data-v="data">數據</a>
+    <a href="#/tags" data-v="tags">標籤與論文</a>
+    <a href="#/console" data-v="console" id="nav-console" hidden>控制台</a>
+    <a href="#/admin" data-v="admin" id="nav-admin" hidden>帳號與權限</a>
+  </nav>
+  <div class="sp"></div>
+  <div class="who"><span id="who"></span><a href="/logout">登出</a></div>
+</header>
+<main id="main"><div class="empty">載入中…</div></main>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const $ = (s, el) => (el || document).querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const size = n => n == null ? "" : n < 1024 ? n + " B" : n < 1048576 ? (n/1024).toFixed(1) + " KB" : n < 1073741824 ? (n/1048576).toFixed(1) + " MB" : (n/1073741824).toFixed(2) + " GB";
+const when = t => t ? new Date(t * 1000).toLocaleString("zh-TW", {hour12:false}) : "";
+let ME = null, TAGS = [], TAGMAP = {}, PROJECTS = [], PROJ_ERR = "";
+
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 2600); }
+
+async function api(path, opts) {
+  opts = Object.assign({credentials:"same-origin", headers:{}}, opts || {});
+  if (opts.json !== undefined) { opts.body = JSON.stringify(opts.json); opts.headers["Content-Type"] = "application/json"; delete opts.json; }
+  const r = await fetch(path, opts);
+  if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent("/portal" + location.hash); throw new Error("未登入"); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+
+function tagChip(name, opts) {
+  opts = opts || {};
+  const t = TAGMAP[name] || {};
+  const col = t.color ? `<span class="c" style="background:${esc(t.color)}"></span>` : "";
+  const cnt = opts.count ? ` <small>${t.papers ? "📄" + t.papers : ""}${t.data ? " 📊" + t.data : ""}</small>` : "";
+  return `<span class="chip${opts.on ? " on" : ""}" data-tag="${esc(name)}" title="${esc(t.description || name)}">${col}${esc(name)}${cnt}${opts.x ? '<span class="x" data-x="1">✕</span>' : ""}</span>`;
+}
+
+async function loadProjects(force) {
+  try { const r = await api("/api/platform/projects" + (force ? "?refresh=1" : "")); PROJECTS = r.projects || []; PROJ_ERR = ""; }
+  catch (e) { PROJECTS = []; PROJ_ERR = e.message; }
+}
+const projOptions = (sel, none) => `<option value="">${esc(none)}</option>` + PROJECTS.map(p => `<option value="${esc(p.id)}" ${String(sel) === String(p.id) ? "selected" : ""}>${esc(p.name)}</option>`).join("");
+async function openProject(p) {
+  try { await api("/api/platform/bus/labcontrol", {method:"POST", json:{type:"open_project", project:p.id, name:p.name, from_module:"portal"}});
+    toast(`已送出：你電腦上開著的量測程式（Lab Control）會用讀檔程式開啟「${p.name}」的所有數據`); } catch (e) { toast(e.message); }
+}
+
+async function loadTags() {
+  const r = await api("/api/platform/tags");
+  TAGS = r.tags || []; TAGMAP = {};
+  for (const t of TAGS) TAGMAP[t.name] = t;
+}
+
+// ---- 模塊 --------------------------------------------------------------------
+const MY_OS = /Windows/i.test(navigator.userAgent) ? "windows" : /Mac/i.test(navigator.userAgent) && !/iPhone|iPad/i.test(navigator.userAgent) ? "macos" : "";
+const ARCH = {universal2: "Apple 晶片與 Intel", arm64: "Apple 晶片", x86_64: "Intel"};
+function dlLabel(f) {
+  if (f.platform === "windows") return "Windows 版";
+  return `Mac 版${f.arch ? "（" + ARCH[f.arch] + "）" : ""}`;
+}
+function downloadButtons(m) {
+  const dl = (m.downloads || []).slice().sort((a, b) => (b.platform === MY_OS) - (a.platform === MY_OS));
+  const src = m.versions && m.versions.find(v => v.version === m.latest);
+  const zip = src && src.files.find(f => f.name.toLowerCase().endsWith(".zip") && !f.platform);
+  let h = `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">` +
+    dl.map(f => `<a class="btn ${f.platform === MY_OS ? "primary" : "small"}" href="${esc(f.url)}" download title="${esc(f.name)}・${size(f.size)}">⬇ ${esc(dlLabel(f))}　${esc(f.version)}</a><span class="small muted" style="margin:-2px 0 2px 4px">${esc(f.name.split(".").pop())} · ${size(f.size)}</span>`).join("") + `</div>`;
+  if (!dl.length) h = `<span class="small muted">站長還沒有上傳 Windows / Mac 版</span>`;
+  if (zip) h += `<div style="margin-top:4px"><a class="small" href="${esc(zip.url)}" title="給 Lab APP 或有 Python 的電腦">Python 版 zip ${esc(m.latest)}</a></div>`;
+  if (dl.length) h += `<div class="small muted" style="margin-top:6px">第一次開啟：Windows 出現「Windows 已保護您的電腦」→ 其他資訊 → 仍要執行；
+    macOS 打開 .dmg 把 App 拖到「應用程式」，第一次用右鍵 →「打開」。</div>`;
+  return h;
+}
+
+function viewHome() {
+  const mods = ME.modules || [];
+  const tile = m => {
+    const off = !m.allowed;
+    let act = "";
+    if (off) act = `<span class="small muted">站長沒有開放</span>`;
+    else if (m.kind === "web" && m.url) act = `<a class="btn primary" href="${esc(m.url)}" ${m.url.startsWith("http") ? 'target="_blank" rel="noopener"' : ""}>開啟</a>`;
+    else if (m.kind === "app") {
+      act = downloadButtons(m) + `<div class="small muted" style="margin-top:4px">裝好之後程式會自己更新。也可以把 <a href="/get">下載頁</a> 給新同學。</div>`;
+    }
+    return `<div class="tile${off ? " off" : ""}"><div class="t">${esc(m.name)}</div><div class="k">${esc(m.id)} · ${m.kind === "web" ? "網頁" : "桌面程式"}${m.owner_only ? " · 站長" : ""}</div>
+      <div class="d">${esc(m.description || "")}</div><div>${act}</div></div>`;
+  };
+  const shown = mods.filter(m => !m.hidden);
+  $("#main").innerHTML = `<h2>模塊 <span class="n">${shown.filter(m => m.allowed).length} 個可用</span></h2>
+    <div class="tiles">${shown.map(tile).join("")}</div>
+    <h2>最近的數據</h2><div id="recent" class="list"><div class="empty">載入中…</div></div>`;
+  api("/api/platform/catalog?limit=8").then(r => {
+    $("#recent").innerHTML = r.items.length ? r.items.map(itemRow).join("") : `<div class="empty">還沒有數據</div>`;
+    $("#recent").onclick = e => { const it = e.target.closest(".item"); if (it) location.hash = "#/data?id=" + it.dataset.id; };
+  }).catch(e => $("#recent").innerHTML = `<div class="empty err">${esc(e.message)}</div>`);
+}
+
+// ---- 數據目錄 -----------------------------------------------------------------
+const DS = {tags:[], mode:"and", q:"", sel:null, project:""};
+function itemRow(x) {
+  return `<div class="item${DS.sel === x.id ? " sel" : ""}" data-id="${x.id}" draggable="true">
+    <div class="nm">${esc(x.name)}${x.exists ? "" : ' <span class="small warn">（只在量測電腦上）</span>'}</div>
+    <div class="mt">${x.project_name ? `<span>📁 ${esc(x.project_name)}</span>` : ""}<span>🖥 ${esc(x.node)}</span>${x.user ? `<span>👤 ${esc(x.user)}</span>` : ""}<span>${when(x.created)}</span><span>${size(x.size)}</span></div>
+    ${x.tags.length ? `<div class="chips">${x.tags.map(t => tagChip(t)).join("")}</div>` : ""}</div>`;
+}
+
+async function viewData(params) {
+  if (params.get("tag")) DS.tags = [params.get("tag")];
+  if (params.get("id")) DS.sel = params.get("id");
+  if (params.has("project")) DS.project = params.get("project");
+  $("#main").innerHTML = `
+    <div class="bar"><select id="proj">${projOptions(DS.project, "全部專案")}</select><input type="search" id="q" placeholder="搜尋檔名、量測方案、說明…" value="${esc(DS.q)}">
+      <select id="mode"><option value="and">符合全部標籤</option><option value="or">符合任一標籤</option></select></div>
+    <div class="chips" id="tagf" style="margin-bottom:12px"></div>
+    <div class="layout"><div><div class="small muted" id="cnt" style="margin-bottom:6px"></div><div class="list" id="items"></div></div>
+      <div class="panel" id="detail"><div class="muted">選一筆數據看詳細資料、相關論文。<br><span class="drag-hint">桌面版：可以把數據直接拖到量測模塊（套用設定）或讀檔模塊（開檔）。</span></div></div></div>`;
+  $("#mode").value = DS.mode;
+  const renderTagFilter = () => {
+    const used = TAGS.filter(t => t.data > 0 || DS.tags.includes(t.name));
+    $("#tagf").innerHTML = used.length ? used.map(t => tagChip(t.name, {on: DS.tags.includes(t.name), count: true})).join("") : `<span class="small muted">還沒有加標籤的數據</span>`;
+  };
+  renderTagFilter();
+  $("#tagf").onclick = e => { const c = e.target.closest(".chip"); if (!c) return; const n = c.dataset.tag;
+    DS.tags = DS.tags.includes(n) ? DS.tags.filter(x => x !== n) : DS.tags.concat([n]); renderTagFilter(); load(); };
+  $("#mode").onchange = e => { DS.mode = e.target.value; load(); };
+  $("#proj").onchange = e => { DS.project = e.target.value; load(); };
+  let tq; $("#q").oninput = e => { clearTimeout(tq); tq = setTimeout(() => { DS.q = e.target.value.trim(); load(); }, 250); };
+  $("#items").onclick = e => { const it = e.target.closest(".item"); if (it) { DS.sel = it.dataset.id; document.querySelectorAll(".item.sel").forEach(x => x.classList.remove("sel")); it.classList.add("sel"); showItem(it.dataset.id); } };
+  $("#items").ondragstart = e => { const it = e.target.closest(".item"); if (!it) return;
+    const url = location.origin + "/api/platform/catalog/" + it.dataset.id;
+    e.dataTransfer.setData("text/uri-list", url); e.dataTransfer.setData("text/plain", url);
+    e.dataTransfer.setData("application/x-qel-catalog", JSON.stringify({id: it.dataset.id, hub: location.origin})); };
+  async function load() {
+    const qs = new URLSearchParams({tags: DS.tags.join(","), mode: DS.mode, q: DS.q, limit: 300, project: DS.project});
+    try {
+      const r = await api("/api/platform/catalog?" + qs);
+      $("#cnt").textContent = `${r.total} 筆`;
+      $("#items").innerHTML = r.items.length ? r.items.map(itemRow).join("") : `<div class="empty">沒有符合的數據</div>`;
+    } catch (e) { $("#items").innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
+  }
+  await load();
+  if (DS.sel) showItem(DS.sel);
+}
+
+async function showItem(id) {
+  const d = $("#detail");
+  d.innerHTML = `<div class="muted">載入中…</div>`;
+  let x;
+  try { x = await api("/api/platform/catalog/" + id); } catch (e) { d.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const meta = Object.entries(x.meta || {}).slice(0, 12).map(([k, v]) => `<b>${esc(k)}</b><span>${esc(typeof v === "object" ? JSON.stringify(v) : v)}</span>`).join("");
+  d.innerHTML = `<h3>${esc(x.name)}</h3>
+    <div class="kv"><b>節點</b><span>${esc(x.node)}</span><b>路徑</b><span>${esc(x.rel)}</span><b>量測者</b><span>${esc(x.user || "—")}</span>
+      <b>時間</b><span>${when(x.created)}</span><b>大小</b><span>${size(x.size)}</span>${x.scheme ? `<b>方案</b><span>${esc(x.scheme)}</span>` : ""}${meta}</div>
+    <div class="bar" style="margin-top:8px"><span class="small muted">論文庫專案</span><select id="iproj" style="flex:1">${projOptions(x.project, "（不屬於專案）")}</select></div>
+    <div class="chips" id="dtags">${x.tags.map(t => tagChip(t, {x: true})).join("")}</div>
+    <div class="bar" style="margin-top:8px"><input id="addtag" list="taglist" placeholder="加標籤…" style="flex:1;min-width:120px"><button class="btn small" id="addbtn">加入</button></div>
+    <datalist id="taglist">${TAGS.map(t => `<option value="${esc(t.name)}">`).join("")}</datalist>
+    <div class="bar">${x.exists ? `<a class="btn primary small" href="${esc(x.url)}">⬇ 下載</a>` : ""}
+      <button class="btn small" id="toviewer" title="需要你電腦上開著量測程式（Lab Control）">在讀檔程式開啟</button><button class="btn small" id="tolab" title="需要你電腦上開著量測程式（Lab Control）">套用設定到量測</button></div>
+    <h2 style="margin-top:10px">相關論文 <span class="n" id="pcnt"></span></h2><div id="papers" class="small muted">載入中…</div>`;
+  const saveTags = async tags => { try { await api(`/api/platform/catalog/${id}/tags`, {method:"PUT", json:{tags}}); await loadTags(); showItem(id); } catch (e) { toast(e.message); } };
+  $("#dtags").onclick = e => { if (!e.target.dataset.x) { const c = e.target.closest(".chip"); if (c) location.hash = "#/tags?tag=" + encodeURIComponent(c.dataset.tag); return; }
+    const n = e.target.closest(".chip").dataset.tag; saveTags(x.tags.filter(t => t !== n)); };
+  const add = () => { const v = $("#addtag").value.trim(); if (v && !x.tags.includes(v)) saveTags(x.tags.concat([v])); };
+  $("#iproj").onchange = async e => { try { await api(`/api/platform/catalog/${id}/project`, {method:"PUT", json:{project: e.target.value}}); toast("已移到專案"); loadProjects(); } catch (err) { toast(err.message); } };
+  $("#addbtn").onclick = add; $("#addtag").onkeydown = e => { if (e.key === "Enter") add(); };
+  // 送到你電腦上開著的量測程式（Lab Control）：它直接套用設定，或用讀檔程式（LabLogViewer）開檔
+  const send = async (type, label) => { try { await api("/api/platform/bus/labcontrol", {method:"POST", json:{type, module: type === "open_in" ? "lablogviewer" : "labcontrol", action: type === "open_in" ? "open" : "apply_settings", catalog_id:id, name:x.name, url:x.url, node:x.node, rel:x.rel, from_module:"portal"}}); toast(`已送出：你電腦上開著的量測程式會${label}`); } catch (e) { toast(e.message); } };
+  $("#toviewer").onclick = () => send("open_in", "用讀檔程式開啟它");
+  $("#tolab").onclick = () => send("apply_settings", "套用它的設定");
+  renderPapers($("#papers"), x.tags, $("#pcnt"));
+}
+
+async function renderPapers(el, tags, cntEl) {
+  if (!tags.length) { el.innerHTML = "這筆數據還沒有標籤。加上標籤就會連到論文庫裡同標籤的論文。"; return; }
+  try {
+    const r = await api("/api/platform/papers?tags=" + encodeURIComponent(tags.join(",")));
+    if (cntEl) cntEl.textContent = r.papers.length ? r.papers.length + " 篇" : "";
+    const errs = r.tags.filter(t => t.error).map(t => t.error);
+    el.innerHTML = (r.papers.length ? r.papers.map(p => `<div class="paper"><a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>
+      <div class="a">${esc((p.authors || []).slice(0, 4).join(", "))}${(p.authors || []).length > 4 ? " 等" : ""}${p.year ? " · " + esc(p.year) : ""}${p.venue ? " · " + esc(p.venue) : ""}</div>
+      <div class="chips">${p.tags.map(t => tagChip(t)).join("")}</div></div>`).join("") : `<div>論文庫裡還沒有這些標籤的論文。</div>`) +
+      (errs.length ? `<div class="warn small">${esc(errs[0])}</div>` : "") +
+      `<div class="small" style="margin-top:6px">${r.tags.filter(t => t.url).map(t => `<a href="${esc(t.url)}" target="_blank" rel="noopener">在論文庫看「${esc(t.name)}」→</a>`).join("　")}</div>`;
+  } catch (e) { el.innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+
+// ---- 專案（論文庫的專案：數據標籤、論文、量測數據）-----------------------------------------
+async function viewProjects(params) {
+  const sel = params.get("id");
+  await loadProjects(!sel);
+  const card = p => `<div class="item${String(p.id) === sel ? " sel" : ""}" data-pid="${esc(p.id)}">
+    <div class="nm">${p.color ? `<span class="c" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${esc(p.color)};margin-right:6px"></span>` : ""}${esc(p.name)}${p.short_name && p.short_name !== p.name ? ` <span class="small muted">${esc(p.short_name)}</span>` : ""}</div>
+    <div class="mt"><span>📊 ${p.data || 0} 筆數據</span>${p.n_papers != null ? `<span>📄 ${p.n_papers} 篇</span>` : ""}${p.status ? `<span>${esc(p.status)}</span>` : ""}</div>
+    ${p.tags && p.tags.length ? `<div class="chips">${p.tags.slice(0, 8).map(t => tagChip(t)).join("")}${p.tags.length > 8 ? `<span class="small muted">＋${p.tags.length - 8}</span>` : ""}</div>` : ""}</div>`;
+  $("#main").innerHTML = `<div class="layout"><div>
+      <div class="bar"><input id="pn" placeholder="新專案名稱" style="flex:1"><input id="ps" placeholder="簡稱（選填）" style="width:120px"><button class="btn primary" id="pnb">在論文庫新增專案</button></div>
+      <div class="small muted" style="margin-bottom:10px">專案在論文庫裡管理；這裡加上量測數據與數據標籤。量測模塊的「檔案設置 → 論文庫專案」選了專案，量完的數據就會歸到這裡。</div>
+      ${PROJ_ERR ? `<div class="empty err">${esc(PROJ_ERR)}</div>` : ""}
+      <div class="list" id="plist">${PROJECTS.map(card).join("") || (PROJ_ERR ? "" : '<div class="empty">論文庫還沒有專案</div>')}</div>
+    </div><div class="panel" id="pd"><div class="muted">選一個專案看它的數據標籤、論文與量測數據。</div></div></div>`;
+  $("#plist").onclick = e => { const it = e.target.closest("[data-pid]"); if (it) location.hash = "#/projects?id=" + encodeURIComponent(it.dataset.pid); };
+  $("#pnb").onclick = async () => {
+    const name = $("#pn").value.trim(); if (!name) return;
+    try { const p = await api("/api/platform/projects", {method:"POST", json:{name, short_name: $("#ps").value.trim()}});
+      toast("已在論文庫建立專案"); location.hash = "#/projects?id=" + encodeURIComponent(p.id); } catch (e) { toast(e.message); }
+  };
+  if (!sel) return;
+  const d = $("#pd");
+  d.innerHTML = `<div class="muted">載入中…</div>`;
+  let p;
+  try { p = await api("/api/platform/projects/" + encodeURIComponent(sel)); } catch (e) { d.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  d.innerHTML = `<h3>${esc(p.name)}</h3>${p.description ? `<div class="small muted">${esc(p.description)}</div>` : ""}
+    <div class="bar" style="margin-top:8px"><button class="btn primary small" id="popen">📂 用讀檔模塊開啟整個專案</button>
+      ${p.url ? `<a class="btn small" href="${esc(p.url)}" target="_blank" rel="noopener">在論文庫開啟</a>` : ""}
+      <a class="btn small" href="#/data?project=${encodeURIComponent(p.id)}">在數據目錄看</a></div>
+    <div class="small muted">NAS 上的專案資料夾：<code>data/projects/${esc(p.folder)}</code>${ME.projects_share ? `（${esc(ME.projects_share.split(",")[0])}）` : ""}</div>
+    <h2>數據標籤 <span class="n">${p.tags.length}</span></h2>
+    <div class="chips" id="ptags">${(p.tag_info || []).map(t => tagChip(t.name, {count: true})).join("") || '<span class="small muted">還沒有標籤</span>'}</div>
+    <div class="bar" style="margin-top:8px"><input id="ptag" list="taglist2" placeholder="加標籤到專案…" style="flex:1"><button class="btn small" id="ptagb">加入</button></div>
+    <datalist id="taglist2">${TAGS.map(t => `<option value="${esc(t.name)}">`).join("")}</datalist>
+    <h2>論文 <span class="n">${p.papers.length}</span></h2>
+    <div class="small">${p.papers.map(x => `<div class="paper"><a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.title)}</a>
+      <div class="a">${esc((x.authors || []).slice(0, 4).join(", "))}${x.year ? " · " + esc(x.year) : ""}${x.role ? " · " + esc(x.role) : ""}</div></div>`).join("") ||
+      `<div class="muted">${esc(p.papers_error || "專案裡還沒有論文（在論文庫把論文加到專案）")}</div>`}</div>
+    <h2>數據 <span class="n">${p.data}</span></h2><div class="list" id="pdata"></div>`;
+  $("#popen").onclick = () => openProject(p);
+  const addTag = async () => { const v = $("#ptag").value.trim(); if (!v) return;
+    try { await api(`/api/platform/projects/${encodeURIComponent(p.id)}/tags`, {method:"PUT", json:{tags:[v]}}); toast("已加到專案"); viewProjects(params); } catch (e) { toast(e.message); } };
+  $("#ptagb").onclick = addTag; $("#ptag").onkeydown = e => { if (e.key === "Enter") addTag(); };
+  $("#ptags").onclick = e => { const c = e.target.closest(".chip"); if (c) location.hash = "#/tags?tag=" + encodeURIComponent(c.dataset.tag); };
+  api("/api/platform/catalog?limit=50&project=" + encodeURIComponent(p.id)).then(r => {
+    $("#pdata").innerHTML = r.items.length ? r.items.map(itemRow).join("") : `<div class="empty">還沒有數據（量測模塊選這個專案後量測）</div>`;
+    $("#pdata").onclick = e => { const it = e.target.closest(".item"); if (it) location.hash = "#/data?id=" + it.dataset.id; };
+  });
+}
+
+// ---- 標籤與論文 ---------------------------------------------------------------
+async function viewTags(params) {
+  const sel = params.get("tag");
+  const cats = {};
+  for (const t of TAGS) (cats[t.category || "（未分類）"] = cats[t.category || "（未分類）"] || []).push(t);
+  $("#main").innerHTML = `<div class="layout"><div>
+      <div class="bar"><input id="nt" placeholder="新標籤名稱" style="flex:1"><input id="nc" placeholder="分類（選填）" list="catlist" style="width:140px">
+        <button class="btn primary" id="ntb">建立標籤</button></div>
+      <datalist id="catlist">${Object.keys(cats).filter(c => !c.startsWith("（")).map(c => `<option value="${esc(c)}">`).join("")}</datalist>
+      <div class="small muted" style="margin-bottom:10px">所有模塊共用同一批標籤（與論文庫同步）。📄 = 論文數，📊 = 數據數。</div>
+      <div id="cats">${Object.entries(cats).map(([c, ts]) => `<div class="cat"><h4>${esc(c)}</h4><div class="chips">${ts.map(t => tagChip(t.name, {count: true, on: t.name === sel})).join("")}</div></div>`).join("") || '<div class="empty">還沒有標籤</div>'}</div>
+    </div><div class="panel" id="tagd"><div class="muted">選一個標籤看相關論文與數據。</div></div></div>`;
+  $("#cats").onclick = e => { const c = e.target.closest(".chip"); if (c) location.hash = "#/tags?tag=" + encodeURIComponent(c.dataset.tag); };
+  $("#ntb").onclick = async () => {
+    const name = $("#nt").value.trim(); if (!name) return;
+    try { const r = await api("/api/platform/tags", {method:"POST", json:{name, category: $("#nc").value.trim()}});
+      toast(r.in_paperlib ? "已建立（論文庫也有了）" : "已建立（只在平台；論文庫需要管理權限）"); await loadTags(); location.hash = "#/tags?tag=" + encodeURIComponent(name); viewTags(new URLSearchParams("tag=" + encodeURIComponent(name))); }
+    catch (e) { toast(e.message); }
+  };
+  if (!sel) return;
+  const t = TAGMAP[sel] || {name: sel};
+  const d = $("#tagd");
+  d.innerHTML = `<h3>${tagChip(sel)}</h3><div class="small muted">${esc(t.description || "")}</div>
+    <div class="bar" style="margin-top:8px"><input id="tcat" placeholder="分類" value="${esc(t.category || "")}" list="catlist" style="flex:1"><button class="btn small" id="tcatb">儲存分類</button>
+    ${t.url ? `<a class="btn small" href="${esc(t.url)}" target="_blank" rel="noopener">在論文庫開啟</a>` : ""}</div>
+    <h2>論文</h2><div id="tp" class="small muted">載入中…</div>
+    <h2>數據 <span class="n">${t.data || 0}</span></h2><div id="td" class="list"></div>`;
+  $("#tcatb").onclick = async () => { try { await api("/api/platform/tags/" + encodeURIComponent(sel), {method:"PATCH", json:{category: $("#tcat").value.trim()}}); await loadTags(); viewTags(params); toast("已儲存"); } catch (e) { toast(e.message); } };
+  renderPapers($("#tp"), [sel]);
+  api("/api/platform/catalog?limit=30&tags=" + encodeURIComponent(sel)).then(r => {
+    $("#td").innerHTML = r.items.length ? r.items.map(itemRow).join("") : `<div class="empty">沒有數據</div>`;
+    $("#td").onclick = e => { const it = e.target.closest(".item"); if (it) location.hash = "#/data?id=" + it.dataset.id; };
+  });
+}
+
+// ---- 站長 --------------------------------------------------------------------
+async function viewAdmin() {
+  if (!(ME.user && ME.user.owner)) { $("#main").innerHTML = `<div class="empty">只有站長可以使用</div>`; return; }
+  $("#main").innerHTML = `<h2>平台狀態</h2><div class="cards" id="st"></div>
+    <h2>使用者與模塊權限 <span class="n">帳號來自論文庫；停用會同時停用論文庫帳號</span></h2><div class="scroll" id="users">載入中…</div>
+    <p class="small muted">程式更新、系統狀態、量測電腦在「<a href="#/console">控制台</a>」。</p>
+    <h2>最近的操作</h2><div class="scroll" id="audit"></div>`;
+  api("/api/platform/status").then(s => {
+    const pl = s.paperlib || {};
+    $("#st").innerHTML = [
+      ["論文庫", pl.online ? `<span class="ok">● 連線</span>` : `<span class="err">● ${pl.configured ? "連不到" : "未設定"}</span>`, esc(pl.url || "")],
+      ["Hub", esc((s.hub || {}).version || ""), ""],
+      ["量測節點", `${(s.nodes || []).filter(n => n.online).length} / ${(s.nodes || []).length}`, "線上 / 全部"],
+      ["數據", s.catalog, "筆"], ["登入中的使用者", s.users_logged_in, ""],
+    ].map(([k, v, sub]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="k">${sub}</div></div>`).join("");
+  }).catch(e => $("#st").innerHTML = `<div class="err">${esc(e.message)}</div>`);
+  try {
+    const r = await api("/api/platform/users");
+    const mods = r.modules;
+    $("#users").innerHTML = `<table><tr><th>使用者</th><th>帳號</th>${mods.map(m => `<th>${esc(m.name)}</th>`).join("")}</tr>
+      ${r.users.map(u => `<tr><td><b>${esc(u.display_name || u.username)}</b> ${u.owner ? '<span class="badge">站長</span>' : ""}<div class="small muted">${esc(u.username)} · ${esc(u.role || "")}</div></td>
+        <td><label class="sw"><input type="checkbox" data-uid="${u.id}" ${u.disabled ? "" : "checked"} ${u.owner ? "disabled" : ""}><span></span></label></td>
+        ${mods.map(m => `<td><label class="sw"><input type="checkbox" data-user="${esc(u.username)}" data-mod="${esc(m.id)}" ${u.modules[m.id] ? "checked" : ""} ${u.owner || u.disabled ? "disabled" : ""}><span></span></label></td>`).join("")}</tr>`).join("")}</table>`;
+    $("#users").onchange = async e => {
+      const i = e.target;
+      try {
+        if (i.dataset.uid) { await api("/api/platform/users/" + i.dataset.uid, {method:"PATCH", json:{enabled: i.checked}}); toast(i.checked ? "已啟用" : "已停用（已登出）"); viewAdmin(); }
+        else { await api("/api/platform/perms", {method:"PUT", json:{username: i.dataset.user, module: i.dataset.mod, allowed: i.checked}}); toast("已更新權限"); }
+      } catch (err) { i.checked = !i.checked; toast(err.message); }
+    };
+  } catch (e) { $("#users").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  api("/api/platform/audit?limit=40").then(r => {
+    $("#audit").innerHTML = `<table><tr><th>時間</th><th>使用者</th><th>動作</th><th>內容</th></tr>${r.audit.map(a => `<tr><td>${when(a.time)}</td><td>${esc(a.user)}</td><td>${esc(a.action)}</td><td class="small">${esc(a.detail)}</td></tr>`).join("")}</table>`;
+  });
+}
+
+// ---- 控制台（站長）：上傳檔案 → 發佈；系統狀態；量測電腦 -----------------------------------------
+const CON = {busy: false, items: []};
+const STATE_ZH = {idle: "閒置", running: "量測中", paused: "暫停", updating: "更新中", offline: "離線", preparing: "準備中"};
+async function viewConsole() {
+  if (!(ME.user && ME.user.owner)) { $("#main").innerHTML = `<div class="empty">只有站長可以使用</div>`; return; }
+  $("#main").innerHTML = `
+    <h2>發佈更新 <span class="n">把新版檔案拖進來：Hub、論文庫、量測、讀檔、Monitor、App（zip、.exe、.dmg）</span></h2>
+    <div class="drop" id="drop">把檔案拖到這裡，或<u>點這裡選檔</u><input type="file" id="pick" multiple hidden accept=".zip,.exe,.msi,.dmg,.pkg"></div>
+    <div class="scroll" id="pubs" style="margin-top:10px"></div>
+    <div class="bar" style="margin-top:8px"><button class="btn primary" id="goall">▶ 全部發佈</button><button class="btn small" id="clear">清除已完成</button><span class="small muted" id="publog"></span></div>
+    <h2>系統狀態</h2><div class="cards" id="sys"><div class="muted">讀取中…</div></div>
+    <h2>量測電腦 <span class="n">量測電腦在 App 的「設定 → 這台是量測電腦」開啟</span></h2><div class="scroll" id="nodes"></div>`;
+  const drop = $("#drop"), pick = $("#pick");
+  drop.onclick = () => pick.click();
+  pick.onchange = () => upload([...pick.files]);
+  drop.ondragover = e => { e.preventDefault(); drop.classList.add("on"); };
+  drop.ondragleave = () => drop.classList.remove("on");
+  drop.ondrop = e => { e.preventDefault(); drop.classList.remove("on"); upload([...e.dataTransfer.files]); };
+  $("#goall").onclick = publishAll;
+  $("#clear").onclick = async () => { await api("/api/platform/console/clear", {method: "POST"}); loadItems(); };
+  $("#pubs").onclick = async e => { const b = e.target.closest("[data-del]"); if (!b) return;
+    await api("/api/platform/console/items/" + b.dataset.del, {method: "DELETE"}); loadItems(); };
+  loadItems(); loadStatus();
+}
+function conLog(m) { const el = $("#publog"); if (el) el.textContent = m; }
+async function upload(files) {
+  for (const f of files) {
+    conLog(`上傳 ${f.name}…`);
+    let ver = "";
+    for (;;) {
+      try {
+        await api("/api/platform/console/stage?filename=" + encodeURIComponent(f.name) + (ver ? "&version=" + encodeURIComponent(ver) : ""),
+                  {method: "POST", body: f});
+      } catch (e) {
+        if (String(e.message).startsWith("需要版本號")) {           // 安裝檔檔名沒有版本（例如 LabLogViewer-Windows-setup.exe）
+          ver = (prompt(`${e.message}\n\n版本號：`, "") || "").trim();
+          if (ver) continue;
+        }
+        toast(`${f.name}：${e.message}`);
+      }
+      break;
+    }
+  }
+  conLog(""); loadItems();
+}
+async function loadItems() {
+  try { CON.items = (await api("/api/platform/console/items")).items; } catch (e) { $("#pubs").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  renderItems();
+}
+function renderItems() {
+  const el = $("#pubs"); if (!el) return;
+  if (!CON.items.length) { el.innerHTML = `<div class="small muted">還沒有上傳的檔案。</div>`; $("#goall").disabled = true; return; }
+  el.innerHTML = `<table class="pub"><tr><th>檔案</th><th>判斷為</th><th>新版本</th><th>線上</th><th class="st">狀態</th><th></th></tr>${CON.items.map(x => {
+    const st = x.done || x.status !== "待發佈" ? x.status : x.online ? "線上已是這一版（會略過）" : x.older ? "⚠ 比線上舊（會退回舊版）" : "待發佈";
+    return `<tr><td>${esc(x.file)}<div class="small muted">${size(x.size)}</div></td><td>${esc(x.name)}</td><td>${esc(x.version)}</td>
+      <td>${esc(x.current || "—")}</td><td class="st ${x.failed ? "err" : x.done ? "ok" : x.older ? "warn" : ""}">${esc(st)}</td>
+      <td>${CON.busy ? "" : `<button class="btn small" data-del="${x.id}">移除</button>`}</td></tr>`; }).join("")}</table>`;
+  $("#goall").disabled = CON.busy || !CON.items.some(x => !x.done && !x.online);
+}
+async function publishAll() {
+  const todo = CON.items.filter(x => !x.done && !x.online);
+  if (!todo.length || CON.busy) return;
+  if (todo.some(x => x.older) && !confirm("有比線上舊的版本，確定要退回舊版？")) return;
+  CON.busy = true; renderItems();
+  for (const x of todo) {
+    x.status = "發佈中…"; renderItems(); conLog(`${x.name} ${x.version}`);
+    try {
+      const r = await api("/api/platform/console/publish/" + x.id, {method: "POST"});
+      Object.assign(x, r);
+      if (r.job) await followJob(x);
+    } catch (e) { x.status = "❌ " + e.message; x.failed = true; }
+    renderItems();
+  }
+  CON.busy = false; conLog("全部完成"); toast("全部完成");
+  await loadItems(); loadStatus();
+}
+async function followJob(x) {
+  let after = 0, misses = 0;
+  for (;;) {
+    try {
+      const v = await api(`/api/platform/console/jobs/${x.id}?after=${after}&wait=10`);
+      misses = 0; after = v.n_lines || after;
+      const cur = (v.steps || []).find(s => s.status === "running");
+      x.status = cur ? `${cur.title}… ${cur.msg || ""}` : x.status;
+      if (v.done) { Object.assign(x, v.item); return; }
+    } catch (e) {
+      if (++misses > 60) { x.status = "❌ 等不到更新結果：" + e.message; x.failed = true; return; }
+      x.status = x.target === "hub" ? "Hub 重新啟動中…" : "等待控制代理…";
+      await new Promise(r => setTimeout(r, 3000));
+    }
+    renderItems();
+  }
+}
+async function loadStatus() {
+  let s;
+  try { s = await api("/api/platform/console/status"); } catch (e) { $("#sys").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const a = s.agent || {}, p = s.platform || {}, pl = p.paperlib || {}, d = s.disk;
+  const pctFree = d ? Math.round(d.free / d.total * 100) : null;
+  const nodesOn = (s.nodes || []).filter(n => n.online).length;
+  $("#sys").innerHTML = [
+    ["Hub", esc((s.hub || {}).version), "版本"],
+    ["控制代理", a.online ? `<span class="ok">● 連線</span>` : `<span class="err">● 連不到</span>`, a.online ? `v${esc(a.version || "")}` : esc(a.error || "")],
+    ["論文庫", pl.online ? `<span class="ok">● ${esc(pl.version || "連線")}</span>` : `<span class="err">● 連不到</span>`, pl.online ? "版本" : esc(pl.error || "")],
+    ["NAS 空間", d ? `${size(d.free)}` : "—", d ? `剩 ${pctFree}%（共 ${size(d.total)}）` : ""],
+    ["量測電腦", `${nodesOn} / ${(s.nodes || []).length}`, "線上 / 全部"],
+    ["數據", esc(p.catalog ?? "—"), "筆"],
+    ["登入中", esc(p.users_logged_in ?? "—"), "人"],
+  ].map(([k, v, sub]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="k">${sub}</div></div>`).join("");
+  const ns = s.nodes || [];
+  $("#nodes").innerHTML = ns.length ? `<table><tr><th>名稱</th><th>狀態</th><th>電腦</th><th>版本</th><th>量測</th></tr>${ns.map(n => {
+    const r = n.run || {};
+    return `<tr><td><span class="dot${n.online ? " on" : ""}"></span><b>${esc(n.name)}</b>${n.simulate ? ' <span class="small muted">模擬</span>' : ""}</td>
+      <td>${n.online ? esc(STATE_ZH[n.state] || n.state) : "離線"}</td><td class="small">${esc(n.user || "")}@${esc(n.host || "")}</td>
+      <td>${esc(n.version || "")}</td><td class="small">${r.name ? `${esc(r.name)}（${esc(r.by || "")}）${r.index ?? ""}/${r.total ?? ""}` : "—"}</td></tr>`; }).join("")}</table>`
+    : `<div class="small muted">還沒有量測電腦上線。</div>`;
+}
+
+// ---- 路由 --------------------------------------------------------------------
+async function route() {
+  const h = location.hash || "#/";
+  const [path, qs] = h.slice(1).split("?");
+  const params = new URLSearchParams(qs || "");
+  const v = {"/data": "data", "/projects": "projects", "/tags": "tags", "/admin": "admin", "/console": "console"}[path] || "home";
+  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
+  try {
+    if (v === "data") await viewData(params);
+    else if (v === "tags") await viewTags(params);
+    else if (v === "projects") await viewProjects(params);
+    else if (v === "admin") await viewAdmin();
+    else if (v === "console") await viewConsole();
+    else viewHome();
+  } catch (e) { $("#main").innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
+}
+
+(async () => {
+  try {
+    ME = await api("/api/platform/me");
+    const u = ME.user || {};
+    $("#who").innerHTML = `${esc(u.display_name || u.username)}${u.owner ? ' <span class="badge">站長</span>' : ""}`;
+    $("#nav-admin").hidden = !u.owner;
+    $("#nav-console").hidden = !u.owner;
+    await Promise.all([loadTags().catch(() => {}), loadProjects()]);
+  } catch (e) { $("#main").innerHTML = `<div class="empty err">${esc(e.message)}</div>`; return; }
+  window.addEventListener("hashchange", route);
+  route();
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => {});
+})();
+</script>
+</body>
+</html>

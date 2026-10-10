@@ -1,0 +1,43 @@
+# 範本方案：編輯器「範本」選單列出 LAB/templates/ 內所有 *.scheme.yaml。
+# 可直接修改或另存新檔；run: 沒寫的欄位使用 settings.yaml run_defaults。
+scheme: 1
+name: 雙磁鐵巢狀掃描（一個檔）
+blocks:
+- kind: set
+  id: d002897c
+  target: magnet_A
+  mode: sweep
+  start: 50
+  stop: 100
+  step: 1
+  unit: mA
+  settle: 0.1
+  children:
+  - kind: set
+    id: 2643a445
+    target: magnet_B
+    mode: sweep
+    start: 100
+    stop: 150
+    step: 0.5
+    unit: mA
+    settle: 0.1
+    children:
+    - kind: measure
+      id: a6ce501a
+      instrument: VNA1
+      traces:
+      - S21
+      settings:
+        start_freq: 5.0198 GHz
+        stop_freq: 5.0298 GHz
+        points: 501
+        power: -10 dBm
+        if_bw: 10 kHz
+        averages: 1
+- kind: save
+  id: 7a79a59c
+  file_name: 2D.hdf5
+  formats:
+  - labber
+  collision: underscore

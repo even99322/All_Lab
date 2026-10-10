@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#16181d">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<title>量子工程平台 · 登入</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --text:#1f2328; --muted:#6b7280; --border:#dfe3e8; --accent:#1971c2; --err:#e03131; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111317; --card:#1b1e24; --text:#e9ecef; --muted:#9097a0; --border:#30343b; --accent:#4dabf7; --err:#ff6b6b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; background:var(--bg); color:var(--text);
+         font: 15px/1.5 "Segoe UI", "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", system-ui, sans-serif; padding:16px; }
+  .box { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:28px; width:100%; max-width:380px; }
+  h1 { font-size:21px; margin:0 0 2px; display:flex; align-items:center; gap:8px; }
+  h1 img { width:28px; height:28px; }
+  p { color:var(--muted); margin:0 0 18px; font-size:13px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:12px 0 4px; }
+  input { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:transparent;
+          color:var(--text); font-size:15px; }
+  input:focus { outline:2px solid var(--accent); border-color:transparent; }
+  button { margin-top:16px; width:100%; padding:10px; border:0; border-radius:8px; background:var(--accent); color:#fff;
+           font-size:15px; font-weight:600; cursor:pointer; }
+  .err { color:var(--err); font-size:13px; margin-top:10px; min-height:1em; }
+  details { margin-top:18px; border-top:1px solid var(--border); padding-top:12px; }
+  summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  details button { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="box">
+  <h1><img src="/icon.svg" alt="">量子工程平台</h1>
+  <p>用<b>論文庫</b>的帳號密碼登入（與 <a href="{{paperlib}}" target="_blank" rel="noopener">{{paperlib}}</a> 相同）。</p>
+  <form method="post" action="/login" style="display:{{user_display}}">
+    <input type="hidden" name="next" value="{{next}}">
+    <label for="u">帳號</label>
+    <input id="u" name="username" autocomplete="username" value="{{username}}" autofocus>
+    <label for="p">密碼</label>
+    <input id="p" name="password" type="password" autocomplete="current-password">
+    <div style="display:{{code_display}}">
+      <label for="c">兩步驟驗證碼</label>
+      <input id="c" name="code" inputmode="numeric" autocomplete="one-time-code">
+    </div>
+    <button type="submit">登入</button>
+  </form>
+  <div class="err">{{error}}</div>
+  <details {{token_open}}>
+    <summary>量測電腦 / 管理用：裝置 token</summary>
+    <form method="post" action="/login">
+      <input type="hidden" name="next" value="{{next}}">
+      <label for="t">裝置 token（Lab Control 設定 <code>remote.token</code>）</label>
+      <input id="t" name="token" type="password" autocomplete="off">
+      <button type="submit">用 token 登入</button>
+    </form>
+  </details>
+</div>
+</body>
+</html>

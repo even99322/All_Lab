@@ -1,0 +1,27 @@
+# 自動找電流邊界（使用 plugins/dip_edge_stop.py）
+#   python -m labcontrol run LAB/experiments/find_bounds.yaml --sim --no-export
+# 往上掃找到一個邊界；把 start/stop 對調再跑一次找另一個。
+# 等效掃描速率 ≈ step / (settle + VNA 單次掃描時間)；目標約 0.02 mA/s。
+name: find_bounds
+
+procedure:
+  type: trace_sweep
+  readouts:
+    - {ref: VNA1, trace: S21}
+
+setup:
+  VNA1: {start_freq: 5.0198 GHz, stop_freq: 5.0298 GHz, points: 501, power: -10, if_bw: 10 kHz, averages: 1}
+
+sweep:
+  - {target: magnet_A.level, name: Average Current, unit: mA, start: 158.6, stop: 159.4, step: 0.001, settle: 0.02 s}
+
+run:
+  approach_rate: 0.5 mA/s
+  park: none               # 停在邊界上，方便接著手動確認
+
+hooks:
+  - {type: dip_edge_stop, channel: S21, edge_points: 3, min_depth_db: 10}
+
+output:
+  raw: true
+  export: []

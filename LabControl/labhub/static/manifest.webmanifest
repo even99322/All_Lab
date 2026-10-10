@@ -1,0 +1,13 @@
+{
+  "name": "量子工程平台",
+  "short_name": "量子工程",
+  "start_url": "/portal",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111317",
+  "theme_color": "#16181d",
+  "lang": "zh-Hant",
+  "icons": [
+    {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+  ]
+}

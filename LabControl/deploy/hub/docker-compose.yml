@@ -1,0 +1,53 @@
+# ⚠ 0.0.15 起建議改用 deploy/platform/docker-compose.yml（論文庫、Hub、控制代理同一個專案）。
+#   這個檔是舊的「只有 Hub」專案，沒有論文庫的環境才用。
+# Lab Control Hub（NAS 中繼網站）＋ 控制代理（更新 / 重建 / 重啟 Hub 用）
+# 這個資料夾放到 NAS（例如 /volume1/docker/LabControlHub/），裡面要有 labhub/ 資料夾與 data/ 資料夾。
+# Synology：Container Manager → 專案 → 新增 → 選這個資料夾 → 使用現有的 docker-compose.yml。
+# 只用官方 python 映像，不需要 build、不需要安裝套件。
+# 之後的更新：Lab Control Monitor「Hub 控制台」或 http://NAS:8766/ 選新版 zip →「更新網站」。
+services:
+  labhub:
+    image: python:3.12-slim
+    container_name: labcontrol-hub
+    restart: unless-stopped
+    working_dir: /app
+    command: ["python", "-m", "labhub"]
+    ports:
+      - "8765:8765"                 # 網站與 API：http://NAS:8765/
+    environment:
+      LABHUB_DATA: /data
+      LABHUB_RELEASES: /releases
+      LABHUB_TOKEN: "CHANGE_ME"      # 存取 token（各電腦 settings.yaml remote.token 相同）
+      # 量子工程平台：用論文庫（paperlib）的帳號登入。Hub 在 NAS 上連論文庫的網址，以及給瀏覽器開論文連結的網址。
+      # 也可以不寫在這裡，改在 data/platform.json 寫 {"paperlib_url": "...", "paperlib_public": "..."}
+      LABHUB_PAPERLIB_URL: "http://192.168.50.2:8080"
+      LABHUB_PAPERLIB_PUBLIC: "http://192.168.50.2:8080,http://100.114.33.20:8080"   # 內網、VPN（依使用者連進來的位址挑）
+      TZ: Asia/Taipei
+    volumes:
+      - ./labhub:/app/labhub:ro
+      - ./data:/data
+      # ↓ 節點自動更新用：Lab APP 發佈資料夾。資料夾必須已存在，確認後拿掉開頭的 #
+      # - /volume1/ccuqel/Releases:/releases:ro
+
+  agent:
+    image: python:3.12-slim
+    container_name: labcontrol-hub-agent
+    restart: unless-stopped
+    working_dir: /hubdir
+    command: ["python", "-m", "labhub.agent"]
+    ports:
+      - "8766:8766"                 # Hub 控制台：http://NAS:8766/
+    environment:
+      LABHUB_TOKEN: "CHANGE_ME"
+      HUB_CONTAINER: labcontrol-hub
+      HUB_URL: http://labcontrol-hub:8765
+      HUB_DIR: /hubdir
+      # 論文庫（發佈中心可以直接更新論文庫網站）：論文庫專案資料夾掛在 /stacks/paperlib
+      PAPERLIB_DIR: /stacks/paperlib
+      PAPERLIB_CONTAINER: paperlib
+      PAPERLIB_URL: "http://192.168.50.2:8080"
+      TZ: Asia/Taipei
+    volumes:
+      - ./:/hubdir                   # 整個 LabControlHub 資料夾（換程式、備份）
+      - /var/run/docker.sock:/var/run/docker.sock   # 停止 / 重建 / 啟動 Hub 與論文庫容器
+      - /volume1/docker/paperlib:/stacks/paperlib   # ← 論文庫專案資料夾（有 Dockerfile、app/、data/ 的那個），路徑要存在

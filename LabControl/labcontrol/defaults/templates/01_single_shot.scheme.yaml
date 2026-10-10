@@ -1,0 +1,24 @@
+# 範本方案：編輯器「範本」選單列出 LAB/templates/ 內所有 *.scheme.yaml。
+# 可直接修改或另存新檔；run: 沒寫的欄位使用 settings.yaml run_defaults。
+# 單張：不動電流（沿用目前的值），直接量一次 VNA。
+scheme: 1
+name: 單張（直接量測 VNA，電流沿用）
+blocks:
+- kind: measure
+  id: a1meas01
+  instrument: VNA1
+  traces:
+  - S21
+  settings:
+    start_freq: 5.0198 GHz
+    stop_freq: 5.0298 GHz
+    points: 501
+    power: -10 dBm
+    if_bw: 10 kHz
+    averages: 1
+- kind: save
+  id: a1save01
+  file_name: single.hdf5
+  formats:
+  - labber
+  collision: underscore

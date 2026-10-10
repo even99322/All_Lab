@@ -1,0 +1,47 @@
+# ============================================================================
+# 「調 DC 電流 → VNA 量 S21」掃描（等同舊 sweep_main.py + last_config.json）
+#   python -m labcontrol run LAB/experiments/dc_vna_sweep.yaml --sim
+# ============================================================================
+name: RSMEP
+
+procedure:
+  type: trace_sweep
+  readouts:
+    - {ref: VNA1, trace: S21, export_name: "VNA - S21"}
+
+setup:                      # 開始前套用到儀器的設定（字串可帶單位）
+  VNA1:
+    start_freq: 5.0198 GHz
+    stop_freq: 5.0298 GHz
+    points: 501
+    power: -10              # dBm
+    if_bw: 10 kHz
+    averages: 1
+
+sweep:                      # 外層 → 內層；只有一層就是一維掃描
+  - target: magnet_A.level # 換成 DC1.level 就是單台掃描；換成 VNA1.power 就是掃功率
+    name: Average Current   # Labber step channel 名稱（與舊檔相同）
+    unit: mA                # start/stop/step 以 mA 填寫，Labber 也以 mA 輸出
+    start: 158.619
+    stop: 159.047
+    step: 0.0005            # 平均電流步進 = 單台步進 0.001 mA 的一半
+    settle: 0.1 s           # 舊 wait_time
+
+run:
+  manual: false             # 手動步進模式（GUI 中可隨時切換）
+  approach_rate: 0.5 mA/s   # 移動到起點的速率（舊 sync_ramp_dcs_safe 預設）
+  park: start               # 結束後回到起點（舊 I_ending = I_start）
+  park_rate: 1 mA/s
+  retries: 1
+  on_error: pause           # VNA 逾時等錯誤：重試一次後自動暫停，而不是整個中斷
+
+hooks:
+  - {type: dip_shape_pause, channel: S21, prominence_db: 3, enabled: true}
+
+output:
+  # root: D:/其他資料夾          # 不寫 = settings.yaml data.root
+  file_name: "0901 RSMEP_13.hdf5"
+  collision: underscore     # paren | underscore | overwrite
+  raw: true                 # 逐點寫入原生 HDF5（<資料夾>/_raw/），當機不丟資料
+  export:
+    - {type: labber}          # project / user / tags 不寫 = settings.yaml labber:

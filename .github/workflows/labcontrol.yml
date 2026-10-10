@@ -1,0 +1,66 @@
+# Lab Control（量測）：Windows 單一 .exe 與 macOS .dmg（Apple 晶片、Intel）。
+# 推 tag "labcontrol-v*"（或 Actions → Build Lab Control → Run workflow）就開始打包。
+# 打包完會自己跑 --self-test；產生的檔案在這次執行的 Artifacts，拖進平台網頁「控制台」→「全部發佈」。
+# 只改程式碼（requirements.txt 沒變）時不用打包：發佈 tools/make_release.py 做的 LabControl_v<版本>.zip 就好。
+name: Build Lab Control
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["labcontrol-v*"]
+
+env:
+  PYTHON_VERSION: "3.12"
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: utf-8
+
+defaults:
+  run:
+    working-directory: LabControl
+
+jobs:
+  windows:
+    name: Windows .exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install packages
+        run: python -m pip install --disable-pip-version-check -r requirements.txt pyinstaller==6.22.3 pillow pyvisa-py
+      - name: Build and self-test
+        run: python packaging/build_app.py
+      - uses: actions/upload-artifact@v5
+        with:
+          name: LabControl-windows
+          path: LabControl/dist/LabControl_v*_windows.exe
+          retention-days: 7
+
+  mac:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install packages
+        run: python -m pip install --disable-pip-version-check -r requirements.txt pyinstaller==6.22.3 pillow pyvisa-py
+      - name: Build and self-test
+        run: |
+          test "$(python -c 'import platform;print(platform.machine())')" = "${{ matrix.arch }}"
+          python packaging/build_app.py
+      - uses: actions/upload-artifact@v5
+        with:
+          name: LabControl-macos-${{ matrix.arch }}
+          path: LabControl/dist/LabControl_v*_macos-*.dmg
+          retention-days: 7
