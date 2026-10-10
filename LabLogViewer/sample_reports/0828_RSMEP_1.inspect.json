@@ -1,0 +1,1843 @@
+{
+  "file": "/mnt/user-data/uploads/0828_RSMEP_1.hdf5",
+  "nodes": [
+    {
+      "path": "/",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Step dimensions": [
+          1,
+          855,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "arm_trig_mode": false,
+        "comment": "",
+        "creation_time": 1787898772.4829948,
+        "hardware_loop": false,
+        "log_name": "0828 RSMEP_1",
+        "log_parallel": true,
+        "logger_mode": false,
+        "star": true,
+        "time_per_point": 0.021191835403442383,
+        "trig_channel": "",
+        "version": "1.8.6",
+        "wait_between": 0.01
+      }
+    },
+    {
+      "path": "/Channels",
+      "kind": "dataset",
+      "shape": [
+        12
+      ],
+      "dtype": "[('name', 'O'), ('instrument', 'O'), ('quantity', 'O'), ('unitPhys', 'O'), ('unitInstr', 'O'), ('gain', '<f8'), ('offset', '<f8'), ('amp', '<f8'), ('highLim', '<f8'), ('lowLim', '<f8'), ('outputChannel', 'O'), ('limit_action', 'O'), ('limit_run_script', '?'), ('limit_script', 'O'), ('use_log_interval', '?'), ('log_interval', '<f8'), ('limit_run_always', '?')]",
+      "fields": [
+        "name",
+        "instrument",
+        "quantity",
+        "unitPhys",
+        "unitInstr",
+        "gain",
+        "offset",
+        "amp",
+        "highLim",
+        "lowLim",
+        "outputChannel",
+        "limit_action",
+        "limit_run_script",
+        "limit_script",
+        "use_log_interval",
+        "log_interval",
+        "limit_run_always"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Data",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Completed": true,
+        "Entries, last trace": 1,
+        "Fixed step index": [],
+        "Fixed step values": [],
+        "Step dimensions": [
+          1,
+          855,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "Step index": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10
+        ]
+      }
+    },
+    {
+      "path": "/Data/Channel names",
+      "kind": "dataset",
+      "shape": [
+        11
+      ],
+      "dtype": "[('name', 'O'), ('info', 'O')]",
+      "fields": [
+        "name",
+        "info"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Data/Data",
+      "kind": "dataset",
+      "shape": [
+        1,
+        11,
+        855
+      ],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Data/Time stamp",
+      "kind": "dataset",
+      "shape": [
+        855
+      ],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Instrument config",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Instrument config/Generic - GPIB: , Log channels at localhost",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Installed options": [],
+        "VNA - S21": [],
+        "___VNA - S21___x_name": "Frequency",
+        "___VNA - S21___x_unit": "Hz"
+      }
+    },
+    {
+      "path": "/Instrument config/Generic - GPIB: , Step channels at localhost",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "# of averages": 0.0,
+        "# of points": 0.0,
+        "Average": 0.0,
+        "Average Current": 0.0,
+        "IF bandwidth": 0.0,
+        "Installed options": [],
+        "Output enabled": 0.0,
+        "Output power": 0.0,
+        "S21 - Enabled": 0.0,
+        "Start frequency": 0.0,
+        "Step index API": 0.0,
+        "Stop frequency": 0.0
+      }
+    },
+    {
+      "path": "/Instrument config/VNA",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Instrument config/VNA/# of averages",
+      "kind": "dataset",
+      "shape": [],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Instrument config/VNA/# of points",
+      "kind": "dataset",
+      "shape": [],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Instrument config/VNA/Average",
+      "kind": "dataset",
+      "shape": [],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Instrument config/VNA/IF bandwidth",
+      "kind": "dataset",
+      "shape": [],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {
+        "unit": "Hz"
+      }
+    },
+    {
+      "path": "/Instrument config/VNA/Output enabled",
+      "kind": "dataset",
+      "shape": [],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Instrument config/VNA/Output power",
+      "kind": "dataset",
+      "shape": [],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {
+        "unit": "dBm"
+      }
+    },
+    {
+      "path": "/Instrument config/VNA/S21 - Enabled",
+      "kind": "dataset",
+      "shape": [],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Instrument config/VNA/Start frequency",
+      "kind": "dataset",
+      "shape": [],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {
+        "unit": "Hz"
+      }
+    },
+    {
+      "path": "/Instrument config/VNA/Stop frequency",
+      "kind": "dataset",
+      "shape": [],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {
+        "unit": "Hz"
+      }
+    },
+    {
+      "path": "/Instruments",
+      "kind": "dataset",
+      "shape": [
+        2
+      ],
+      "dtype": "[('hardware', 'O'), ('version', 'O'), ('id', 'O'), ('model', 'O'), ('name', 'O'), ('interface', '<i2'), ('address', 'O'), ('server', 'O'), ('startup', '<i2'), ('lock', '?'), ('show_advanced', '?'), ('Timeout', '<f8'), ('Term. character', 'O'), ('Send end on write', '?'), ('Lock VISA resource', '?'), ('Suppress end bit termination on read', '?'), ('Use specific TCP port', '?'), ('TCP port', '<f8'), ('Use VICP protocol', '?'), ('Baud rate', '<f8'), ('Data bits', '<f8'), ('Stop bits', '<f8'), ('Parity', 'O'), ('GPIB board number', '<f8'), ('Send GPIB go to local at close', '?'), ('PXI chassis', '<f8'), ('Run in 32-bit mode', '?')]",
+      "fields": [
+        "hardware",
+        "version",
+        "id",
+        "model",
+        "name",
+        "interface",
+        "address",
+        "server",
+        "startup",
+        "lock",
+        "show_advanced",
+        "Timeout",
+        "Term. character",
+        "Send end on write",
+        "Lock VISA resource",
+        "Suppress end bit termination on read",
+        "Use specific TCP port",
+        "TCP port",
+        "Use VICP protocol",
+        "Baud rate",
+        "Data bits",
+        "Stop bits",
+        "Parity",
+        "GPIB board number",
+        "Send GPIB go to local at close",
+        "PXI chassis",
+        "Run in 32-bit mode"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Log list",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('channel_name', 'O')]",
+      "fields": [
+        "channel_name"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Settings",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/# of averages",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/# of averages/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 0.2,
+        "Max value": 2.0,
+        "Min value": 1.0,
+        "Precision": 0.0001,
+        "Start value": 1.0
+      }
+    },
+    {
+      "path": "/Step config/# of averages/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/# of averages/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/# of points",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/# of points/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 100.2,
+        "Max value": 1002.0,
+        "Min value": 501.0,
+        "Precision": 0.0501,
+        "Start value": 501.0
+      }
+    },
+    {
+      "path": "/Step config/# of points/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/# of points/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Average",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Average/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 0.2,
+        "Max value": 2.0,
+        "Min value": 1.0,
+        "Precision": 0.0001,
+        "Start value": 1.0
+      }
+    },
+    {
+      "path": "/Step config/Average/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Average/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Average Current",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Average Current/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 0.0853999999999985,
+        "Max value": 163.021,
+        "Min value": 162.594,
+        "Precision": 4.269999999999925e-05,
+        "Start value": 162.594
+      }
+    },
+    {
+      "path": "/Step config/Average Current/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Average Current/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/IF bandwidth",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/IF bandwidth/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 2000.0,
+        "Max value": 20000.0,
+        "Min value": 10000.0,
+        "Precision": 1.0,
+        "Start value": 10000.0
+      }
+    },
+    {
+      "path": "/Step config/IF bandwidth/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/IF bandwidth/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Output enabled",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Output enabled/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 0.2,
+        "Max value": 2.0,
+        "Min value": 1.0,
+        "Precision": 0.0001,
+        "Start value": 1.0
+      }
+    },
+    {
+      "path": "/Step config/Output enabled/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Output enabled/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Output power",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Output power/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 2.0,
+        "Max value": -10.0,
+        "Min value": -20.0,
+        "Precision": 0.001,
+        "Start value": -10.0
+      }
+    },
+    {
+      "path": "/Step config/Output power/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Output power/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/S21 - Enabled",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/S21 - Enabled/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 0.2,
+        "Max value": 2.0,
+        "Min value": 1.0,
+        "Precision": 0.0001,
+        "Start value": 1.0
+      }
+    },
+    {
+      "path": "/Step config/S21 - Enabled/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/S21 - Enabled/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Start frequency",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Start frequency/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 1003940000.0,
+        "Max value": 10039400000.0,
+        "Min value": 5019700000.0,
+        "Precision": 501970.0,
+        "Start value": 5019700000.0
+      }
+    },
+    {
+      "path": "/Step config/Start frequency/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Start frequency/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Step index API",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Step index API/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 0.2,
+        "Max value": 2.0,
+        "Min value": 1.0,
+        "Precision": 0.0001,
+        "Start value": 1.0
+      }
+    },
+    {
+      "path": "/Step config/Step index API/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Step index API/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Stop frequency",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Stop frequency/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 1005940000.0,
+        "Max value": 10059400000.0,
+        "Min value": 5029700000.0,
+        "Precision": 502970.0,
+        "Start value": 5029700000.0
+      }
+    },
+    {
+      "path": "/Step config/Stop frequency/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/Stop frequency/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step list",
+      "kind": "dataset",
+      "shape": [
+        11
+      ],
+      "dtype": "[('channel_name', 'O'), ('step_unit', '<i2'), ('wait_after', '<f8'), ('after_last', '<i2'), ('final_value', '<f8'), ('use_relations', '?'), ('equation', 'O'), ('show_advanced', '?'), ('sweep_mode', '<i2'), ('use_outside_sweep_rate', '?'), ('sweep_rate_outside', '<f8'), ('alternate_direction', '?')]",
+      "fields": [
+        "channel_name",
+        "step_unit",
+        "wait_after",
+        "after_last",
+        "final_value",
+        "use_relations",
+        "equation",
+        "show_advanced",
+        "sweep_mode",
+        "use_outside_sweep_rate",
+        "sweep_rate_outside",
+        "alternate_direction"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Tags",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Project": [
+          "08/0828"
+        ],
+        "Tags": [
+          "VNA Sweep"
+        ],
+        "User": [
+          "QEL"
+        ]
+      }
+    },
+    {
+      "path": "/Traces",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Traces/Time stamp",
+      "kind": "dataset",
+      "shape": [
+        855
+      ],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Traces/VNA - S21",
+      "kind": "dataset",
+      "shape": [
+        501,
+        2,
+        855
+      ],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {
+        "complex": true,
+        "x, name": "Frequency",
+        "x, unit": "Hz"
+      }
+    },
+    {
+      "path": "/Traces/VNA - S21_N",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "int32",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Traces/VNA - S21_t0dt",
+      "kind": "dataset",
+      "shape": [
+        1,
+        2
+      ],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Views",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "selected_view": "phase"
+      }
+    },
+    {
+      "path": "/Views/Current view",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "auto_rotate": false,
+        "bins": 50,
+        "channel3": "Average Current",
+        "channel_enabled": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          true,
+          true
+        ],
+        "channel_graph": [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "0",
+          ""
+        ],
+        "data_op": "None",
+        "data_op3": "None",
+        "dim3": 2,
+        "dimX": 0,
+        "fixed_rotation": 0.0,
+        "graph0-autoscale_x": true,
+        "graph0-autoscale_y": true,
+        "graph0-autoscale_z": true,
+        "graph0-colormap": "Viridis",
+        "graph0-cross_section_x": false,
+        "graph0-cross_section_y": false,
+        "graph0-cursor_1_type": "Off",
+        "graph0-cursor_1_x": 0.0,
+        "graph0-cursor_1_y": 0.0,
+        "graph0-cursor_2_type": "Off",
+        "graph0-cursor_2_x": 0.0,
+        "graph0-cursor_2_y": 0.0,
+        "graph0-invert_colormap": true,
+        "graph0-show_contrast": false,
+        "graph0-transpose": false,
+        "graph0-x_lim": [
+          5019620000.0,
+          5029780000.0
+        ],
+        "graph0-x_log": false,
+        "graph0-y_lim": [
+          -224.36122178817035,
+          179.78635334354541
+        ],
+        "graph0-y_log": false,
+        "grid_type": "1",
+        "ignore_x_image": false,
+        "image_mode": false,
+        "image_selection": [
+          0
+        ],
+        "instrument_units": false,
+        "list_type": "Log list",
+        "lock_x": true,
+        "lock_y": false,
+        "multi_graph": false,
+        "multi_sel_dimensions": [
+          1,
+          1
+        ],
+        "multi_selection": [
+          0,
+          0
+        ],
+        "multi_x_index": 0,
+        "plot_db": true,
+        "rotation_vs_x": 0.0,
+        "selected_items": [
+          [
+            0,
+            255,
+            0,
+            255
+          ],
+          [
+            0,
+            588,
+            0,
+            588
+          ]
+        ],
+        "smooth": 1,
+        "smooth3": 1,
+        "trace_op": "Show individual",
+        "trace_selector": false,
+        "unwrap": true,
+        "use_eq": false,
+        "x_channel": "VNA - S21",
+        "x_eq": "x",
+        "x_lim": [],
+        "x_opt": "vsX",
+        "y_channel": "VNA - S21",
+        "y_eq": "y",
+        "y_lim": [],
+        "y_opt": "Phase"
+      }
+    },
+    {
+      "path": "/Views/mag",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "auto_rotate": false,
+        "bins": 50,
+        "channel3": "Average Current",
+        "channel_enabled": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          true,
+          true
+        ],
+        "channel_graph": [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "0",
+          ""
+        ],
+        "data_op": "None",
+        "data_op3": "None",
+        "dim3": 2,
+        "dimX": 0,
+        "fixed_rotation": 0.0,
+        "graph0-autoscale_x": true,
+        "graph0-autoscale_y": true,
+        "graph0-autoscale_z": true,
+        "graph0-colormap": "Viridis",
+        "graph0-cross_section_x": false,
+        "graph0-cross_section_y": false,
+        "graph0-cursor_1_type": "Off",
+        "graph0-cursor_1_x": 0.0,
+        "graph0-cursor_1_y": 0.0,
+        "graph0-cursor_2_type": "Off",
+        "graph0-cursor_2_x": 0.0,
+        "graph0-cursor_2_y": 0.0,
+        "graph0-invert_colormap": true,
+        "graph0-show_contrast": false,
+        "graph0-transpose": false,
+        "graph0-x_lim": [
+          5019620000.0,
+          5029780000.0
+        ],
+        "graph0-x_log": false,
+        "graph0-y_lim": [
+          -95.84485986855357,
+          -8.06005823730898
+        ],
+        "graph0-y_log": false,
+        "grid_type": "1",
+        "ignore_x_image": false,
+        "image_mode": false,
+        "image_selection": [
+          0
+        ],
+        "instrument_units": false,
+        "list_type": "Log list",
+        "lock_x": true,
+        "lock_y": false,
+        "multi_graph": false,
+        "multi_sel_dimensions": [
+          1,
+          1
+        ],
+        "multi_selection": [
+          0,
+          0
+        ],
+        "multi_x_index": 0,
+        "plot_db": true,
+        "rotation_vs_x": 0.0,
+        "selected_items": [
+          [
+            0,
+            255,
+            0,
+            255
+          ],
+          [
+            0,
+            588,
+            0,
+            588
+          ]
+        ],
+        "smooth": 1,
+        "smooth3": 1,
+        "trace_op": "Show individual",
+        "trace_selector": false,
+        "unwrap": false,
+        "use_eq": false,
+        "x_channel": "VNA - S21",
+        "x_eq": "x",
+        "x_lim": [],
+        "x_opt": "vsX",
+        "y_channel": "VNA - S21",
+        "y_eq": "y",
+        "y_lim": [],
+        "y_opt": "Magnitude"
+      }
+    },
+    {
+      "path": "/Views/phase",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "auto_rotate": false,
+        "bins": 50,
+        "channel3": "Average Current",
+        "channel_enabled": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          true,
+          true
+        ],
+        "channel_graph": [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "0",
+          ""
+        ],
+        "data_op": "None",
+        "data_op3": "None",
+        "dim3": 2,
+        "dimX": 0,
+        "fixed_rotation": 0.0,
+        "graph0-autoscale_x": true,
+        "graph0-autoscale_y": true,
+        "graph0-autoscale_z": true,
+        "graph0-colormap": "Viridis",
+        "graph0-cross_section_x": false,
+        "graph0-cross_section_y": false,
+        "graph0-cursor_1_type": "Off",
+        "graph0-cursor_1_x": 0.0,
+        "graph0-cursor_1_y": 0.0,
+        "graph0-cursor_2_type": "Off",
+        "graph0-cursor_2_x": 0.0,
+        "graph0-cursor_2_y": 0.0,
+        "graph0-invert_colormap": true,
+        "graph0-show_contrast": false,
+        "graph0-transpose": false,
+        "graph0-x_lim": [
+          5019620000.0,
+          5029780000.0
+        ],
+        "graph0-x_log": false,
+        "graph0-y_lim": [
+          -224.36122178817035,
+          179.78635334354541
+        ],
+        "graph0-y_log": false,
+        "grid_type": "1",
+        "ignore_x_image": false,
+        "image_mode": false,
+        "image_selection": [
+          0
+        ],
+        "instrument_units": false,
+        "list_type": "Log list",
+        "lock_x": true,
+        "lock_y": false,
+        "multi_graph": false,
+        "multi_sel_dimensions": [
+          1,
+          1
+        ],
+        "multi_selection": [
+          0,
+          0
+        ],
+        "multi_x_index": 0,
+        "plot_db": true,
+        "rotation_vs_x": 0.0,
+        "selected_items": [
+          [
+            0,
+            255,
+            0,
+            255
+          ],
+          [
+            0,
+            588,
+            0,
+            588
+          ]
+        ],
+        "smooth": 1,
+        "smooth3": 1,
+        "trace_op": "Show individual",
+        "trace_selector": false,
+        "unwrap": true,
+        "use_eq": false,
+        "x_channel": "VNA - S21",
+        "x_eq": "x",
+        "x_lim": [],
+        "x_opt": "vsX",
+        "y_channel": "VNA - S21",
+        "y_eq": "y",
+        "y_lim": [],
+        "y_opt": "Phase"
+      }
+    },
+    {
+      "path": "/Views/polar",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "auto_rotate": false,
+        "bins": 50,
+        "channel3": "Average Current",
+        "channel_enabled": [
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          false,
+          true,
+          true,
+          true,
+          true
+        ],
+        "channel_graph": [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "0",
+          ""
+        ],
+        "data_op": "None",
+        "data_op3": "None",
+        "dim3": 2,
+        "dimX": 0,
+        "fixed_rotation": 0.0,
+        "graph0-autoscale_x": true,
+        "graph0-autoscale_y": true,
+        "graph0-autoscale_z": true,
+        "graph0-colormap": "Viridis",
+        "graph0-cross_section_x": false,
+        "graph0-cross_section_y": false,
+        "graph0-cursor_1_type": "Off",
+        "graph0-cursor_1_x": 5023677181.208055,
+        "graph0-cursor_1_y": -93.25407632470883,
+        "graph0-cursor_2_type": "Off",
+        "graph0-cursor_2_x": 0.0,
+        "graph0-cursor_2_y": 0.0,
+        "graph0-invert_colormap": true,
+        "graph0-show_contrast": false,
+        "graph0-transpose": false,
+        "graph0-x_lim": [
+          -0.34271582642896,
+          0.08843063524896
+        ],
+        "graph0-x_log": false,
+        "graph0-y_lim": [
+          -0.174940950065,
+          0.266295920265
+        ],
+        "graph0-y_log": false,
+        "grid_type": "1",
+        "ignore_x_image": false,
+        "image_mode": false,
+        "image_selection": [
+          0
+        ],
+        "instrument_units": false,
+        "list_type": "Log list",
+        "lock_x": true,
+        "lock_y": false,
+        "multi_graph": false,
+        "multi_sel_dimensions": [
+          1,
+          1
+        ],
+        "multi_selection": [
+          0,
+          0
+        ],
+        "multi_x_index": 0,
+        "plot_db": true,
+        "rotation_vs_x": 0.0,
+        "selected_items": [
+          [
+            0,
+            255,
+            0,
+            255
+          ],
+          [
+            0,
+            588,
+            0,
+            588
+          ]
+        ],
+        "smooth": 1,
+        "smooth3": 1,
+        "trace_op": "Show individual",
+        "trace_selector": false,
+        "unwrap": true,
+        "use_eq": false,
+        "x_channel": "VNA - S21",
+        "x_eq": "x",
+        "x_lim": [],
+        "x_opt": "Real",
+        "y_channel": "VNA - S21",
+        "y_eq": "y",
+        "y_lim": [],
+        "y_opt": "Imag"
+      }
+    }
+  ],
+  "labber_summary": {
+    "log_name": "0828 RSMEP_1",
+    "format_variant": "trace_log_channel",
+    "root_attrs": {
+      "Step dimensions": [
+        1,
+        855,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "arm_trig_mode": false,
+      "comment": "",
+      "creation_time": 1787898772.4829948,
+      "hardware_loop": false,
+      "log_name": "0828 RSMEP_1",
+      "log_parallel": true,
+      "logger_mode": false,
+      "star": true,
+      "time_per_point": 0.021191835403442383,
+      "trig_channel": "",
+      "version": "1.8.6",
+      "wait_between": 0.01
+    },
+    "channels_master_list": [
+      {
+        "name": "Step index API",
+        "instrument": "Generic - GPIB: , Step channels at localhost",
+        "quantity": "Step index API",
+        "unitPhys": ""
+      },
+      {
+        "name": "Average Current",
+        "instrument": "Generic - GPIB: , Step channels at localhost",
+        "quantity": "Average Current",
+        "unitPhys": "mA"
+      },
+      {
+        "name": "S21 - Enabled",
+        "instrument": "Generic - GPIB: , Step channels at localhost",
+        "quantity": "S21 - Enabled",
+        "unitPhys": ""
+      },
+      {
+        "name": "Output enabled",
+        "instrument": "Generic - GPIB: , Step channels at localhost",
+        "quantity": "Output enabled",
+        "unitPhys": ""
+      },
+      {
+        "name": "Output power",
+        "instrument": "Generic - GPIB: , Step channels at localhost",
+        "quantity": "Output power",
+        "unitPhys": "dBm"
+      },
+      {
+        "name": "IF bandwidth",
+        "instrument": "Generic - GPIB: , Step channels at localhost",
+        "quantity": "IF bandwidth",
+        "unitPhys": "Hz"
+      },
+      {
+        "name": "Average",
+        "instrument": "Generic - GPIB: , Step channels at localhost",
+        "quantity": "Average",
+        "unitPhys": ""
+      },
+      {
+        "name": "# of averages",
+        "instrument": "Generic - GPIB: , Step channels at localhost",
+        "quantity": "# of averages",
+        "unitPhys": ""
+      },
+      {
+        "name": "Start frequency",
+        "instrument": "Generic - GPIB: , Step channels at localhost",
+        "quantity": "Start frequency",
+        "unitPhys": "Hz"
+      },
+      {
+        "name": "Stop frequency",
+        "instrument": "Generic - GPIB: , Step channels at localhost",
+        "quantity": "Stop frequency",
+        "unitPhys": "Hz"
+      },
+      {
+        "name": "# of points",
+        "instrument": "Generic - GPIB: , Step channels at localhost",
+        "quantity": "# of points",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S21",
+        "instrument": "Generic - GPIB: , Log channels at localhost",
+        "quantity": "VNA - S21",
+        "unitPhys": ""
+      }
+    ],
+    "step_channels": [
+      "Step index API",
+      "Average Current",
+      "S21 - Enabled",
+      "Output enabled",
+      "Output power",
+      "IF bandwidth",
+      "Average",
+      "# of averages",
+      "Start frequency",
+      "Stop frequency",
+      "# of points"
+    ],
+    "log_channels": [
+      "VNA - S21"
+    ],
+    "scalar_data_matrix": {
+      "path": "/Data/Data",
+      "shape": [
+        1,
+        11,
+        855
+      ],
+      "dtype": "float64",
+      "channel_names": [
+        "Step index API",
+        "Average Current",
+        "S21 - Enabled",
+        "Output enabled",
+        "Output power",
+        "IF bandwidth",
+        "Average",
+        "# of averages",
+        "Start frequency",
+        "Stop frequency",
+        "# of points"
+      ],
+      "note": "shape is typically (1, n_channels, n_entries): n_channels scalar step/log channel values recorded per sweep entry. If a log channel is itself a vector/trace (see vector_trace_channels below), its data does NOT live here — only its scalar step-channel siblings do."
+    },
+    "vector_trace_channels": [
+      {
+        "channel_name": "VNA - S21",
+        "path": "/Traces/VNA - S21",
+        "shape": [
+          501,
+          2,
+          855
+        ],
+        "dtype": "float64",
+        "attrs": {
+          "complex": true,
+          "x, name": "Frequency",
+          "x, unit": "Hz"
+        },
+        "is_complex": true,
+        "x_axis_name": "Frequency",
+        "x_axis_unit": "Hz",
+        "t0dt": [
+          [
+            5019700000.0,
+            20000.0
+          ]
+        ],
+        "x_axis_reconstruction": "x = t0 + dt * arange(N); t0dt stored per-entry as [t0, dt] pairs (one row per sweep entry, or a single row shared by all entries).",
+        "n_points": [
+          501
+        ]
+      }
+    ],
+    "instrument_config": {
+      "Generic - GPIB: , Log channels at localhost": {
+        "Installed options": [],
+        "VNA - S21": [],
+        "___VNA - S21___x_name": "Frequency",
+        "___VNA - S21___x_unit": "Hz"
+      },
+      "Generic - GPIB: , Step channels at localhost": {
+        "# of averages": 0.0,
+        "# of points": 0.0,
+        "Average": 0.0,
+        "Average Current": 0.0,
+        "IF bandwidth": 0.0,
+        "Installed options": [],
+        "Output enabled": 0.0,
+        "Output power": 0.0,
+        "S21 - Enabled": 0.0,
+        "Start frequency": 0.0,
+        "Step index API": 0.0,
+        "Stop frequency": 0.0
+      },
+      "VNA": {
+        "# of averages": 1.0,
+        "# of points": 501.0,
+        "Average": 1.0,
+        "IF bandwidth": 10000.0,
+        "Output enabled": 1.0,
+        "Output power": -10.0,
+        "S21 - Enabled": 1.0,
+        "Start frequency": 5019700000.0,
+        "Stop frequency": 5029700000.0
+      }
+    },
+    "sweep": {
+      "step_dimensions": [
+        1,
+        855,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "step_index": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "fixed_step_index": [],
+      "fixed_step_values": [],
+      "completed": true,
+      "entries_last_trace": 1,
+      "active_step_dimensions": [
+        855
+      ],
+      "n_active_dims": 1
+    },
+    "tags": {
+      "Project": [
+        "08/0828"
+      ],
+      "Tags": [
+        "VNA Sweep"
+      ],
+      "User": [
+        "QEL"
+      ]
+    },
+    "warnings": []
+  }
+}

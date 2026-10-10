@@ -1,0 +1,15 @@
+{
+  "id": "capybara",
+  "name": "Capybara",
+  "levels": {
+    "1": "../assets/capybara/lv01",
+    "10": "../assets/capybara/lv10",
+    "20": "../assets/capybara/lv20",
+    "30": "../assets/capybara/lv30",
+    "40": "../assets/capybara/lv40",
+    "50": "../assets/capybara/lv50"
+  },
+  "events": {},
+  "display_scale": 0.5,
+  "eye_style": "dot"
+}

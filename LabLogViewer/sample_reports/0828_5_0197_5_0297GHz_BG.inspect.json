@@ -1,0 +1,1302 @@
+{
+  "file": "/mnt/user-data/uploads/0828_5_0197_5_0297GHz_BG.hdf5",
+  "nodes": [
+    {
+      "path": "/",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Step dimensions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "arm_trig_mode": false,
+        "comment": "",
+        "creation_time": 1787899482.7870896,
+        "hardware_loop": false,
+        "log_name": "0828 5.0197~5.0297GHz BG",
+        "log_parallel": true,
+        "logger_mode": false,
+        "time_per_point": 1.1989638805389404,
+        "trig_channel": "",
+        "version": "1.8.6",
+        "wait_between": 0.09999999999999999
+      }
+    },
+    {
+      "path": "/Channels",
+      "kind": "dataset",
+      "shape": [
+        23
+      ],
+      "dtype": "[('name', 'O'), ('instrument', 'O'), ('quantity', 'O'), ('unitPhys', 'O'), ('unitInstr', 'O'), ('gain', '<f8'), ('offset', '<f8'), ('amp', '<f8'), ('highLim', '<f8'), ('lowLim', '<f8'), ('outputChannel', 'O'), ('limit_action', 'O'), ('limit_run_script', '?'), ('limit_script', 'O'), ('use_log_interval', '?'), ('log_interval', '<f8'), ('limit_run_always', '?')]",
+      "fields": [
+        "name",
+        "instrument",
+        "quantity",
+        "unitPhys",
+        "unitInstr",
+        "gain",
+        "offset",
+        "amp",
+        "highLim",
+        "lowLim",
+        "outputChannel",
+        "limit_action",
+        "limit_run_script",
+        "limit_script",
+        "use_log_interval",
+        "log_interval",
+        "limit_run_always"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Data",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Completed": true,
+        "Fixed step index": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9
+        ],
+        "Fixed step values": [
+          1.0,
+          1.0,
+          -10.0,
+          10000.0,
+          1.0,
+          10.0,
+          1.0,
+          5019700000.0,
+          5029700000.0,
+          501.0
+        ],
+        "Step dimensions": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "Step index": []
+      }
+    },
+    {
+      "path": "/Data/Channel names",
+      "kind": "dataset",
+      "shape": [
+        0
+      ],
+      "dtype": "[('name', 'O'), ('info', 'O')]",
+      "fields": [
+        "name",
+        "info"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Data/Data",
+      "kind": "dataset",
+      "shape": [
+        1,
+        0,
+        1
+      ],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Data/Time stamp",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Instrument config",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Instrument config/Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "# of averages": 10.0,
+        "# of points": 501.0,
+        "Average": true,
+        "IF bandwidth": 10000.0,
+        "Installed options": [],
+        "Output enabled": true,
+        "Output power": -10.0,
+        "Range type": "Start - Stop",
+        "S11": [],
+        "S11 - Enabled": false,
+        "S12": [],
+        "S12 - Enabled": false,
+        "S13": [],
+        "S13 - Enabled": false,
+        "S14": [],
+        "S14 - Enabled": false,
+        "S21": [],
+        "S21 - Enabled": true,
+        "S22": [],
+        "S22 - Enabled": false,
+        "S23": [],
+        "S23 - Enabled": false,
+        "S24": [],
+        "S24 - Enabled": false,
+        "S31": [],
+        "S31 - Enabled": false,
+        "S32": [],
+        "S32 - Enabled": false,
+        "S33": [],
+        "S33 - Enabled": false,
+        "S34": [],
+        "S34 - Enabled": false,
+        "S41": [],
+        "S41 - Enabled": false,
+        "S42": [],
+        "S42 - Enabled": false,
+        "S43": [],
+        "S43 - Enabled": false,
+        "S44": [],
+        "S44 - Enabled": false,
+        "Start frequency": 5019700000.0,
+        "Stop frequency": 5029700000.0,
+        "Sweep type": "Linear",
+        "Used ports": "Use all ports",
+        "Wait for new trace": true
+      }
+    },
+    {
+      "path": "/Instruments",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('hardware', 'O'), ('version', 'O'), ('id', 'O'), ('model', 'O'), ('name', 'O'), ('interface', '<i2'), ('address', 'O'), ('server', 'O'), ('startup', '<i2'), ('lock', '?'), ('show_advanced', '?'), ('Timeout', '<f8'), ('Term. character', 'O'), ('Send end on write', '?'), ('Lock VISA resource', '?'), ('Suppress end bit termination on read', '?'), ('Use specific TCP port', '?'), ('TCP port', '<f8'), ('Use VICP protocol', '?'), ('Baud rate', '<f8'), ('Data bits', '<f8'), ('Stop bits', '<f8'), ('Parity', 'O'), ('GPIB board number', '<f8'), ('Send GPIB go to local at close', '?'), ('PXI chassis', '<f8'), ('Run in 32-bit mode', '?')]",
+      "fields": [
+        "hardware",
+        "version",
+        "id",
+        "model",
+        "name",
+        "interface",
+        "address",
+        "server",
+        "startup",
+        "lock",
+        "show_advanced",
+        "Timeout",
+        "Term. character",
+        "Send end on write",
+        "Lock VISA resource",
+        "Suppress end bit termination on read",
+        "Use specific TCP port",
+        "TCP port",
+        "Use VICP protocol",
+        "Baud rate",
+        "Data bits",
+        "Stop bits",
+        "Parity",
+        "GPIB board number",
+        "Send GPIB go to local at close",
+        "PXI chassis",
+        "Run in 32-bit mode"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Log list",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('channel_name', 'O')]",
+      "fields": [
+        "channel_name"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Settings",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Data compression": 4,
+        "Data precision": "Double precision",
+        "Limit hardware looping to first step item": false,
+        "Max evaluations": 200,
+        "Method": "Bayesian-Gaussian-Process",
+        "Minimization function": "y[0]",
+        "Number of step items in hardware loop": 1,
+        "Only send signal if source instrument has been updated": true,
+        "Relative tolerance": Infinity,
+        "Send values in parallel": true,
+        "Target value": -Infinity,
+        "Update instruments at start even if values are unchanged": true,
+        "opt-Bayesian-Gaussian-Process: Acquisition function": "gp_hedge",
+        "opt-Bayesian-Gaussian-Process: kappa": 1.96,
+        "opt-Bayesian-Gaussian-Process: xi": 0.1
+      }
+    },
+    {
+      "path": "/Step config",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - # of averages",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - # of averages/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 1.0,
+        "Max value": 10.0,
+        "Min value": 5.0,
+        "Precision": 0.0005,
+        "Start value": 5.0
+      }
+    },
+    {
+      "path": "/Step config/VNA - # of averages/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - # of averages/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - # of points",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - # of points/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 200.2,
+        "Max value": 2002.0,
+        "Min value": 1001.0,
+        "Precision": 0.1001,
+        "Start value": 1001.0
+      }
+    },
+    {
+      "path": "/Step config/VNA - # of points/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - # of points/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Average",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Average/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 0.2,
+        "Max value": 1.0,
+        "Min value": 0.0,
+        "Precision": 0.0001,
+        "Start value": 1
+      }
+    },
+    {
+      "path": "/Step config/VNA - Average/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Average/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - IF bandwidth",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - IF bandwidth/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 2000.0,
+        "Max value": 20000.0,
+        "Min value": 10000.0,
+        "Precision": 1.0,
+        "Start value": 10000.0
+      }
+    },
+    {
+      "path": "/Step config/VNA - IF bandwidth/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - IF bandwidth/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Output enabled",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Output enabled/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 0.2,
+        "Max value": 1.0,
+        "Min value": 0.0,
+        "Precision": 0.0001,
+        "Start value": 1
+      }
+    },
+    {
+      "path": "/Step config/VNA - Output enabled/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Output enabled/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Output power",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Output power/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 4.0,
+        "Max value": -20.0,
+        "Min value": -40.0,
+        "Precision": 0.002,
+        "Start value": -20.0
+      }
+    },
+    {
+      "path": "/Step config/VNA - Output power/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Output power/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - S21 - Enabled",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - S21 - Enabled/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 0.2,
+        "Max value": 1.0,
+        "Min value": 0.0,
+        "Precision": 0.0001,
+        "Start value": 1
+      }
+    },
+    {
+      "path": "/Step config/VNA - S21 - Enabled/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - S21 - Enabled/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Start frequency",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Start frequency/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 1000152000.0,
+        "Max value": 10001520000.0,
+        "Min value": 5000760000.0,
+        "Precision": 500076.0,
+        "Start value": 5000760000.0
+      }
+    },
+    {
+      "path": "/Step config/VNA - Start frequency/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Start frequency/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Stop frequency",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Stop frequency/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 1004200000.0,
+        "Max value": 10042000000.0,
+        "Min value": 5021000000.0,
+        "Precision": 502100.0,
+        "Start value": 5021000000.0
+      }
+    },
+    {
+      "path": "/Step config/VNA - Stop frequency/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Stop frequency/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Wait for new trace",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Wait for new trace/Optimizer",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Enabled": false,
+        "Initial step size": 0.2,
+        "Max value": 1.0,
+        "Min value": 0.0,
+        "Precision": 0.0001,
+        "Start value": 1
+      }
+    },
+    {
+      "path": "/Step config/VNA - Wait for new trace/Relation parameters",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('variable', 'O'), ('channel_name', 'O'), ('use_lookup', '?')]",
+      "fields": [
+        "variable",
+        "channel_name",
+        "use_lookup"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step config/VNA - Wait for new trace/Step items",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "[('range_type', '<i2'), ('step_type', '<i2'), ('single', '<f8'), ('start', '<f8'), ('stop', '<f8'), ('center', '<f8'), ('span', '<f8'), ('step', '<f8'), ('n_pts', '<i4'), ('interp', '<i2'), ('sweep_rate', '<f8')]",
+      "fields": [
+        "range_type",
+        "step_type",
+        "single",
+        "start",
+        "stop",
+        "center",
+        "span",
+        "step",
+        "n_pts",
+        "interp",
+        "sweep_rate"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Step list",
+      "kind": "dataset",
+      "shape": [
+        10
+      ],
+      "dtype": "[('channel_name', 'O'), ('step_unit', '<i2'), ('wait_after', '<f8'), ('after_last', '<i2'), ('final_value', '<f8'), ('use_relations', '?'), ('equation', 'O'), ('show_advanced', '?'), ('sweep_mode', '<i2'), ('use_outside_sweep_rate', '?'), ('sweep_rate_outside', '<f8'), ('alternate_direction', '?')]",
+      "fields": [
+        "channel_name",
+        "step_unit",
+        "wait_after",
+        "after_last",
+        "final_value",
+        "use_relations",
+        "equation",
+        "show_advanced",
+        "sweep_mode",
+        "use_outside_sweep_rate",
+        "sweep_rate_outside",
+        "alternate_direction"
+      ],
+      "attrs": {}
+    },
+    {
+      "path": "/Tags",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {
+        "Project": [
+          "08/0828"
+        ],
+        "Tags": [],
+        "User": [
+          ""
+        ]
+      }
+    },
+    {
+      "path": "/Traces",
+      "kind": "group",
+      "shape": null,
+      "dtype": null,
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Traces/Time stamp",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Traces/VNA - S21",
+      "kind": "dataset",
+      "shape": [
+        501,
+        2,
+        1
+      ],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {
+        "complex": true,
+        "x, name": "Frequency",
+        "x, unit": "Hz"
+      }
+    },
+    {
+      "path": "/Traces/VNA - S21_N",
+      "kind": "dataset",
+      "shape": [
+        1
+      ],
+      "dtype": "int32",
+      "fields": null,
+      "attrs": {}
+    },
+    {
+      "path": "/Traces/VNA - S21_t0dt",
+      "kind": "dataset",
+      "shape": [
+        1,
+        2
+      ],
+      "dtype": "float64",
+      "fields": null,
+      "attrs": {}
+    }
+  ],
+  "labber_summary": {
+    "log_name": "0828 5.0197~5.0297GHz BG",
+    "format_variant": "trace_log_channel",
+    "root_attrs": {
+      "Step dimensions": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "arm_trig_mode": false,
+      "comment": "",
+      "creation_time": 1787899482.7870896,
+      "hardware_loop": false,
+      "log_name": "0828 5.0197~5.0297GHz BG",
+      "log_parallel": true,
+      "logger_mode": false,
+      "time_per_point": 1.1989638805389404,
+      "trig_channel": "",
+      "version": "1.8.6",
+      "wait_between": 0.09999999999999999
+    },
+    "channels_master_list": [
+      {
+        "name": "VNA - # of averages",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "# of averages",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - # of points",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "# of points",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - Average",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "Average",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - IF bandwidth",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "IF bandwidth",
+        "unitPhys": "Hz"
+      },
+      {
+        "name": "VNA - Output enabled",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "Output enabled",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - Output power",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "Output power",
+        "unitPhys": "dBm"
+      },
+      {
+        "name": "VNA - Range type",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "Range type",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S11 - Enabled",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "S11 - Enabled",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S11",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "S11",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S12 - Enabled",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "S12 - Enabled",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S12",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "S12",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S21 - Enabled",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "S21 - Enabled",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S21",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "S21",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S22 - Enabled",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "S22 - Enabled",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S22",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "S22",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S31 - Enabled",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "S31 - Enabled",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S31",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "S31",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - S42 - Enabled",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "S42 - Enabled",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - Start frequency",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "Start frequency",
+        "unitPhys": "Hz"
+      },
+      {
+        "name": "VNA - Stop frequency",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "Stop frequency",
+        "unitPhys": "Hz"
+      },
+      {
+        "name": "VNA - Sweep type",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "Sweep type",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - Used ports",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "Used ports",
+        "unitPhys": ""
+      },
+      {
+        "name": "VNA - Wait for new trace",
+        "instrument": "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost",
+        "quantity": "Wait for new trace",
+        "unitPhys": ""
+      }
+    ],
+    "step_channels": [
+      "VNA - S21 - Enabled",
+      "VNA - Output enabled",
+      "VNA - Output power",
+      "VNA - IF bandwidth",
+      "VNA - Average",
+      "VNA - # of averages",
+      "VNA - Wait for new trace",
+      "VNA - Start frequency",
+      "VNA - Stop frequency",
+      "VNA - # of points"
+    ],
+    "log_channels": [
+      "VNA - S21"
+    ],
+    "scalar_data_matrix": {
+      "path": "/Data/Data",
+      "shape": [
+        1,
+        0,
+        1
+      ],
+      "dtype": "float64",
+      "channel_names": [],
+      "note": "shape is typically (1, n_channels, n_entries): n_channels scalar step/log channel values recorded per sweep entry. If a log channel is itself a vector/trace (see vector_trace_channels below), its data does NOT live here — only its scalar step-channel siblings do."
+    },
+    "vector_trace_channels": [
+      {
+        "channel_name": "VNA - S21",
+        "path": "/Traces/VNA - S21",
+        "shape": [
+          501,
+          2,
+          1
+        ],
+        "dtype": "float64",
+        "attrs": {
+          "complex": true,
+          "x, name": "Frequency",
+          "x, unit": "Hz"
+        },
+        "is_complex": true,
+        "x_axis_name": "Frequency",
+        "x_axis_unit": "Hz",
+        "t0dt": [
+          [
+            5019700000.0,
+            20000.0
+          ]
+        ],
+        "x_axis_reconstruction": "x = t0 + dt * arange(N); t0dt stored per-entry as [t0, dt] pairs (one row per sweep entry, or a single row shared by all entries).",
+        "n_points": [
+          501
+        ]
+      }
+    ],
+    "instrument_config": {
+      "Rohde&Schwarz Network Analyzer 4 port - IP: 192.168.1.11, VNA at localhost": {
+        "# of averages": 10.0,
+        "# of points": 501.0,
+        "Average": true,
+        "IF bandwidth": 10000.0,
+        "Installed options": [],
+        "Output enabled": true,
+        "Output power": -10.0,
+        "Range type": "Start - Stop",
+        "S11": [],
+        "S11 - Enabled": false,
+        "S12": [],
+        "S12 - Enabled": false,
+        "S13": [],
+        "S13 - Enabled": false,
+        "S14": [],
+        "S14 - Enabled": false,
+        "S21": [],
+        "S21 - Enabled": true,
+        "S22": [],
+        "S22 - Enabled": false,
+        "S23": [],
+        "S23 - Enabled": false,
+        "S24": [],
+        "S24 - Enabled": false,
+        "S31": [],
+        "S31 - Enabled": false,
+        "S32": [],
+        "S32 - Enabled": false,
+        "S33": [],
+        "S33 - Enabled": false,
+        "S34": [],
+        "S34 - Enabled": false,
+        "S41": [],
+        "S41 - Enabled": false,
+        "S42": [],
+        "S42 - Enabled": false,
+        "S43": [],
+        "S43 - Enabled": false,
+        "S44": [],
+        "S44 - Enabled": false,
+        "Start frequency": 5019700000.0,
+        "Stop frequency": 5029700000.0,
+        "Sweep type": "Linear",
+        "Used ports": "Use all ports",
+        "Wait for new trace": true
+      }
+    },
+    "sweep": {
+      "step_dimensions": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "step_index": [],
+      "fixed_step_index": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9
+      ],
+      "fixed_step_values": [
+        1.0,
+        1.0,
+        -10.0,
+        10000.0,
+        1.0,
+        10.0,
+        1.0,
+        5019700000.0,
+        5029700000.0,
+        501.0
+      ],
+      "completed": true,
+      "entries_last_trace": null,
+      "active_step_dimensions": [],
+      "n_active_dims": 0
+    },
+    "tags": {
+      "Project": [
+        "08/0828"
+      ],
+      "Tags": [],
+      "User": [
+        ""
+      ]
+    },
+    "warnings": []
+  }
+}

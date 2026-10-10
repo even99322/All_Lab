@@ -1,0 +1,59 @@
+{
+ "open_1d_small": {
+  "ms_median": 87.93,
+  "ms_max": 87.93,
+  "stall_p99_ms": 67.96,
+  "stall_max_ms": 67.96
+ },
+ "open_2d_big": {
+  "ms_median": 794.88,
+  "ms_max": 794.88,
+  "stall_p99_ms": 794.38,
+  "stall_max_ms": 794.38
+ },
+ "open_2d_flux": {
+  "ms_median": 854.15,
+  "ms_max": 854.15,
+  "stall_p99_ms": 849.42,
+  "stall_max_ms": 849.42
+ },
+ "reopen_flux": {
+  "ms_median": 930.61,
+  "ms_max": 930.61,
+  "stall_p99_ms": 929.2,
+  "stall_max_ms": 929.2
+ },
+ "2d_swap_xy": {
+  "ms_median": 0.12,
+  "ms_max": 0.27,
+  "stall_p99_ms": 0,
+  "stall_max_ms": 0
+ },
+ "1d_trace_step": {
+  "ms_median": 0.02,
+  "ms_max": 72.14,
+  "stall_p99_ms": 49.95,
+  "stall_max_ms": 72.14
+ },
+ "rss_after_open_mb": 683.4,
+ "rss_start_mb": 177.7,
+ "2d_smooth_change": {
+  "ms_median": 674.08,
+  "ms_max": 745.78,
+  "stall_p99_ms": 706.12,
+  "stall_max_ms": 745.31
+ },
+ "2d_operation_change": {
+  "ms_median": 738.56,
+  "ms_max": 980.27,
+  "stall_p99_ms": 884.56,
+  "stall_max_ms": 885.33
+ },
+ "cross_section_drag": {
+  "ms_median": 40.82,
+  "ms_max": 86.66,
+  "stall_p99_ms": 86.34,
+  "stall_max_ms": 86.41
+ },
+ "rss_end_mb": 882.6
+}
