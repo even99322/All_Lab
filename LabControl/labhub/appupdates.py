@@ -133,6 +133,43 @@ def _q(name: str) -> str:
     return urllib.parse.quote(name)
 
 
+# ---- Windows 一鍵安裝（0.0.28）-------------------------------------------------------------------------
+SETUP_APPS = ("labcontrol", "lablogviewer")
+
+
+def is_setup_name(name: str) -> bool:
+    n = str(name).lower()
+    return n.endswith(".exe") and "setup" in n
+
+
+def setup_info(plat) -> Optional[Dict[str, Any]]:
+    """最新的 QELSetup_v<版本>_windows.exe（下載頁的「Windows 一鍵安裝」）；沒有 → None。"""
+    info = app_info(plat, "setup")
+    win = [f for f in info["downloads"] if f.get("platform") == "windows"]
+    win.sort(key=lambda f: _pv(f["version"]), reverse=True)
+    return win[0] if win else None
+
+
+def setup_plan(plat) -> str:
+    """一鍵安裝程式讀的清單（純文字，一行一個程式）：
+        app|版本|檔名|大小|sha256|網址路徑
+    每個程式取最新的 Windows 安裝程式（*setup*.exe，Inno Setup，能用 /SILENT 安裝）。"""
+    lines = ["# QEL setup plan v1: app|version|file|size|sha256|path"]
+    for mid in SETUP_APPS:
+        info = app_info(plat, mid)
+        files = [f for f in info["downloads"] if f.get("platform") == "windows" and is_setup_name(f["name"])]
+        if not files:
+            m = plat.modules().get(mid) or {}
+            files = [dict(f, version=v["version"], url=f"/get/{mid}/{v['version']}/{_q(f['name'])}")
+                     for v in m.get("versions") or [] for f in v["files"]
+                     if f.get("platform") == "windows" and is_setup_name(f["name"])]
+        if not files:
+            continue
+        f = max(files, key=lambda x: _pv(x["version"]))
+        lines.append("|".join([mid, f["version"], f["name"], str(f.get("size", 0)), f.get("sha256", ""), f["url"]]))
+    return "\n".join(lines) + "\n"
+
+
 def public_file(name: str) -> bool:
     """/get/<app>/… 不用登入可以下載的檔：安裝檔與功能更新包（Python zip）。"""
     return bool(file_platform(name)) or name.lower().endswith(".zip")

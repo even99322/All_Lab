@@ -255,3 +255,35 @@ def test_lablogviewer_feed(hub):
     assert [i["zh"] for i in feed["items"]] == ["讀 .nc", "程式內更新"]
     assert {f["platform"] for f in feed["downloads"]} == {"windows", "macos"}
     assert all(f["sha256"] for f in feed["downloads"])
+
+
+def test_windows_one_click_setup_plan(hub):
+    """0.0.28：Windows 一鍵安裝（QELSetup）讀 /get/setup.txt：量測、讀檔最新的 *setup*.exe；/get/setup 轉到最新的安裝程式。"""
+    import hashlib
+
+    url, state, owner, alice, ac = hub
+    code, r = _call(url + "/get/setup")
+    assert code == 404
+    p = state.platform
+    p.add_release("labcontrol", "0.0.27", "LabControl_v0.0.27_windows.exe", b"MZold", "boss")     # 舊的單一 .exe
+    p.add_release("labcontrol", "0.0.28", "LabControl_v0.0.28_windows-setup.exe", b"MZlc", "boss")
+    p.add_release("labcontrol", "0.0.28", "LabControl_v0.0.28_macos-arm64.dmg", b"DMG", "boss")
+    p.add_release("lablogviewer", "2.1.3", "LabLogViewer_v2.1.3_windows-setup.exe", b"MZllv", "boss")
+    p.add_release("setup", "1.0.0", "QELSetup_v1.0.0_windows.exe", b"MZboot", "boss")
+    code, text = _call(url + "/get/setup.txt")
+    lines = [ln for ln in text.decode().splitlines() if ln and not ln.startswith("#")]
+    assert [ln.split("|")[:3] for ln in lines] == [["labcontrol", "0.0.28", "LabControl_v0.0.28_windows-setup.exe"],
+                                                  ["lablogviewer", "2.1.3", "LabLogViewer_v2.1.3_windows-setup.exe"]]
+    app, ver, name, size, sha, path = lines[0].split("|")
+    assert int(size) == 4 and sha == hashlib.sha256(b"MZlc").hexdigest()
+    assert _call(url + path)[1] == b"MZlc"                                  # 不用登入就能下載
+    code, info = _call(url + "/get/info")
+    assert info["setup"]["name"] == "QELSetup_v1.0.0_windows.exe"
+    assert "setup" not in [a["id"] for a in info["apps"]]                    # 不是一般的程式卡片
+    req = urllib.request.Request(url + "/get/setup")
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(req, timeout=10) as resp:                               # 302 → 安裝程式本身
+        assert resp.read() == b"MZboot"
+    from labhub.packages import identify_binary
+
+    assert identify_binary("QELSetup_v1.0.0_windows.exe")["target"] == "setup"

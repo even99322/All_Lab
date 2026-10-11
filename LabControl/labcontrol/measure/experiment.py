@@ -47,6 +47,12 @@ class OutputPlan:
     extras: List["OutputPlan"] = field(default_factory=list)          # 其他 Data 方塊（output.extra）
 
 
+def raw_backup() -> bool:
+    """量測時要不要另存 _raw/<檔名>_<時間>.lm.h5（0.0.28 起預設不要）。
+    舊的 settings.yaml 裡的 data.raw 不再看（以前預設檔寫的是 true）；要的話設 data.raw_backup: true。"""
+    return bool(setting("data.raw_backup", False))
+
+
 class Experiment:
     def __init__(self, station: Station, config: Dict[str, Any]) -> None:
         self.station = station
@@ -84,7 +90,7 @@ class Experiment:
                             now, self.output_project().get("name", ""))
         fname = file_name or o.get("file_name") or f"{self.name}.hdf5"
         raw = None
-        if o.get("raw", setting("data.raw", True)):
+        if o.get("raw", raw_backup()):
             raw = folder / setting("data.raw_folder", "_raw") / f"{Path(fname).stem}_{now:%H%M%S}.lm.h5"
         exporters = [dict(e) for e in o.get("export", [])]
         pattern = o.get("split_pattern") or setting("data.split_pattern", "{stem}_{index:03d}_{label}")

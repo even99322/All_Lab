@@ -127,8 +127,13 @@ def publish_temporary(temporary: str | Path, output: str | Path, *, overwrite: b
     """Atomically publish a finished file, refusing implicit replacement."""
     temporary = Path(temporary)
     output = Path(output)
-    with temporary.open("rb") as stream:
-        os.fsync(stream.fileno())
+    # v2.1.3: Windows refuses fsync on a read-only handle ([Errno 9] Bad file descriptor: every
+    # De-background failed there); the handle is opened for writing (nothing is written).
+    with temporary.open("r+b") as stream:
+        try:
+            os.fsync(stream.fileno())
+        except OSError:
+            pass                                    # the data were already flushed when the writer closed
     if overwrite:
         os.replace(temporary, output)
         return

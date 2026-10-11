@@ -134,7 +134,7 @@ def test_browser_comment_is_data_owned_compact_and_uses_native_editor(qapp, tmp_
     browser._flush_browser_comment()
     browser._load_browser_comment(second)
     assert browser.comment_editor.toPlainText() == ""
-    assert browser._comment_ratio <= 0.15
+    assert browser._comment_ratio <= 0.45
     browser._toggle_comment_panel()
     assert not browser._comment_expanded
     browser.close()

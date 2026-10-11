@@ -101,10 +101,10 @@ class LocalBackend:
         j = GroupRamp.jobs.get(job)
         return j.view() if j else {"id": job, "done": True}
 
-    def fine_step(self, refs: List[str], direction: int) -> Dict[str, float]:
+    def fine_step(self, refs: List[str], direction: int, step: Optional[float] = None) -> Dict[str, float]:
         from ..core.grouping import fine_step
 
-        return fine_step(self.station, refs, direction)
+        return fine_step(self.station, refs, direction, step)
 
     def output(self, refs: List[str], on: bool) -> Dict[str, Any]:
         from ..core.grouping import set_output
@@ -221,8 +221,9 @@ class RemoteBackend:
     def ramp_status(self, job: str) -> Dict[str, Any]:
         return self.node.call("ramp_status", job=job)
 
-    def fine_step(self, refs: List[str], direction: int) -> Dict[str, float]:
-        return self.node.call("fine_step", refs=list(refs), direction=int(direction))
+    def fine_step(self, refs: List[str], direction: int, step: Optional[float] = None) -> Dict[str, float]:
+        kw = {"step": float(step)} if step else {}                 # 舊版節點不認得 step：沒選時不送
+        return self.node.call("fine_step", refs=list(refs), direction=int(direction), **kw)
 
     def output(self, refs: List[str], on: bool) -> Dict[str, Any]:
         return self.node.call("output", refs=list(refs), on=bool(on))

@@ -38,6 +38,14 @@ class MeasurementList(QTreeWidget):
         self.active_drag_token = token
         mime = QMimeData()
         mime.setData(MIME_TYPE, token.encode("ascii"))
+        # v2.1.3: also the file itself, so the Data can be dropped into other programs — Lab Control
+        # ("apply the settings of this file to the measurement"), the file manager, e-mail ...
+        path = getattr(item.data(0, Qt.UserRole), "absolute_path", None)
+        if path and Path(path).is_file():
+            from PySide6.QtCore import QUrl
+
+            mime.setUrls([QUrl.fromLocalFile(str(path))])
+            mime.setText(str(path))
         drag = QDrag(self)
         drag.setMimeData(mime)
         drag.exec(Qt.CopyAction)

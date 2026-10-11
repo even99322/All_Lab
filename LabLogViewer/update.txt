@@ -1627,3 +1627,26 @@ Date: 2026-10-11
   - Update preview: "Update now" when the notice carries an installer for this computer.
   - installer.iss: a silent (in-app) update keeps the shortcut icon chosen before.
   - tests/test_v212_hub_update.py.
+
+v2.1.3 - DE-BACKGROUND ON WINDOWS, METADATA PANE, INTERFACES > MEASUREMENT
+Date: 2026-10-11
+
+  - app/core/hdf5_processing_writer.py: publish_temporary synced the finished file through a read-only handle;
+    Windows refuses fsync there ([Errno 9] Bad file descriptor), so every De-background failed on Windows
+    (.nc and Labber). The handle is now opened r+b and a refused sync is not fatal.
+  - Browser: the Comment area is split Comment | Metadata (app/core/quick_metadata.py): sweep axes
+    (start → stop, points, step), per VNA the frequency range / center & span / points / IF bandwidth /
+    averages / power (Labber "Instrument config" names and Lab Control snapshot names), fixed sources with
+    their level and output, traces × entries × points, creation time. Built with the Quick Preview (same
+    background read, cached with it). The note area defaults to 26% of the column (5–45%).
+  - Interfaces > Measurement (app/interfaces/measurement): opens Lab Control. Selected Data → Lab Control
+    applies its settings (asks first). An open Lab Control (0.0.28+) is reached over a local socket
+    "qel-labcontrol-<user>"; otherwise the program recorded in ~/.qel/labcontrol/app.json or the usual
+    install place is started with --apply <file>.
+  - Browser list drag: also file URLs (QMimeData.setUrls), so dropping into Lab Control applies settings.
+  - Lab Control raw records (_raw/*.lm.h5, schema labcontrol/1) open read-only as a point-layout view
+    (labcontrol_nc.raw_as_nc).
+  - hub_update.install_windows: waits for this process to exit (tasklist + ping; "timeout" cannot run without
+    a console) before the silent installer runs.
+  - packaging/lablogviewer.spec added (it was missing from the shared source; .gitignore keeps it).
+  - tests/test_v213_browser_metadata.py.

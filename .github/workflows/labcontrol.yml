@@ -1,4 +1,4 @@
-# Lab Control（量測）：Windows 單一 .exe 與 macOS .dmg（Apple 晶片、Intel）。
+# Lab Control（量測）：Windows 安裝程式（Inno Setup）＋一鍵安裝 QELSetup、macOS .dmg（Apple 晶片、Intel）。
 # 推 tag "labcontrol-v*"（或 Actions → Build Lab Control → Run workflow）就開始打包。
 # 打包完會自己跑 --self-test；產生的檔案在這次執行的 Artifacts，拖進平台網頁「控制台」→「全部發佈」。
 # 只改程式碼（requirements.txt 沒變）時不用打包：發佈 tools/make_release.py 做的 LabControl_v<版本>.zip 就好。
@@ -20,22 +20,31 @@ defaults:
 
 jobs:
   windows:
-    name: Windows .exe
+    name: Windows installer
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) { choco install innosetup -y --no-progress }
+          "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Append
       - name: Install packages
         run: python -m pip install --disable-pip-version-check -r requirements.txt pyinstaller==6.22.3 pillow pyvisa-py
-      - name: Build and self-test
+      - name: Build, self-test, installer
         run: python packaging/build_app.py
+      - name: Windows one-click setup (QELSetup)
+        run: iscc /DSetupVersion=1.0.0 packaging/qel_setup.iss
       - uses: actions/upload-artifact@v5
         with:
           name: LabControl-windows
-          path: LabControl/dist/LabControl_v*_windows.exe
-          retention-days: 7
+          path: |
+            LabControl/dist/LabControl_v*_windows-setup.exe
+            LabControl/dist/QELSetup_v*_windows.exe
+          retention-days: 14
 
   mac:
     name: macOS ${{ matrix.arch }}
@@ -63,4 +72,4 @@ jobs:
         with:
           name: LabControl-macos-${{ matrix.arch }}
           path: LabControl/dist/LabControl_v*_macos-*.dmg
-          retention-days: 7
+          retention-days: 14

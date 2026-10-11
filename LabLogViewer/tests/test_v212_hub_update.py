@@ -211,7 +211,7 @@ def test_windows_install_runs_the_installer_silently_then_reopens(tmp_path, monk
     script = hub_update.install_windows(setup, Path(r"C:\Users\lab\AppData\Local\Programs\LabLogViewer\LabLogViewer.exe"))
     text = script.read_text(encoding="utf-8")
     assert f'"{setup}" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /NOCANCEL' in text
-    assert text.index("timeout") < text.index("/SILENT") < text.index('start ""')
+    assert text.index("tasklist") < text.index("/SILENT") < text.index('start ""')
     assert "LabLogViewer.exe" in text.splitlines()[-1]
     assert started == [["cmd.exe", "/c", str(script)]]
 

@@ -96,19 +96,28 @@ def read_levels(station: Station, refs: List[str]) -> Dict[str, float]:
     return {r: float(station.parameter(r).get()) for r in refs}
 
 
-def fine_step(station: Station, refs: List[str], direction: int) -> Dict[str, float]:
-    """兩台電源：+1 → 目前較低的那台升一個最小步進；-1 → 較高的那台降一步（相同時動第一台）。"""
-    if len(refs) != 2:
-        raise ConfigError("微調只適用於剛好兩台的群組")
+def fine_step(station: Station, refs: List[str], direction: int, step: Optional[float] = None) -> Dict[str, float]:
+    """微調。兩台：+1 → 目前較低的那台升一步；-1 → 較高的那台降一步（相同時動第一台）。一台：直接升 / 降一步。
+    step = 一步多大（SI 單位；0.0.28 起可選，像網頁版選位數）；None = 儀器的最小步進。
+    超過儀器限制時拒絕（limits）；不會小於最小步進，也會對齊最小步進。"""
+    if len(refs) not in (1, 2):
+        raise ConfigError("微調只適用於一台或兩台的群組")
     lv = read_levels(station, refs)
-    a, b = refs
-    if direction > 0:
-        who = a if lv[a] <= lv[b] else b
+    if len(refs) == 1:
+        who = refs[0]
     else:
-        who = a if lv[a] >= lv[b] else b
+        a, b = refs
+        if direction > 0:
+            who = a if lv[a] <= lv[b] else b
+        else:
+            who = a if lv[a] >= lv[b] else b
     src = _src(station, who)
-    step = float(getattr(src, "resolution", None) or 1e-6)
-    station.parameter(who).set(lv[who] + (step if direction > 0 else -step))
+    res = float(getattr(src, "resolution", None) or 1e-6)
+    size = res if not step else max(res, round(abs(float(step)) / res) * res)
+    target = lv[who] + (size if direction > 0 else -size)
+    if src.limits:
+        src.limits.check(target)
+    station.parameter(who).set(target)
     return read_levels(station, refs)
 
 

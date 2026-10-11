@@ -337,6 +337,7 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.critical(self, "開啟失敗", str(e))
 
     def save_scheme(self, ask: bool = False) -> None:
+        self.files.commit_edits()
         path = self.doc.path
         if ask or not path:
             path, _ = QtWidgets.QFileDialog.getSaveFileName(
@@ -393,6 +394,7 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
 
     # ---- 執行 ---------------------------------------------------------------
     def start_measurement(self) -> None:
+        self.files.commit_edits()                    # 檔名等欄位打完沒按 Enter 也算數
         r = self.doc.result
         if not r.ok:
             self.files.setCurrentIndex(2)
@@ -459,6 +461,24 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         if self.remote_target is None:
             self.doc.set_catalog(build_catalog(self.station))
 
+    def handle_local_message(self, m: dict) -> None:
+        """同一台電腦的其他程式（LabLogViewer「介面 → 量測」、`LabControl --apply 檔案`）送來的指令。"""
+        if self.isMinimized():
+            self.showNormal()
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        QtWidgets.QApplication.alert(self, 2000)
+        if m.get("cmd") == "apply" and m.get("path"):
+            p = Path(str(m["path"]))
+            if not p.is_file():
+                QtWidgets.QMessageBox.warning(self, "套用設定", f"找不到數據檔：{p}")
+                return
+            if self.monitor.busy:
+                QtWidgets.QMessageBox.information(self, "套用設定", "量測進行中：量完再套用設定。")
+                return
+            self.platform.apply_file(p)
+
     def closeEvent(self, ev: QtGui.QCloseEvent) -> None:
         if self.monitor.busy:
             q = QtWidgets.QMessageBox.question(self, "量測中", "量測進行中，確定要中斷並關閉？"
@@ -471,6 +491,8 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         if not self._confirm_discard():
             ev.ignore()
             return
+        if getattr(self, "local_link", None) is not None:
+            self.local_link.stop()
         self._shutdown_remote()
         self.updates.stop()
         self.platform.close()

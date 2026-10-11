@@ -639,10 +639,10 @@ class NodeService:
     def cmd_ramp_status(self, sender, job: str) -> Dict[str, Any]:
         return self._backend().ramp_status(job)
 
-    def cmd_fine_step(self, sender, refs: List[str], direction: int) -> Dict[str, float]:
+    def cmd_fine_step(self, sender, refs: List[str], direction: int, step: Optional[float] = None) -> Dict[str, float]:
         self._check_set()
         self.station.ensure_connected(list(refs))
-        return self._backend().fine_step(list(refs), int(direction))
+        return self._backend().fine_step(list(refs), int(direction), step)
 
     def cmd_output(self, sender, refs: List[str], on: bool) -> Dict[str, Any]:
         self._check_set()

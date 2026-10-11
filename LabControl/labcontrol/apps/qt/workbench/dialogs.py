@@ -31,7 +31,9 @@ def decimals(unit: str) -> int:
 
 
 def dspin(lo: float = -1e12, hi: float = 1e12, dec: int = 6, suffix: str = "") -> QtWidgets.QDoubleSpinBox:
-    w = QtWidgets.QDoubleSpinBox()
+    from ..digit_edit import DigitSpinBox
+
+    w = DigitSpinBox()                       # 0.0.28：滾輪 / ↑↓ 動游標所在那一位（中心頻率等）
     w.setRange(lo, hi)
     w.setDecimals(dec)
     w.setKeyboardTracking(False)

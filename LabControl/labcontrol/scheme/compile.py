@@ -362,7 +362,7 @@ def compile_scheme(scheme: Scheme, cat: Catalog) -> CompileResult:
         if fs["formats"]:
             info("沒有 Data 節點：整個量測存成一個檔（要每個外圈值一個檔，把 Data 節點接在外圈迴圈裡）")
         else:
-            warn("沒有選存檔格式：只會寫 _raw/ 原始檔")
+            warn("沒有選存檔格式：量完不會存檔")
     names_files = {}
     for k, sv in enumerate(saves):
         if measures and order[sv.id] < max(order[m.id] for m in measures):
@@ -379,7 +379,7 @@ def compile_scheme(scheme: Scheme, cat: Catalog) -> CompileResult:
             res.split_depth = depth
             split_by = by
             if not fs["formats"]:
-                warn("沒有選存檔格式，只會寫 _raw/ 原始檔", sv)
+                warn("沒有選存檔格式：量完不會存檔", sv)
         else:
             if not sv.formats:
                 warn("這個 Data 沒有選存檔格式，不會存檔", sv)
@@ -463,7 +463,9 @@ def compile_scheme(scheme: Scheme, cat: Catalog) -> CompileResult:
     export = _export_list(fs["formats"])
     output = {k: v for k, v in scheme.output.items()
               if k not in ("formats", "project", "user", "tags", "comment", "file_name", "collision")}
-    output.update(raw=bool(setting("data.raw", True)), export=export, file_name=fs["file_name"],
+    from ..measure.experiment import raw_backup
+
+    output.update(raw=raw_backup(), export=export, file_name=fs["file_name"],
                   collision=fs["collision"])
     if split_by:
         output["split_by"] = split_by

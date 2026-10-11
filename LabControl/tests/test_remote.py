@@ -156,7 +156,7 @@ def test_remote_run_live_feed_and_files(node, hub, tmp_path):
     files = next(p for t, p in seen if t == "remote.files")["files"]
     rels = [f["rel"] for f in files]
     assert any(r.endswith("remote.h5") and "/" in r for r in rels)   # 保留資料夾結構（相對資料根目錄）
-    assert any("_raw/" in r for r in rels)                           # 原始檔也上傳
+    assert not any("_raw/" in r for r in rels)                       # 0.0.28：預設不另存 _raw/
     listed = hub.files("QEL-PC")
     assert {f["rel"] for f in listed} >= set(rels)
     dst = hub.download(files[0]["url"], tmp_path / "dl" / "x.h5")    # 控制端下載

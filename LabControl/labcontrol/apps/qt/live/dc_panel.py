@@ -3,7 +3,8 @@
   * 拖曳成員到別的群組卡片 = 合併（跟隨第一台 master）；拖到兩張卡片之間的空隙 = 拆出來自己一組。
   * 合併時目前值不同 → 詢問「覆寫（以 master 值）」或「平均」，然後整組斜坡過去。
   * 左側 M1 / M2 / M3 記憶：點一下 = 以 0.05 mA/s 斜坡到記憶值（沒存過則記住目前值）；右鍵 = 記住 / 清除。
-  * 右側 ＋ / −（只有剛好兩台時）：一次只動一台一個最小步進（+ 動較低的、− 動較高的）。
+  * 右側 ＋ / −（一台或兩台時）：兩台時一次只動一台（+ 動較低的、− 動較高的）；下面選一步多大（0.0.28，像網頁版
+    選位數：最小步進、×10、×100…，每組記在這台電腦 LAB/live_steps.json）。
   * 跟隨者的數值一直顯示。群組存在 LAB/live_groups.json（每台電腦 / 節點分開）。
 """
 from __future__ import annotations
@@ -212,23 +213,46 @@ class GroupCard(QtWidgets.QFrame):
         mid.addLayout(ctl)
         root.addLayout(mid, 1)
 
-        self.fine: List[QtWidgets.QPushButton] = []
-        if len(self.members) == 2:
+        self.fine: List[QtWidgets.QWidget] = []
+        if len(self.members) in (1, 2):
             fine = QtWidgets.QVBoxLayout()
             fine.setSpacing(4)
+            two = len(self.members) == 2
             for sign, text in ((+1, "＋"), (-1, "－")):
                 b = QtWidgets.QPushButton(text)
-                b.setFixedSize(44, 40)
-                b.setToolTip("微調：一次只動一台一個最小步進（" + ("較低的那台升一步" if sign > 0 else "較高的那台降一步") + "）")
+                b.setFixedSize(92, 34)
+                b.setToolTip(("微調：一次只動一台一步（" + ("較低的那台升一步" if sign > 0 else "較高的那台降一步") + "）")
+                             if two else ("微調：升一步" if sign > 0 else "微調：降一步"))
                 b.setAutoRepeat(True)
                 b.setAutoRepeatDelay(500)
                 b.setAutoRepeatInterval(250)
                 b.clicked.connect(lambda _c=False, s=sign: self.panel.fine_step(self, s))
                 fine.addWidget(b)
                 self.fine.append(b)
+            # 0.0.28：一步多大（像網頁版選位數）：最小步進、×10、×100…，記在這台電腦
+            self.step_box = QtWidgets.QComboBox()
+            self.step_box.setFixedWidth(92)
+            self.step_box.setToolTip("＋ / － 一次動多少（最小步進 = 儀器的解析度）")
+            res = float(panel.sources.get(self.members[0], {}).get("resolution") or 1e-6)
+            sc = disp_scale(self.unit)
+            for k in range(5):
+                v = res * 10 ** k
+                self.step_box.addItem(f"{v / sc:.6g} {du}", v)
+            saved = panel.step_for(self.members)
+            if saved:
+                i = min(range(self.step_box.count()), key=lambda j: abs(self.step_box.itemData(j) - saved))
+                self.step_box.setCurrentIndex(i)
+            self.step_box.currentIndexChanged.connect(
+                lambda _i: panel.remember_step(self.members, self.step_box.currentData()))
+            fine.addWidget(self.step_box)
+            self.fine.append(self.step_box)
             fine.addStretch(1)
             root.addLayout(fine)
         self._update_memory()
+
+    def fine_size(self) -> Optional[float]:
+        box = getattr(self, "step_box", None)
+        return float(box.currentData()) if box is not None and box.currentIndex() > 0 else None
 
     # ---- 顯示 ---------------------------------------------------------------------
     def _update_memory(self) -> None:
@@ -534,7 +558,33 @@ class DCGroupsPanel(QtWidgets.QWidget):
             for r, v in (lv or {}).items():
                 self.levels[r] = v
             card.update_values(self.levels, self.outputs, self.errors)
-        self._run(lambda: be.fine_step(refs, direction), ok, "微調")
+        size = card.fine_size()
+        self._run(lambda: be.fine_step(refs, direction, size), ok, "微調")
+
+    # ---- ＋ / － 的步進（每組記在這台電腦：LAB/live_groups 旁的設定）---------------------------------
+    def _steps_file(self):
+        return lab_path("live_steps.json")
+
+    def step_for(self, members: List[str]) -> Optional[float]:
+        import json
+
+        try:
+            return float(json.loads(self._steps_file().read_text(encoding="utf-8")).get("|".join(members)))
+        except (OSError, ValueError, TypeError):
+            return None
+
+    def remember_step(self, members: List[str], value: Any) -> None:
+        import json
+
+        try:
+            data = json.loads(self._steps_file().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {}
+        data["|".join(members)] = float(value)
+        try:
+            self._steps_file().write_text(json.dumps(data), encoding="utf-8")
+        except OSError:
+            pass
 
     def output(self, card: GroupCard, on: bool) -> None:
         be, refs = self.backend, list(card.members)

@@ -47,7 +47,7 @@ def test_interface_contract_accepts_absent_browser_context_and_stubs_are_safe():
     assert context.metadata is None
     assert context.instrument_metadata is None
 
-    for interface in (MeasurementInterface(), TimeDomainInterface()):
+    for interface in (TimeDomainInterface(),):            # v2.1.3: Measurement opens Lab Control
         assert interface.is_available() is False
         result = interface.launch(context)
         assert isinstance(result, InterfaceResult)
@@ -82,6 +82,11 @@ def test_interfaces_menu_can_open_and_actions_are_reachable(browser, qapp, monke
     window, _localizer = browser
     messages = []
     monkeypatch.setattr(QMessageBox, "information", lambda *args: messages.append(args))
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: messages.append(args))
+    from app.interfaces.measurement import interface as measurement
+
+    monkeypatch.setattr(measurement, "send", lambda message, timeout_ms=1500: False)
+    monkeypatch.setattr(measurement, "find_labcontrol", lambda: None)
     window.show()
     qapp.processEvents()
     window.interfaces_menu.popup(window.mapToGlobal(QPoint(20, 20)))
@@ -89,7 +94,7 @@ def test_interfaces_menu_can_open_and_actions_are_reachable(browser, qapp, monke
     assert window.interfaces_menu.isVisible()
     window.measurement_action.trigger()
     qapp.processEvents()
-    assert messages[-1][2] == "Measurement interface is not configured yet."
+    assert "Lab Control was not found" in messages[-1][2]          # v2.1.3: opens Lab Control
     window.interfaces_menu.close()
     window.close()
 

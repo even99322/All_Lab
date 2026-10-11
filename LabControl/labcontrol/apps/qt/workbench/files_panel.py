@@ -28,6 +28,9 @@ NEW_PROJECT = "__new__"
 COLLISIONS = [("underscore", "建立新檔（加 _2、_3…）"), ("paren", "建立新檔（加 (2)、(3)…）"), ("overwrite", "覆寫")]
 
 
+from ....measure.experiment import raw_backup  # noqa: E402
+
+
 class FilePanel(QtWidgets.QTabWidget):
     def __init__(self, doc: WorkbenchDoc, parent=None) -> None:
         super().__init__(parent)
@@ -127,7 +130,13 @@ class FilePanel(QtWidgets.QTabWidget):
         outer.addStretch()
 
         self.lab_project.activated.connect(self._project_chosen)
-        self.fname.editingFinished.connect(lambda: self._out("file_name", self.fname.text().strip()))
+        self.fname.editingFinished.connect(self._commit_fname)
+        # 0.0.28：打字時就記下檔名（之前只有按 Enter / 換到別的欄位才記：直接按「▶ 開始量測」或 F5
+        # 時，工具列按鈕不會拿走焦點，打好的檔名沒有套用，存成舊的 aaa_1）
+        self._fname_timer = QtCore.QTimer(self)
+        self._fname_timer.setSingleShot(True)
+        self._fname_timer.timeout.connect(self._commit_fname)
+        self.fname.textEdited.connect(lambda _t: self._fname_timer.start(400))
         self.date_hint.clicked.connect(self._fix_date)
         self.root.editingFinished.connect(lambda: self._out("root", self.root.text().strip()))
         browse.clicked.connect(self._browse)
@@ -194,6 +203,28 @@ class FilePanel(QtWidgets.QTabWidget):
     def _mutate(self, fn: Callable) -> None:
         if not self._loading:
             self.doc.mutate(fn, origin=self)
+
+    def _commit_fname(self) -> None:
+        self._fname_timer.stop()
+        name = self.fname.text().strip()
+        if name != (self.doc.scheme.output.get("file_name") or ""):
+            self._out("file_name", name)
+
+    def commit_edits(self) -> None:
+        """開始量測、存方案之前：把正在打、還沒按 Enter 的欄位都寫進方案。"""
+        out = self.doc.scheme.output
+        self._commit_fname()
+        for key, widget in (("root", self.root), ("folder_pattern", self.pattern), ("project", self.project)):
+            if widget.text().strip() != (out.get(key) or ""):
+                self._out(key, widget.text().strip())
+        if self.user.text().strip() != (out.get("user") or ""):
+            self._out("user", self.user.text().strip() or None)
+        current = ", ".join(out["tags"]) if out.get("tags") is not None else ""
+        if self.tags.text().strip() != current:
+            self._tags()
+        if self._comment_timer.isActive() or self.comment.toPlainText().strip() != (out.get("comment") or ""):
+            self._comment_timer.stop()
+            self._out("comment", self.comment.toPlainText().strip())
 
     def _out(self, key: str, value: Any) -> None:
         def fn(s):
@@ -349,7 +380,8 @@ class FilePanel(QtWidgets.QTabWidget):
             s = self.doc.scheme
             o = s.output
             fs = file_settings(s, self.doc.result.save)
-            self.fname.setText(o.get("file_name", ""))
+            if not (self.fname.hasFocus() and self._fname_timer.isActive()):    # 正在打的字不要被蓋掉
+                self.fname.setText(o.get("file_name", ""))
             self.fname.setPlaceholderText(fs["file_name"])
             self.root.setText(o.get("root", ""))
             self.root.setPlaceholderText(str(setting("data.root", "")))
@@ -395,7 +427,7 @@ class FilePanel(QtWidgets.QTabWidget):
         except Exception as e:  # noqa: BLE001
             folder = Path(f"（資料夾規則錯誤：{e}）")
         if not fs["formats"]:
-            split = "沒有選格式：只寫 _raw/ 原始檔"
+            split = "⚠ 沒有選格式：量完不會存檔"
         elif r.split_depth:
             names = "、".join(lp.axis_name for lp in r.loops[:r.split_depth])
             ex = setting("data.split_pattern", "{stem}_{index:03d}_{label}")
@@ -407,8 +439,9 @@ class FilePanel(QtWidgets.QTabWidget):
             split += (f"<br>＋ 額外 Data：<b>{e['file_name']}</b>（{'+'.join(e['formats']) or '未選格式'}），"
                       + (f"每個 {names} 值一個檔" if e["depth"] else "整個量測一個檔"))
         self.where.setText(f"<b>存到</b> {folder}<br><b>檔名</b> {fs['file_name']}"
-                           f"（{dict(COLLISIONS).get(fs['collision'], fs['collision'])}）<br>{split}<br>"
-                           + theme.span("原始資料另存 _raw/（當機不遺失）", "muted"))
+                           f"（{dict(COLLISIONS).get(fs['collision'], fs['collision'])}）<br>{split}"
+                           + ("<br>" + theme.span("原始資料另存 _raw/（settings.yaml data.raw_backup）", "muted")
+                              if raw_backup() else ""))
         # 檢查
         self.issue_list.clear()
         for i in r.issues:

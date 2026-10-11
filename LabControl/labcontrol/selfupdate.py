@@ -461,11 +461,56 @@ def relaunch(exe: Path, args: Optional[List[str]] = None) -> None:
     subprocess.Popen([str(exe), *args], env=env, **kw)
 
 
+def is_setup(name: str) -> bool:
+    """Windows 安裝程式（0.0.28 起 LabControl_v<版本>_windows-setup.exe；Inno Setup）。"""
+    n = str(name).lower()
+    return n.endswith(".exe") and ("setup" in n or "install" in n)
+
+
+def installed_exe() -> Path:
+    """安裝程式裝好的 Lab Control：目前這個（旁邊有 unins000.exe = 用安裝程式裝的）或預設位置。"""
+    cur = current_executable()
+    if (cur.parent / "unins000.exe").exists():
+        return cur
+    base = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"))
+    return base / "Programs" / "Lab Control" / "LabControl.exe"
+
+
+def run_setup_after_exit(setup: Path, args: Optional[List[str]] = None) -> Path:
+    """Lab Control 結束後安靜執行安裝程式（同一個安裝位置），裝好再開新版。回傳新版執行檔。"""
+    exe = installed_exe()
+    args = list(sys.argv[1:] if args is None else args)
+    script = setup.with_name("install_labcontrol_update.cmd")
+    line_args = subprocess.list2cmdline(args)
+    script.write_text(
+        "@echo off\r\n"
+        f"set PID={os.getpid()}\r\n"
+        ":wait\r\n"                                         # 等 Lab Control 關掉（最多約 60 秒）
+        'tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)\r\n'
+        f'"{setup}" /SILENT /SUPPRESSMSGBOXES /NORESTART /NOCANCEL /CLOSEAPPLICATIONS\r\n'
+        "set PYINSTALLER_RESET_ENVIRONMENT=1\r\n"
+        f'start "" "{exe}" {line_args}\r\n'
+        f'del "{setup}"\r\n', encoding="utf-8")
+    kw: Dict[str, Any] = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
+                          "close_fds": True}
+    if os.name == "nt":
+        kw["creationflags"] = 0x00000008 | 0x00000200          # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+    subprocess.Popen(["cmd.exe", "/c", str(script)], **kw)
+    return exe
+
+
 def update_to(info: Dict[str, Any], progress: Optional[Callable[[int, int], None]] = None,
               args: Optional[List[str]] = None) -> Path:
-    """下載 → 換上 → 開新版。回傳新版執行檔；呼叫端接著結束自己。"""
+    """下載 → 換上 → 開新版。回傳新版執行檔；呼叫端接著結束自己。
+    Windows 安裝程式（*-setup.exe）：下載到暫存資料夾，Lab Control 結束後安靜安裝、自動重開。"""
     if not FROZEN:
         raise RuntimeError("用 Python 執行的 Lab Control 不能自己更新（請用打包版，或 Lab APP / git 更新）")
+    if this_platform() == "windows" and is_setup(info.get("name", "")):
+        path = _fetch(info, Path(tempfile.mkdtemp(prefix="labcontrol_setup_")), progress)
+        if info.get("sha256") and _sha256(path) != info["sha256"]:
+            path.unlink(missing_ok=True)
+            raise RuntimeError("下載後檢查碼不符（請再試一次）")
+        return run_setup_after_exit(path, args)
     path = download(info, progress)
     exe = install(path)
     relaunch(exe, args)

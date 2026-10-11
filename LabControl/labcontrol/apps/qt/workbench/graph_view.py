@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import math
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import QPointF, QRectF, Qt
@@ -90,6 +90,7 @@ class NodeItem(QtWidgets.QGraphicsObject):
         self.setZValue(2)
         self.ports: Dict[str, PortItem] = {}
         self.title, self.sub, self.badge, self.color_key = "", "", "", "wait"
+        self.h = H
         self.level = "ok"
         self._drop_hl = False
         self.refresh()
@@ -115,13 +116,15 @@ class NodeItem(QtWidgets.QGraphicsObject):
         self.ports = {}
         b = self.block()
         self.title, self.sub, self.badge, self.color_key = describe(self.doc, self.nid, b)
+        self.prepareGeometryChange()
+        self.h = H + max(0, min(4, len(self.sub.split("\n"))) - 2) * 16      # 量測方塊：多兩行設定
         col = kind_color(self.color_key)
         if self.nid != START:
             self.ports["in"] = PortItem(self, "in", QPointF(W / 2, 0), theme.qc("port"))
-        self.ports[NEXT] = PortItem(self, NEXT, QPointF(W / 2, H), theme.qc("text2"),
+        self.ports[NEXT] = PortItem(self, NEXT, QPointF(W / 2, self.h), theme.qc("text2"),
                                     "完成後" if b is not None and b.is_loop else "")
         if b is not None and b.is_loop:
-            self.ports[BODY] = PortItem(self, BODY, QPointF(W, H / 2), col, "每一點 ⟲")
+            self.ports[BODY] = PortItem(self, BODY, QPointF(W, self.h / 2), col, "每一點 ⟲")
         iss = self.doc.result.issues_for(self.nid) if self.nid != START else []
         self.level = "error" if any(i.level == "error" for i in iss) else \
             "warning" if any(i.level == "warning" for i in iss) else "ok"
@@ -131,12 +134,12 @@ class NodeItem(QtWidgets.QGraphicsObject):
 
     # ---- 繪圖 ------------------------------------------------------------
     def boundingRect(self) -> QRectF:
-        return QRectF(-4, -4, W + 8, H + 8)
+        return QRectF(-4, -4, W + 8, self.h + 8)
 
     def paint(self, p: QtGui.QPainter, opt, widget=None) -> None:
         p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
         col = kind_color(self.color_key)
-        r = QRectF(0, 0, W, H)
+        r = QRectF(0, 0, W, self.h)
         sel = self.isSelected() or self.doc.selected == self.nid
         border = theme.qc("err") if self.level == "error" else theme.qc("orange") if self.level == "warning" else \
             theme.qc("accent") if sel else theme.qc("node_border")
@@ -147,7 +150,7 @@ class NodeItem(QtWidgets.QGraphicsObject):
         p.drawRoundedRect(r, 9, 9)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(col)
-        p.drawRoundedRect(QRectF(0, 0, 7, H), 4, 4)
+        p.drawRoundedRect(QRectF(0, 0, 7, self.h), 4, 4)
         f = p.font()
         f.setPointSizeF(10.5)
         f.setBold(True)
@@ -159,10 +162,15 @@ class NodeItem(QtWidgets.QGraphicsObject):
         p.setFont(f)
         p.setPen(theme.qc("node_text"))
         fm = QtGui.QFontMetrics(f)
-        lines = self.sub.split("\n")[:2]
+        lines = self.sub.split("\n")[:4]
         for i, line in enumerate(lines):
-            p.drawText(QRectF(16, 29 + i * 17, W - 22, 17), Qt.AlignmentFlag.AlignVCenter,
+            warn = line.startswith("⚠")
+            if warn:
+                p.setPen(theme.qc("orange"))
+            p.drawText(QRectF(16, 29 + i * 16, W - 22, 16), Qt.AlignmentFlag.AlignVCenter,
                        fm.elidedText(line, Qt.TextElideMode.ElideRight, int(W - 24)))
+            if warn:
+                p.setPen(theme.qc("node_text"))
         if self.badge:
             f.setPointSizeF(8)
             f.setBold(True)
@@ -217,8 +225,8 @@ class EdgeItem(QtWidgets.QGraphicsPathItem):
         p2 = b.ports["in"].scene_center()
         path = QtGui.QPainterPath(p1)
         dy = max(40.0, abs(p2.y() - p1.y()) * 0.5)
-        left_in = b.mapToScene(QPointF(0, H / 2))
-        if self.port == BODY and left_in.x() > p1.x() + 20 and abs(left_in.y() - p1.y()) < H * 1.5:
+        left_in = b.mapToScene(QPointF(0, b.h / 2))
+        if self.port == BODY and left_in.x() > p1.x() + 20 and abs(left_in.y() - p1.y()) < b.h * 1.5:
             # 迴圈內容在右邊同一列：水平接到節點左側，看起來像手繪的「往右展開」
             dx = max(30.0, (left_in.x() - p1.x()) * 0.5)
             path.cubicTo(p1 + QPointF(dx, 0), left_in - QPointF(dx, 0), left_in)
@@ -270,6 +278,53 @@ class EdgeItem(QtWidgets.QGraphicsPathItem):
 
 
 # ---------------------------------------------------------------------------
+def _q(v: Any) -> str:
+    """量測方塊設定值的顯示：「5.024800000 GHz」→「5.0248 GHz」。"""
+    text = str(v).strip()
+    parts = text.split()
+    try:
+        num = float(parts[0])
+    except (ValueError, IndexError):
+        return text
+    return f"{num:.10g}" + (" " + " ".join(parts[1:]) if len(parts) > 1 else "")
+
+
+def measure_details(st: Dict[str, Any], kind: str) -> List[str]:
+    """流程圖上量測方塊的設定（0.0.28）：頻率、點數、IF 頻寬、平均、功率。
+    沒有在方塊裡設定的項目 = 量測時用儀器當時的值 → 用「⚠ … 用儀器目前值」提醒，免得忘了改。"""
+    if not any(k in st for k in ("start_freq", "stop_freq", "center_freq", "span", "points", "if_bw")) \
+            and kind not in ("vna", ""):
+        return []
+    lines = []
+    if "start_freq" in st or "stop_freq" in st:
+        lines.append(f"{_q(st.get('start_freq', '?'))} → {_q(st.get('stop_freq', '?'))}")
+    elif "center_freq" in st or "span" in st:
+        lines.append(f"中心 {_q(st.get('center_freq', '?'))} · 寬 {_q(st.get('span', '?'))}")
+    else:
+        lines.append("⚠ 頻率：用儀器目前值")
+    parts, parts2 = [], []
+    if "points" in st:
+        parts.append(f"{_q(st['points'])} 點")
+    if "if_bw" in st:
+        parts.append(f"IF {_q(st['if_bw'])}")
+    if "averages" in st:
+        try:
+            parts2.append("平均 關" if int(float(str(st["averages"]).split()[0])) <= 0 else f"平均 {_q(st['averages'])}")
+        except (ValueError, IndexError):
+            parts2.append(f"平均 {_q(st['averages'])}")
+    if "power" in st:
+        parts2.append(f"功率 {_q(st['power'])}")
+    missing = [label for key, label in (("points", "點數"), ("if_bw", "IF"), ("averages", "平均"))
+               if key not in st]
+    if parts:
+        lines.append(" · ".join(parts))
+    if parts2:
+        lines.append(" · ".join(parts2))
+    if missing:
+        lines.append(f"⚠ {'、'.join(missing)}：用儀器目前值")
+    return lines[:3]
+
+
 def describe(doc: WorkbenchDoc, nid: str, b: Optional[Block]) -> Tuple[str, str, str, str]:
     """(標題, 說明, 標籤, 顏色 key)"""
     cat = doc.catalog
@@ -296,9 +351,9 @@ def describe(doc: WorkbenchDoc, nid: str, b: Optional[Block]) -> Tuple[str, str,
         return title, f"{name}\n= {_fmt(b.value)} {b.unit}", "固定", key
     if b.kind == "measure":
         m = cat.measurer(b.instrument)
-        pts = (b.settings or {}).get("points")
-        sub = f"{m.short if m else b.instrument} · {'/'.join(b.traces) or '—'}" + (f" · {pts} 點" if pts else "")
-        return (m.head if m else "量測"), sub, "量測", ((m.kind or "measure") if m else "measure")
+        sub = f"{m.short if m else b.instrument} · {'/'.join(b.traces) or '—'}"
+        detail = measure_details(b.settings or {}, (m.kind if m else "") or "")
+        return (m.head if m else "量測"), "\n".join([sub, *detail]), "量測", ((m.kind or "measure") if m else "measure")
     if b.kind == "save":
         r = doc.result
         extra = next((e for e in getattr(r, "extras", []) or [] if e["block"] == b.id), None)

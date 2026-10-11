@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QInputDialog, QMainWindow, QMenu,
     QMessageBox, QProgressDialog, QPushButton, QSplitter, QStackedWidget,
     QLineEdit, QProgressBar, QSpinBox, QStatusBar, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
-    QPlainTextEdit, QWidget,
+    QPlainTextEdit, QTextBrowser, QWidget,
 )
 
 from app import __version__
@@ -172,7 +172,7 @@ class BrowserWindow(QMainWindow):
         self._comment_native_text = ""
         self._comment_external_text = ""
         self._comment_expanded = True
-        self._comment_ratio = 0.05
+        self._comment_ratio = 0.26
         self._comment_timer = QTimer(self)
         self._comment_timer.setSingleShot(True)
         self._comment_timer.setInterval(450)
@@ -719,12 +719,32 @@ class BrowserWindow(QMainWindow):
         self.comment_toggle_button.clicked.connect(self._toggle_comment_panel)
         comment_header.addWidget(self.comment_toggle_button)
         comment_header.addStretch(1)
+        self.metadata_title = QLabel(self.comment_panel)
+        self.metadata_title.setObjectName("browserMetadataTitle")
+        comment_header.addWidget(self.metadata_title)
+        comment_header.addStretch(1)
         comment_layout.addLayout(comment_header)
-        self.comment_editor = QPlainTextEdit(self.comment_panel)
+        # v2.1.3: the note area is split: Comment (left) | Metadata — how the selected Data was measured
+        # (sweep, VNA frequency / points / IF bandwidth / averages / power, fixed sources), always visible.
+        self.comment_metadata_splitter = QSplitter(Qt.Horizontal, self.comment_panel)
+        self.comment_metadata_splitter.setObjectName("browserCommentMetadataSplitter")
+        self.comment_metadata_splitter.setChildrenCollapsible(False)
+        self.comment_editor = QPlainTextEdit(self.comment_metadata_splitter)
         self.comment_editor.setPlaceholderText("Comment for the selected Data")
         self.comment_editor.setEnabled(False)
         self.comment_editor.textChanged.connect(self._schedule_browser_comment_save)
-        comment_layout.addWidget(self.comment_editor, 1)
+        self.metadata_view = QTextBrowser(self.comment_metadata_splitter)
+        self.metadata_view.setObjectName("browserMetadataView")
+        self.metadata_view.setOpenLinks(False)
+        self.comment_metadata_splitter.addWidget(self.comment_editor)
+        self.comment_metadata_splitter.addWidget(self.metadata_view)
+        self.comment_metadata_splitter.setStretchFactor(0, 1)
+        self.comment_metadata_splitter.setStretchFactor(1, 1)
+        comment_layout.addWidget(self.comment_metadata_splitter, 1)
+        self._metadata_sections = None
+        self._set_metadata(None, "meta.none")
+        self.localizer.language_changed.connect(lambda *_a: self._set_metadata(self._metadata_sections,
+                                                                               self._metadata_message))
         self.preview_comment_splitter.addWidget(self.comment_panel)
         self.preview_comment_splitter.setStretchFactor(0, 1)
         self.preview_comment_splitter.setStretchFactor(1, 0)
@@ -750,25 +770,27 @@ class BrowserWindow(QMainWindow):
     def _comment_total_height(self) -> int:
         return max(sum(self.preview_comment_splitter.sizes()), self.preview_comment_splitter.height(), 1)
 
+    COMMENT_MIN, COMMENT_DEFAULT, COMMENT_MAX = 0.05, 0.26, 0.45     # v2.1.3: room for the Metadata
+
     def _apply_comment_panel_size(self, *, default: bool = False) -> None:
-        """Keep the Browser note compact: 5% by default, capped at 15%."""
+        """Comment | Metadata below the Quick Preview: 26% by default, 5–45%."""
         if not hasattr(self, "preview_comment_splitter"):
             return
         total = self._comment_total_height()
         header = self._comment_header_height()
         if default:
-            self._comment_ratio = 0.05
-        maximum = max(header, int(total * 0.15))
+            self._comment_ratio = self.COMMENT_DEFAULT
+        maximum = max(header, int(total * self.COMMENT_MAX))
         if self._comment_expanded:
-            desired = max(header, int(total * max(0.05, min(0.15, self._comment_ratio))))
+            desired = max(header, int(total * max(self.COMMENT_MIN, min(self.COMMENT_MAX, self._comment_ratio))))
             desired = min(desired, maximum)
-            self.comment_editor.show()
+            self.comment_metadata_splitter.show()
             self.comment_panel.setMaximumHeight(maximum)
             self.comment_toggle_button.setText("Comment")
             self.comment_toggle_button.setArrowType(Qt.DownArrow)
         else:
             desired = header
-            self.comment_editor.hide()
+            self.comment_metadata_splitter.hide()
             self.comment_panel.setMaximumHeight(header)
             self.comment_toggle_button.setText("Comment")
             self.comment_toggle_button.setArrowType(Qt.RightArrow)
@@ -780,8 +802,8 @@ class BrowserWindow(QMainWindow):
             return
         total = self._comment_total_height()
         comment_height = self.preview_comment_splitter.sizes()[-1]
-        self._comment_ratio = max(0.05, min(0.15, comment_height / total))
-        if comment_height > max(self._comment_header_height(), int(total * 0.15)):
+        self._comment_ratio = max(self.COMMENT_MIN, min(self.COMMENT_MAX, comment_height / total))
+        if comment_height > max(self._comment_header_height(), int(total * self.COMMENT_MAX)):
             self._apply_comment_panel_size()
         self._schedule_session_save()
 
@@ -881,11 +903,11 @@ class BrowserWindow(QMainWindow):
         if not isinstance(state, dict):
             return
         self._comment_expanded = bool(state.get("expanded", True))
-        ratio = state.get("ratio", 0.05)
+        ratio = state.get("ratio_v213", self.COMMENT_DEFAULT)   # older sessions saved a Comment-only 5–15%
         try:
-            self._comment_ratio = max(0.05, min(0.15, float(ratio)))
+            self._comment_ratio = max(self.COMMENT_MIN, min(self.COMMENT_MAX, float(ratio)))
         except (TypeError, ValueError):
-            self._comment_ratio = 0.05
+            self._comment_ratio = self.COMMENT_DEFAULT
         self._apply_comment_panel_size()
 
     def open_database_dialog(self) -> None:
@@ -1492,8 +1514,21 @@ class BrowserWindow(QMainWindow):
         if worker is self._preview_worker:
             self._show_preview(preview)
 
+    def _set_metadata(self, sections, message: str | None = None) -> None:
+        """The Metadata pane next to the Comment: the sections of quick_metadata, or a message key."""
+        from app.core.quick_metadata import to_html
+
+        self._metadata_sections, self._metadata_message = sections, message
+        text = self.localizer.text
+        self.metadata_title.setText(text("meta.title"))
+        if sections:
+            self.metadata_view.setHtml(to_html(sections, text))
+        else:
+            self.metadata_view.setHtml(f"<span style='opacity:0.7'>{text(message or 'meta.none')}</span>")
+
     def _show_preview(self, preview) -> None:
         self._preview_data = preview
+        self._set_metadata(getattr(preview, "metadata", None), "meta.unavailable")
         status = f"{preview.log_name}  ·  {preview.channel_name}"
         if preview.acquisition is not None and preview.acquisition.is_partial:
             status += (
@@ -1525,6 +1560,7 @@ class BrowserWindow(QMainWindow):
 
     def _clear_preview(self, message: str) -> None:
         self._preview_data = None
+        self._set_metadata(None, "meta.loading" if message.startswith("Loading") else "meta.none")
         self.preview_status.setText(message)
         self.preview_stack.setCurrentWidget(self.preview_empty)
 
@@ -2191,6 +2227,7 @@ class BrowserWindow(QMainWindow):
                 "comment_panel": {
                     "expanded": self._comment_expanded,
                     "ratio": self._comment_ratio,
+                    "ratio_v213": self._comment_ratio,
                 },
                 "window": self._geometry_state(self),
             },

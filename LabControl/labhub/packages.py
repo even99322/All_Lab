@@ -37,11 +37,12 @@ TARGETS: Dict[str, tuple] = {
     "lablogviewer": ("module", "數據讀取模擬模塊 LabLogViewer"),
     "monitor": ("module", "平台監控 Monitor"),
     "launcher": ("module", "量子工程平台 App（舊的啟動器，0.0.26 起不再使用）"),
+    "setup": ("module", "Windows 安裝程式（量測＋讀檔一起裝，從 NAS 下載）"),
 }
 MANIFEST = "qel-module.json"
 #: 安裝檔檔名的開頭 → 模塊
 BINARY_PREFIX = {"qellauncher": "launcher", "labcontrol": "labcontrol", "labcontrolmonitor": "monitor",
-                 "labmonitor": "monitor", "lablogviewer": "lablogviewer"}
+                 "labmonitor": "monitor", "lablogviewer": "lablogviewer", "qelsetup": "setup"}
 BINARY_EXT = (".exe", ".msi", ".dmg", ".pkg")
 _BIN = re.compile(r"^(?P<name>[A-Za-z]+)[_-]v?(?P<ver>\d+(?:\.\d+){1,3})[_-](?P<plat>windows|win64|win|macos|mac|osx)"
                   r"(?:[_-][A-Za-z0-9]+)*\.(?:exe|msi|dmg|pkg|zip)$", re.I)

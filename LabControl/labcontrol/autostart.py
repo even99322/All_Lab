@@ -108,3 +108,28 @@ def set_enabled(on: bool) -> None:
                      encoding="utf-8")
     elif p.exists():
         p.unlink()
+
+
+def refresh() -> bool:
+    """開著「開機自動開啟」而程式換了位置（0.0.28 起用安裝程式裝到 %LOCALAPPDATA%\\Programs\\Lab Control）
+    → 自動開啟改成指向現在這個程式。回傳是否有改。"""
+    if not getattr(sys, "frozen", False) or not is_enabled():
+        return False
+    try:
+        if sys.platform == "win32":
+            import subprocess
+            import winreg
+
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+                current = str(winreg.QueryValueEx(k, NAME)[0])
+            if current == subprocess.list2cmdline(command()):
+                return False
+        elif sys.platform == "darwin":
+            if plistlib.loads(_mac_plist().read_bytes()).get("ProgramArguments") == command():
+                return False
+        else:
+            return False
+        set_enabled(True)
+        return True
+    except Exception:  # noqa: BLE001
+        return False

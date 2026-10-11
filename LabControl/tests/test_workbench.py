@@ -166,7 +166,7 @@ def test_run_from_window(win, tmp_path):
     assert not win.monitor.busy
     assert win.monitor.progress.value() == win.monitor.progress.maximum() == 5
     assert list(tmp_path.rglob("w.h5"))                 # 原生 HDF5 匯出
-    assert list(tmp_path.rglob("_raw/w_*.lm.h5"))       # 逐點原始檔
+    assert not list(tmp_path.rglob("_raw"))             # 0.0.28：預設不另存 _raw/
     win.measure_window.close()                          # 關閉 = 收起來；工具列「📈 量測監控」再開
     assert not win.measure_window.isVisible()
     win.show_measure_window()

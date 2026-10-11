@@ -1,24 +1,13 @@
-# Measurement Interface
+# Measurement Interface (v2.1.3)
 
-`MeasurementInterface` is the reserved integration point for a future
-measurement application. It currently reports itself unavailable and performs
-no hardware or external-process action.
+Interfaces → Measurement opens **Lab Control**, the lab's measurement program.
 
-Implement future Measurement behavior in this directory. Override
-`is_available()` and `launch(context)` in `interface.py`; return an
-`InterfaceResult` with `launched()`, `unavailable()`, or `failed(message)`.
-The Database Browser presents localized messages for unavailable and failed
-results. Exceptions are caught by the Browser boundary and are not shown as a
-traceback.
+- With a Data entry selected, Lab Control applies that file's measurement settings (it asks first; undo works).
+- Lab Control already open on this computer: the request goes over a local connection
+  (`QLocalServer` named `qel-labcontrol-<user>`, Lab Control 0.0.28+), and its window comes to the front.
+- Not open: it is started with `--apply <file>` — the program recorded in `~/.qel/labcontrol/app.json`,
+  else `%LOCALAPPDATA%\Programs\Lab Control\LabControl.exe` / `/Applications/Lab Control.app`.
+  `LABCONTROL_EXE` overrides.
 
-`InterfaceContext` may provide the resolved database path/name/identity, the
-selected folder and log path/name, and a sweep summary when the Browser already
-has that information. Log ID, channel, dimension names, full metadata, and
-instrument metadata are currently `None`; do not guess them. The context is
-non-destructive and contains no open HDF5 handle.
-
-Do not put instrument control in `BrowserWindow`. Normally only
-`app/interfaces/measurement/` should need editing. Keep tests local to the
-interface and add a Browser-level test only when its launch contract changes.
-The GUI must not import `h5py`; use an established Core/Data Model API if a
-future integration genuinely needs Labber data.
+Dragging a Data entry from the Browser list now also carries the file (file URL), so it can be dropped
+into Lab Control (same "apply settings"), a file manager or a mail.

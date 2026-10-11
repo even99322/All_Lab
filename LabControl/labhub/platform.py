@@ -57,6 +57,9 @@ DEFAULT_MODULES: Dict[str, Dict[str, Any]] = {
     "catalog": {"name": "數據目錄", "kind": "web", "description": "依標籤搜尋量測數據與相關論文", "order": 5,
                 "url": "/portal#/data"},
     "nodes": {"name": "量測節點", "kind": "web", "description": "所有量測電腦的狀態與進度", "order": 6, "url": "/nodes"},
+    # 0.0.28：Windows 一鍵安裝（QELSetup_v<版本>_windows.exe）：從 NAS 下載最新的量測、讀檔安裝程式並安裝
+    "setup": {"name": "Windows 安裝程式", "kind": "app", "hidden": True, "order": 92,
+              "description": "量測＋讀檔一起裝：從 NAS 下載最新的安裝程式"},
 }
 #: 下載頁 /get 列出、不用登入就能下載的獨立程式
 APPS = ("labcontrol", "lablogviewer")

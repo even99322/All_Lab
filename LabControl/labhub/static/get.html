@@ -31,11 +31,14 @@ ol li { margin:2px 0; }
 .empty { color:var(--muted); }
 .note { background:var(--warnbg); color:var(--ink); border:1px solid var(--line); border-left:4px solid var(--warn); border-radius:10px; padding:12px 14px; font-size:.9rem; }
 .note b { color:var(--warn); }
+.setup { border:2px solid var(--accent); }
+.setup ul { margin:0; padding-left:1.3em; font-size:.92rem; }
 </style>
 </head>
 <body>
 <main>
   <div class="brand"><img src="/icon.svg" alt=""><div><h1>量子工程平台</h1><p class="sub">量測與讀檔程式下載。裝好之後程式會自己更新，不用再回來下載。</p></div></div>
+  <section class="card setup" id="setup" hidden></section>
   <div class="apps" id="apps"><section class="card"><p class="empty">讀取中…</p></section></div>
   <section class="card">
     <h2>第一次安裝</h2>
@@ -56,8 +59,8 @@ const label = f => f.platform === "windows" ? "Windows" : "Mac" + (f.arch ? "・
 const rank = f => f.platform !== "macos" ? 0 : ({universal2: 0, arm64: 1, x86_64: 2}[f.arch] ?? 3);
 const steps = {
   windows: [
-    "按上面的「下載 Windows 版」。",
-    "下載完打開它。量測（Lab Control）是單一 .exe，放在桌面或任何資料夾直接執行；讀檔（LabLogViewer）是安裝程式，照畫面按「下一步」。",
+    "按最上面的「Windows 一鍵安裝」（量測＋讀檔一起裝），或下面各自的「下載 Windows 版」。",
+    "下載完打開它，照畫面按「下一步」：一鍵安裝會從實驗室的 NAS 下載兩個程式的最新版並裝好（裝在你的使用者資料夾，不需要系統管理員）。",
     "如果出現「Windows 已保護您的電腦」：按「其他資訊」→「仍要執行」。",
     "第一次開啟後用論文庫的帳號登入（量測：工具列「平台 ▾ → 登入」）。之後有新版，程式會自己提示並更新。",
   ],
@@ -75,6 +78,16 @@ const warn = {
 };
 fetch("/get/info").then(r => r.json()).then(info => {
   const apps = info.apps || [];
+  const su = info.setup;
+  if (su && OS !== "mobile" && OS !== "macos") {
+    const box = document.getElementById("setup");
+    box.innerHTML = `<div><h2>Windows 一鍵安裝　<span class="ver">量測＋讀檔 · ${esc(su.version)}</span></h2>
+      <p class="muted">一個小安裝程式：從實驗室的 NAS 下載量測（Lab Control）與讀檔（LabLogViewer）的最新版並安裝，可以只勾其中一個。</p></div>
+      <a class="big" href="${esc(su.url)}">⬇ 下載 Windows 一鍵安裝 <small>${mb(su.size)}</small></a>
+      <ul><li>裝好之後兩個程式都會自己收到更新推播、在程式裡更新，不用再回來下載。</li>
+      <li>好記的網址：<code>${esc(location.origin)}/get/setup</code></li></ul>`;
+    box.hidden = false;
+  }
   let h = "";
   for (const a of apps) {
     const dl = (a.downloads || []).slice().sort((x, y) => rank(x) - rank(y));

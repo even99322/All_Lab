@@ -415,8 +415,38 @@ def _get_info(h: Handler) -> None:
     """下載頁與程式內版本檢查：量測（Lab Control）、讀檔（LabLogViewer）的安裝檔與功能更新包（見 appupdates.py）。"""
     from .appupdates import all_apps
 
+    from .appupdates import setup_info
+
     h._json({"name": "量子工程平台", "apps": all_apps(_plat(h)), "downloads": [], "zip": [],
-             "paperlib": _plat(h).paperlib_public, "hub": __version__})
+             "setup": setup_info(_plat(h)), "paperlib": _plat(h).paperlib_public, "hub": __version__})
+
+
+@route("GET", r"/get/setup\.txt", auth=False)
+def _get_setup_plan(h: Handler) -> None:
+    """Windows 一鍵安裝程式（QELSetup）讀的清單：量測、讀檔最新的安裝程式（見 appupdates.setup_plan）。"""
+    from .appupdates import setup_plan
+
+    body = setup_plan(_plat(h)).encode("utf-8")
+    h.send_response(200)
+    h.send_header("Content-Type", "text/plain; charset=utf-8")
+    h.send_header("Content-Length", str(len(body)))
+    h.send_header("Cache-Control", "no-store")
+    h.end_headers()
+    h.wfile.write(body)
+
+
+@route("GET", r"/get/setup", auth=False)
+def _get_setup(h: Handler) -> None:
+    """好記的網址：http://<NAS>:8765/get/setup → 最新的 Windows 一鍵安裝程式。"""
+    from .appupdates import setup_info
+
+    f = setup_info(_plat(h))
+    if f is None:
+        raise HubHTTPError(404, "站長還沒有上傳 Windows 一鍵安裝程式（QELSetup_v*_windows.exe）")
+    h.send_response(302)
+    h.send_header("Location", f["url"])
+    h.send_header("Content-Length", "0")
+    h.end_headers()
 
 
 @route("GET", r"/get/watch", auth=False)
@@ -444,7 +474,7 @@ def _get_feed(h: Handler, mid: str) -> None:
     h._json(lablogviewer_feed(_plat(h), mid))
 
 
-@route("GET", r"/get/(labcontrol|lablogviewer)/([0-9.]+)/([^/]+)", auth=False)
+@route("GET", r"/get/(labcontrol|lablogviewer|setup)/([0-9.]+)/([^/]+)", auth=False)
 def _get_app_file(h: Handler, mid: str, version: str, filename: str) -> None:
     """量測 / 讀檔程式的安裝檔（.exe、.dmg…）與功能更新包（Python zip）：不用登入就能下載。"""
     from .appupdates import public_file

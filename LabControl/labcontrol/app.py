@@ -61,13 +61,22 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--target", help="開啟後「執行於」選這個量測節點（例如 LAB-A）")
     ap.add_argument("--minimized", action="store_true", help="視窗縮小開啟（量測電腦開機自動開啟時用）")
     ap.add_argument("--theme", choices=["light", "dark", "system"], help="外觀（覆寫 settings.yaml app.theme，不寫檔）")
+    ap.add_argument("--apply", metavar="數據檔", help="套用這個數據檔（.nc / .hdf5）的量測設定；Lab Control 已經開著就交給它")
     ap.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")
     a = ap.parse_args(argv)
+    if a.scheme and Path(a.scheme).suffix.lower() in (".nc", ".hdf5", ".h5") and not a.apply:
+        a.apply, a.scheme = a.scheme, None        # 「用 Lab Control 開啟」數據檔 = 套用它的設定
 
     created = ensure_lab_home()
     _setup_logging()
+    try:
+        from .autostart import refresh as _refresh_autostart
 
-    from PyQt6 import QtGui, QtWidgets
+        _refresh_autostart()                   # 改用安裝程式裝之後，開機自動開啟跟著換到新位置
+    except Exception:  # noqa: BLE001
+        pass
+
+    from PyQt6 import QtCore, QtGui, QtWidgets
 
     from .core.station import Station
     from .scheme import Scheme
@@ -89,6 +98,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ic = icon_path()
     if ic:
         app.setWindowIcon(QtGui.QIcon(str(ic)))
+    if not (a.server or a.node or a.minimized):
+        from .apps.qt.local_link import forward
+
+        if forward(a.apply):                    # 已經開著：交給它（視窗跳到前面），這裡結束
+            return 0
 
     try:
         st = Station.from_lab(a.lab, simulate=True if a.sim else None)
@@ -118,6 +132,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             w.act_node.setChecked(True)
         if a.target:
             w.want_target(a.target)
+        from .apps.qt.local_link import LocalLink
+
+        w.local_link = LocalLink(w.handle_local_message, w)    # 讀檔程式「介面 → 量測」、--apply
+        w.local_link.start()
+        if a.apply:
+            QtCore.QTimer.singleShot(600, lambda: w.handle_local_message({"cmd": "apply", "path": a.apply}))
     if created:
         w.statusBar().showMessage(f"已建立設定資料夾 {lab_home()}（{len(created)} 個預設檔）", 15000)
     rc = app.exec()

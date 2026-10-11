@@ -46,8 +46,16 @@ def test_group_ramp_fine_step_and_output():
     assert sorted(r.values()) == pytest.approx([0.1590, 0.159001])
     r = b.fine_step(refs, -1)
     assert list(r.values()) == pytest.approx([0.1590, 0.1590])
-    with pytest.raises(Exception, match="兩台"):
-        b.fine_step(refs[:1], +1)
+    # 0.0.28：可選一步多大（對齊最小步進）；一台的群組也能微調
+    r = b.fine_step(refs, +1, step=1e-5)
+    assert sorted(r.values()) == pytest.approx([0.1590, 0.15901])
+    r = b.fine_step(refs, -1, step=1.4e-5)                               # 對齊最小步進：14 µA
+    assert sorted(r.values()) == pytest.approx([0.158996, 0.1590])
+    st.parameter("DC3.ch1.level").set(0.1590)
+    assert b.fine_step(refs[:1], +1, step=1e-4) == pytest.approx({"DC3.ch1.level": 0.1591})
+    b.fine_step(refs[:1], -1, step=1e-4)
+    with pytest.raises(Exception, match="一台或兩台"):
+        b.fine_step(refs + ["DC1.ch1.level"], +1)
     assert b.output(refs, True) == {"DC3.ch1.level": True, "DC4.ch1.level": True}
     # 超過上限拒絕
     with pytest.raises(Exception):

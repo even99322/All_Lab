@@ -180,9 +180,12 @@ def install_windows(setup: Path, app_exe: Path | None = None) -> Path:
     """Run the Inno Setup installer silently after this program quits, then start LabLogViewer again."""
     app_exe = app_exe or Path(sys.executable).resolve()
     script = setup.with_name("install_update.cmd")
+    # v2.1.3: wait for this LabLogViewer to exit ("timeout" cannot run without a console: ping waits instead)
     script.write_text(
         "@echo off\r\n"
-        "timeout /t 2 /nobreak >nul\r\n"                       # let LabLogViewer close first
+        f"set PID={os.getpid()}\r\n"
+        ":wait\r\n"
+        'tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)\r\n'
         f'"{setup}" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /NOCANCEL\r\n'
         f'start "" "{app_exe}"\r\n', encoding="utf-8")
     subprocess.Popen(["cmd.exe", "/c", str(script)], **_detached())

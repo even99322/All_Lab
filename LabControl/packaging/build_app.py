@@ -1,6 +1,6 @@
 """打包 Lab Control 成獨立程式（PyInstaller）。在要打包的作業系統上執行（PyInstaller 不能跨平台編譯）：
 
-    Windows：雙擊 packaging/build_windows.bat     → dist/LabControl_v<版本>_windows.exe（單一執行檔）
+    Windows：雙擊 packaging/build_windows.bat     → dist/LabControl_v<版本>_windows-setup.exe（安裝程式；需要 Inno Setup）
     macOS：  雙擊 packaging/build_macos.command   → dist/LabControl_v<版本>_macos-<晶片>.dmg（裡面是 Lab Control.app）
 
 或手動：
@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 NAME = "LabControl"
@@ -144,13 +145,35 @@ def pyinstaller(extra, work: Path) -> None:
     run(args + list(extra) + [ROOT / "main.py"])
 
 
+def iscc() -> Optional[str]:
+    """Inno Setup 的編譯器（https://jrsoftware.org/isdl.php，或 winget install JRSoftware.InnoSetup）。"""
+    found = shutil.which("iscc") or shutil.which("ISCC")
+    if found:
+        return found
+    for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles"),
+                 os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs")):
+        if base and Path(base, "Inno Setup 6", "ISCC.exe").exists():
+            return str(Path(base, "Inno Setup 6", "ISCC.exe"))
+    return None
+
+
 def build_windows(v: str, work: Path) -> Path:
-    pyinstaller(["--onefile", "--windowed", "--version-file", version_file(v, work)], work)
-    out = ROOT / "dist" / f"{NAME}_v{v}_windows.exe"
-    if out.exists():
-        out.unlink()
-    (ROOT / "dist" / f"{NAME}.exe").rename(out)
-    return out
+    """0.0.28 起：資料夾版（dist/LabControl/LabControl.exe）＋ Inno Setup 安裝程式
+    dist/LabControl_v<版本>_windows-setup.exe（跟讀檔程式一樣：裝到 %LOCALAPPDATA%\\Programs\\Lab Control，
+    開始功能表、桌面捷徑、解除安裝；不需要系統管理員）。"""
+    pyinstaller(["--windowed", "--version-file", version_file(v, work)], work)
+    compiler = iscc()
+    if compiler is None:
+        raise SystemExit("找不到 Inno Setup（ISCC.exe）。請先安裝 https://jrsoftware.org/isdl.php（或在命令列執行 "
+                         "winget install JRSoftware.InnoSetup），再重新打包。")
+    if not self_test(windows_exe()):
+        raise SystemExit("✖ 自我檢查失敗：請把上面的訊息傳給開發者")
+    run([compiler, f"/DAppVersion={v}", ROOT / "packaging" / "labcontrol.iss"])
+    return ROOT / "dist" / f"{NAME}_v{v}_windows-setup.exe"
+
+
+def windows_exe() -> Path:
+    return ROOT / "dist" / NAME / f"{NAME}.exe"
 
 
 def build_macos(v: str, work: Path) -> Path:
@@ -223,7 +246,9 @@ def main() -> int:
         print("請在 Windows 或 macOS 上執行（PyInstaller 不能跨平台編譯）；Linux 只能 --check")
         return 1
     print(f"\n✔ 完成：{out}（{out.stat().st_size / 1e6:.0f} MB）", flush=True)
-    if not self_test(out):
+    if sys.platform == "win32" and "--check" not in sys.argv:
+        pass                                             # 安裝程式做之前已經自我檢查過
+    elif not self_test(out):
         print("✖ 自我檢查失敗：請把上面的訊息傳給開發者")
         return 1
     if "--check" not in sys.argv:

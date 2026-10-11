@@ -278,6 +278,85 @@ def build_labber_view(h5file) -> dict[str, VNode]:
     return tree
 
 
+# ---- Lab Control raw files (.lm.h5, schema "labcontrol/1"), v2.1.3 --------------------------------
+RAW_SCHEMA_PREFIX = "labcontrol/"
+
+
+def is_labcontrol_raw(h5file) -> bool:
+    """Lab Control's raw record (``_raw/<name>_<time>.lm.h5``): axes/, channels/<name>/data, setpoints."""
+    try:
+        return (_s(h5file.attrs.get("schema", "")).startswith(RAW_SCHEMA_PREFIX)
+                and "channels" in h5file and "setpoints" in h5file)
+    except Exception:
+        return False
+
+
+def raw_as_nc(h5file):
+    """The raw record as an in-memory Lab Control .nc file (point layout): every measured point in order,
+    the swept values in display units, traces with their x axis, the instrument snapshot. Read-only copy."""
+    import h5py
+
+    root = {str(k): h5file.attrs[k] for k in h5file.attrs}
+    try:
+        meta = json.loads(_s(root.get("metadata", "")) or "{}")
+    except ValueError:
+        meta = {}
+    setpoints = np.asarray(h5file["setpoints"][()], dtype=float)
+    n = int(setpoints.shape[0])
+    mem = h5py.File(f"labcontrol-raw-{id(h5file)}", "w", driver="core", backing_store=False)
+    mem.attrs.update({"schema": "labcontrol-nc/1", "name": _s(root.get("name", "")), "created": _s(root.get("created", "")),
+                      "layout": "point", "complete": 1 if bool(_scalar(root.get("complete", True))) else 0,
+                      "comment": "", "tags": "", "user": "",
+                      "labcontrol": json.dumps({"snapshot": meta.get("snapshot") or {},
+                                                "experiment": meta.get("experiment") or {}})})
+    point = mem.create_dataset("point", data=np.arange(n))
+    point.make_scale("point")
+    used = {"point"}
+
+    def unique(name: str) -> str:
+        base = "".join(c if c.isalnum() or c in "_-" else "_" for c in name) or "axis"
+        name, k = base, 2
+        while name in used or name in mem:
+            name, k = f"{base}_{k}", k + 1
+        used.add(name)
+        return name
+
+    axes = h5file["axes"] if "axes" in h5file else {}
+    for index in range(setpoints.shape[1] if setpoints.ndim == 2 else 0):
+        info = dict(axes[str(index)].attrs) if str(index) in axes else {}
+        scale = float(_scalar(info.get("display_scale", 1.0)) or 1.0)
+        label = _s(info.get("name", f"axis {index}")) or f"axis {index}"
+        var = mem.create_dataset(unique(label), data=setpoints[:, index] * scale)
+        var.attrs.update({"units": _s(info.get("display_unit", info.get("unit", ""))), "long_name": label,
+                          "target": _s(info.get("target", "")) or label, "si_scale": scale})
+        var.dims[0].attach_scale(point)
+    for name, group in h5file["channels"].items():
+        if "data" not in group:
+            continue
+        a = dict(group.attrs)
+        data = np.asarray(group["data"][()])
+        if data.ndim == 2 and "x" in group:
+            x_name = unique(_s(a.get("x_name", "Frequency")) or "x")
+            x = mem.create_dataset(x_name, data=np.asarray(group["x"][()], dtype=float))
+            x.attrs.update({"units": _s(a.get("x_unit", "")), "long_name": _s(a.get("x_name", x_name))})
+            x.make_scale(x_name)
+            var = mem.create_dataset(unique(name), data=data)
+            var.dims[0].attach_scale(point)
+            var.dims[1].attach_scale(x)
+        elif data.ndim == 1:
+            var = mem.create_dataset(unique(name), data=data)
+            var.dims[0].attach_scale(point)
+        else:
+            continue
+        var.attrs.update({"units": _s(a.get("unit", "")), "long_name": _s(a.get("export_name", name)) or name,
+                          "channel": _s(a.get("name", name)) or name, "source": _s(a.get("source", ""))})
+    if "timestamps" in h5file:
+        ts = mem.create_dataset("timestamp", data=np.asarray(h5file["timestamps"][()], dtype=float))
+        ts.attrs["units"] = "s"
+        ts.dims[0].attach_scale(point)
+    return mem
+
+
 class NetCDFComplexTraceWriter:
     """De-background for Lab Control .nc files: write processed entries back into the complex NetCDF
     variable of a copied file (same interface as hdf5_processing_writer.HDF5ComplexTraceWriter).

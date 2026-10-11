@@ -165,16 +165,20 @@ class HDF5Reader:
         # Labber-shaped virtual tree so the parser / Experiment read them unchanged.
         self._virtual = None
         try:
-            from app.core.labcontrol_nc import build_labber_view, is_labcontrol_nc
+            from app.core.labcontrol_nc import build_labber_view, is_labcontrol_nc, is_labcontrol_raw, raw_as_nc
 
             if is_labcontrol_nc(self._file):
                 self._virtual = build_labber_view(self._file)
+            elif is_labcontrol_raw(self._file):         # v2.1.3: Lab Control _raw/*.lm.h5 (read-only)
+                self._raw_nc = raw_as_nc(self._file)
+                self._virtual = build_labber_view(self._raw_nc)
+                self._virtual_raw = True
         except Exception:
             self._virtual = None
 
     @property
     def is_labcontrol_nc(self) -> bool:
-        return self._virtual is not None
+        return self._virtual is not None and not getattr(self, "_virtual_raw", False)
 
     def _vnode(self, path: str):
         key = "/" + path.strip("/") if path.strip("/") else "/"
@@ -207,6 +211,10 @@ class HDF5Reader:
             if self._file is not None:
                 self._file.close()
                 self._file = None
+            raw = getattr(self, "_raw_nc", None)
+            if raw is not None:
+                raw.close()
+                self._raw_nc = None
 
     def __enter__(self) -> "HDF5Reader":
         return self

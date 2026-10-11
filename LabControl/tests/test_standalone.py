@@ -389,3 +389,35 @@ def test_boot_broken_code_package_falls_back_immediately(tmp_path):
     assert r["version"] == __version__ and not r["overlay"]
     st = json.loads((tmp_path / "code" / "state.json").read_text())
     assert "9.9.5" in st["bad"] and "ImportError" in st["last_error"]
+
+
+def test_windows_setup_update_runs_the_installer_after_exit(tmp_path, monkeypatch):
+    """0.0.28：Windows 版改用安裝程式：程式內更新下載 *setup*.exe，Lab Control 結束後安靜安裝並重開。"""
+    import hashlib
+
+    data = b"MZ setup"
+    monkeypatch.setattr(selfupdate, "FROZEN", True)
+    monkeypatch.setattr(selfupdate, "this_platform", lambda: "windows")
+    monkeypatch.setattr(selfupdate, "current_executable", lambda: tmp_path / "old" / "LabControl.exe")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData"))
+    started = []
+    monkeypatch.setattr(selfupdate.subprocess, "Popen", lambda args, **kw: started.append(args))
+    def fetch(info, folder, progress=None):
+        (folder / info["name"]).write_bytes(data)
+        return folder / info["name"]
+    monkeypatch.setattr(selfupdate, "_fetch", fetch)
+    info = {"name": "LabControl_v0.0.29_windows-setup.exe", "url": "http://x/s.exe", "size": len(data),
+            "sha256": hashlib.sha256(data).hexdigest()}
+    exe = selfupdate.update_to(info, args=["--node"])
+    assert exe == tmp_path / "AppData" / "Programs" / "Lab Control" / "LabControl.exe"   # 預設安裝位置
+    script = Path(started[0][2])
+    text = script.read_text(encoding="utf-8")
+    assert started[0][:2] == ["cmd.exe", "/c"]
+    assert text.index("tasklist") < text.index("/SILENT") < text.index('start ""')
+    assert f'"{exe}" --node' in text and "LabControl_v0.0.29_windows-setup.exe" in text
+    (tmp_path / "old").mkdir()
+    (tmp_path / "old" / "unins000.exe").write_text("")                                  # 用安裝程式裝的 → 同一個位置
+    assert selfupdate.installed_exe() == tmp_path / "old" / "LabControl.exe"
+    with pytest.raises(RuntimeError, match="檢查碼"):
+        selfupdate.update_to(dict(info, sha256="0" * 64))
+    assert selfupdate.is_setup("LabLogViewer_v2.1.3_windows-setup.exe") and not selfupdate.is_setup("LabControl_v0.0.27_windows.exe")

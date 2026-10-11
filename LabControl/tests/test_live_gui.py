@@ -78,9 +78,11 @@ def test_live_tab_groups_merge_memory_fine(win, monkeypatch):
     refs = [c.members for c in dc.cards]
     assert ["DC3.ch1.level", "DC4.ch1.level"] in refs                  # 預設群組 = 虛擬雙電源 pair
     pair = next(c for c in dc.cards if c.members == ["DC3.ch1.level", "DC4.ch1.level"])
-    assert len(pair.fine) == 2                                         # 兩台 → 有微調
+    assert len(pair.fine) == 3                                         # 兩台 → ＋、－、步進
     single = next(c for c in dc.cards if len(c.members) == 1)
-    assert single.fine == []
+    assert len(single.fine) == 3                                       # 0.0.28：一台也能微調
+    assert pair.step_box.count() == 5 and pair.step_box.itemText(0) == "0.001 mA"
+    assert pair.fine_size() is None                                    # 預設 = 最小步進
     # 微調：+ 只動一台一個最小步進
     st = win.station
     before = {r: st.parameter(r).get() for r in pair.members}
@@ -88,6 +90,15 @@ def test_live_tab_groups_merge_memory_fine(win, monkeypatch):
     assert pump(lambda: sorted(st.parameter(r).get() for r in pair.members) != sorted(before.values()))
     after = sorted(st.parameter(r).get() for r in pair.members)
     assert after[1] - after[0] == pytest.approx(1e-6, abs=1e-9)
+    pair.step_box.setCurrentIndex(2)                                   # 0.1 mA，記在這台電腦
+    assert pair.fine_size() == pytest.approx(1e-4) and dc.step_for(pair.members) == pytest.approx(1e-4)
+    before = sorted(st.parameter(r).get() for r in pair.members)
+    dc.fine_step(pair, +1)
+    assert pump(lambda: sorted(st.parameter(r).get() for r in pair.members) != before)
+    assert max(st.parameter(r).get() for r in pair.members) == pytest.approx(before[0] + 1e-4)
+    dc.fine_step(pair, -1)
+    assert pump(lambda: sorted(st.parameter(r).get() for r in pair.members) == pytest.approx(before))
+    pair.step_box.setCurrentIndex(0)
     # 記憶：M1 記住 master 目前值 → 改變後 recall 會斜坡回去
     assert pump(lambda: dc.levels.get("DC3.ch1.level") is not None)
     pair = next(c for c in dc.cards if c.members[0] == "DC3.ch1.level")

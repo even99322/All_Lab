@@ -812,6 +812,10 @@ class VNAPanel(QtWidgets.QWidget):
         run_bg(lambda: be.describe(name), ok, lambda m: self.message.emit(f"讀取 {name} 參數失敗：{m}"))
 
     def _build_form(self) -> None:
+        if not hasattr(self, "_wheel_apply"):
+            self._wheel_apply = QtCore.QTimer(self)
+            self._wheel_apply.setSingleShot(True)
+            self._wheel_apply.timeout.connect(lambda: self.dirty and not self.busy and self.apply())
         for w in list(self.edits.values()) + list(self.labels.values()):
             w.setParent(None)
             w.deleteLater()
@@ -827,8 +831,11 @@ class VNAPanel(QtWidgets.QWidget):
                 e: QtWidgets.QWidget = QtWidgets.QCheckBox()
                 e.clicked.connect(lambda _c, k=k: self._mark(k))
             elif p.get("settable"):
-                e = QtWidgets.QLineEdit()
+                from ..digit_edit import WheelLineEdit
+
+                e = WheelLineEdit()                  # 0.0.28：滾輪 / ↑↓ 調整游標那一位，停手 0.7 秒後寫入 VNA
                 e.textEdited.connect(lambda _t, k=k: self._mark(k))
+                e.stepped.connect(lambda k=k: (self._mark(k), self._wheel_apply.start(700)))
                 e.returnPressed.connect(self.apply)
                 e.setMinimumWidth(70)
             else:

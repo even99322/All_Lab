@@ -23,6 +23,7 @@ class QuickPreviewData:
     z_min: float | None = None
     z_max: float | None = None
     restored: bool = False
+    metadata: list | None = None          # v2.1.3: quick_metadata.summarize sections (Browser Metadata pane)
 
 
 def _channel_order(experiment) -> list[str]:
@@ -115,8 +116,21 @@ def _build_1d_preview(experiment, channel_name: str, transform: str, trace_index
 
 
 def build_quick_preview(path: str, display_state: dict[str, Any] | None = None) -> QuickPreviewData:
-    """Load one useful 1D trace or 2D slice, then close the HDF5 file."""
+    """Load one useful 1D trace or 2D slice and the measurement settings, then close the HDF5 file."""
     with load_experiment(path) as experiment:
+        try:
+            from app.core.quick_metadata import summarize
+
+            metadata = summarize(experiment, lambda key: key)   # "meta.*" keys: translated when shown
+        except Exception:                       # the settings pane never stops the preview
+            metadata = None
+        preview = _build_quick_preview(experiment, display_state)
+        preview.metadata = metadata
+        return preview
+
+
+def _build_quick_preview(experiment, display_state: dict[str, Any] | None) -> QuickPreviewData:
+    if True:
         channels = _channel_order(experiment)
         if not channels:
             raise ValueError("This log has no plottable measurement channels.")

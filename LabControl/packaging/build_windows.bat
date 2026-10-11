@@ -1,6 +1,7 @@
 @echo off
-rem Lab Control: build a single Windows .exe (double-click this file).
-rem Needs Python 3.12 (https://www.python.org/downloads/ , tick "Add python.exe to PATH").
+rem Lab Control: build the Windows installer LabControl_v<version>_windows-setup.exe (double-click this file).
+rem Needs Python 3.12 (https://www.python.org/downloads/ , tick "Add python.exe to PATH")
+rem and Inno Setup 6 (https://jrsoftware.org/isdl.php , or: winget install JRSoftware.InnoSetup).
 rem Do NOT click inside this window while it runs (Windows pauses it); if you did, press Esc.
 setlocal
 set PYTHONUTF8=1
@@ -28,7 +29,7 @@ echo.
 echo [3/3] %time%  Building and self-testing (3-8 minutes, lots of INFO lines) ...
 %VPY% packaging\build_app.py || goto fail
 echo.
-echo %time%  DONE. Drop dist\LabControl_v*_windows.exe into the web console (portal - console - publish all).
+echo %time%  DONE. Drop dist\LabControl_v*_windows-setup.exe into the web console (portal - console - publish all).
 explorer dist
 pause
 exit /b 0
