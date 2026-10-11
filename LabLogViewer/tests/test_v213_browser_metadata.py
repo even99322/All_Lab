@@ -86,6 +86,7 @@ def test_browser_shows_metadata_next_to_the_comment(qapp, tmp_path):
     folder.mkdir()
     shutil.copy(NC, folder / "sweep.nc")
     browser = BrowserWindow(star_store=StarStore(tmp_path / "stars.json"))
+    browser.localizer.set_language("en")
     browser.resize(1400, 900)
     browser.show()
     assert browser.metadata_title.text() == "Metadata"

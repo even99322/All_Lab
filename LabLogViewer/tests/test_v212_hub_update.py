@@ -309,6 +309,7 @@ def test_settings_about_has_check_for_updates(qapp, localizer, monkeypatch):
     assert calls == [__version__]
     localizer.set_language("zh_TW")
     assert dialog.check_update_button.text() == "檢查更新"
+    localizer.set_language("en")
 
 
 def test_watcher_pushes_a_notice_into_the_bell(qapp, hub, monkeypatch):

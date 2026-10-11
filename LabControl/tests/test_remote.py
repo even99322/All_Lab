@@ -187,7 +187,7 @@ def test_late_joiner_and_hub_restart_reset(node, hub, tmp_path):
 
 def test_remote_stop(node, hub, station, tmp_path):
     rn = RemoteNode(hub, "QEL-PC")
-    sch = _scheme(stop=158.70)                           # 201 點：夠長
+    sch = _scheme(stop=159.00)                           # 801 點：夠長（0.0.28 沒有 _raw，量得更快）
     sch.output["root"] = str(tmp_path / "data")
     rn.call("run_scheme", scheme=sch.to_dict())
     with pytest.raises(Exception):
