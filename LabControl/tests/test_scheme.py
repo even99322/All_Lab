@@ -138,7 +138,7 @@ def test_scheme_runs_end_to_end(mst, cat, tmp_path, key, files):
     paths = exp.export(ds, out)
     assert len(paths) == files and all(p.exists() for p in paths)
     if key == "2d_one_file":                              # 多維 Labber 對應：外層為主排序、內層在前
-        spec = les.build_labber_spec(str(out.raw_path))
+        spec = les.build_labber_spec(str(paths[0]))       # 0.0.28 起沒有 _raw/：用匯出的原生 HDF5
         assert [c["name"] for c in spec["step_channels"][:2]] == ["磁鐵 B 電流", "磁鐵 A 電流"]
         np.testing.assert_allclose(spec["entry_axes"][0][1], [50, 50, 50, 51, 51, 51, 52, 52, 52])
     else:

@@ -53,18 +53,19 @@ jobs:
           Start-Process python -ArgumentList $args -RedirectStandardOutput hub.log -RedirectStandardError hub.err -NoNewWindow
           for ($i = 0; $i -lt 60; $i++) { Start-Sleep 1; if ((Get-Content hub.log -Raw) -match "ready") { break } }
           Get-Content hub.log
-          (Invoke-WebRequest http://127.0.0.1:18765/get/setup.txt -UseBasicParsing).Content
+          $plan = (Invoke-WebRequest http://127.0.0.1:18765/get/setup.txt -UseBasicParsing).Content
+          Write-Output "::notice title=setup.txt::$($plan -replace "`n", '%0A')"
       - name: One-click setup (silent) from the Hub
         shell: pwsh
         run: |
           $boot = (Get-ChildItem files -Filter "QELSetup_*.exe").FullName
           $p = Start-Process $boot -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/HUB=http://127.0.0.1:18765", "/LOG=$PWD\qelsetup.log" -Wait -PassThru
-          Get-Content qelsetup.log -Tail 40
-          if ($p.ExitCode -ne 0) { throw "QELSetup exit code $($p.ExitCode)" }
+          $tail = (Get-Content qelsetup.log -Tail 25) -join "%0A"
+          if ($p.ExitCode -ne 0) { Write-Output "::error title=QELSetup exit $($p.ExitCode)::$tail"; throw "QELSetup exit code $($p.ExitCode)" }
           $lc = "$env:LOCALAPPDATA\Programs\Lab Control\LabControl.exe"
           $llv = "$env:LOCALAPPDATA\Programs\LabLogViewer\LabLogViewer.exe"
-          if (-not (Test-Path $lc)) { throw "Lab Control not installed" }
-          if (-not (Test-Path $llv)) { throw "LabLogViewer not installed" }
+          if (-not (Test-Path $lc)) { Write-Output "::error title=Lab Control not installed::$tail"; throw "Lab Control not installed" }
+          if (-not (Test-Path $llv)) { Write-Output "::error title=LabLogViewer not installed::$tail"; throw "LabLogViewer not installed" }
           Get-ChildItem "$env:LOCALAPPDATA\Programs\Lab Control" | Select-Object -First 10
       - name: Installed Lab Control --self-test
         shell: pwsh
@@ -72,15 +73,17 @@ jobs:
           $env:LABCONTROL_SELF_TEST_REPORT = "$env:RUNNER_TEMP\lc_self_test.txt"
           $env:LABCONTROL_NO_UPDATE_CHECK = "1"
           $p = Start-Process "$env:LOCALAPPDATA\Programs\Lab Control\LabControl.exe" -ArgumentList "--self-test" -Wait -PassThru
-          Get-Content $env:LABCONTROL_SELF_TEST_REPORT
-          if ($p.ExitCode -ne 0) { throw "Lab Control self-test failed" }
+          $r = (Get-Content $env:LABCONTROL_SELF_TEST_REPORT) -join "%0A"
+          Write-Output "::notice title=Lab Control self-test::$r"
+          if ($p.ExitCode -ne 0) { Write-Output "::error title=Lab Control self-test::$r"; throw "Lab Control self-test failed" }
       - name: Installed LabLogViewer --self-test
         shell: pwsh
         run: |
           $env:LABLOGVIEWER_SELF_TEST_REPORT = "$env:RUNNER_TEMP\llv_self_test.txt"
           $p = Start-Process "$env:LOCALAPPDATA\Programs\LabLogViewer\LabLogViewer.exe" -ArgumentList "--self-test" -Wait -PassThru
-          Get-Content $env:LABLOGVIEWER_SELF_TEST_REPORT
-          if ($p.ExitCode -ne 0) { throw "LabLogViewer self-test failed" }
+          $r = (Get-Content $env:LABLOGVIEWER_SELF_TEST_REPORT) -join "%0A"
+          Write-Output "::notice title=LabLogViewer self-test::$r"
+          if ($p.ExitCode -ne 0) { Write-Output "::error title=LabLogViewer self-test::$r"; throw "LabLogViewer self-test failed" }
       - name: Second run updates in place (same folders)
         shell: pwsh
         run: |
@@ -102,6 +105,12 @@ jobs:
       - name: Install packages
         run: python -m pip install --disable-pip-version-check -r packaging/requirements-build.txt pytest xarray h5netcdf
       - name: De-background, .nc, metadata, Measurement interface (Windows)
+        shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q -p no:cacheprovider tests/test_v015b_debackground.py tests/test_v210_labcontrol_nc.py tests/test_v213_browser_metadata.py tests/test_v212_hub_update.py
+        run: |
+          python -m pytest -q -p no:cacheprovider -rfE --tb=line tests/test_v015b_debackground.py tests/test_v210_labcontrol_nc.py tests/test_v213_browser_metadata.py tests/test_v212_hub_update.py *> pytest.txt
+          $code = $LASTEXITCODE
+          $tail = (Get-Content pytest.txt -Tail 40 | ForEach-Object { $_ -replace '%', '%25' }) -join "%0A"
+          if ($code -ne 0) { Write-Output "::error title=pytest (Windows)::$tail"; exit $code }
+          Write-Output "::notice title=pytest (Windows)::$tail"
