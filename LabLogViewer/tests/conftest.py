@@ -38,6 +38,7 @@ def isolated_user_data(tmp_path_factory, monkeypatch):
     home = tmp_path_factory.mktemp("home")
     (home / "Documents").mkdir()
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))      # Windows: Path.home() reads USERPROFILE, not HOME
     from app.core import data_location
 
     data_location._reset_for_tests()

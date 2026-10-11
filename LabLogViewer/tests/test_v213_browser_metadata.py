@@ -244,7 +244,7 @@ def test_data_drag_carries_the_file(qapp, tmp_path, monkeypatch):
             return action
     monkeypatch.setattr(ui, "QDrag", FakeDrag)
     lst.startDrag(Qt.CopyAction)
-    assert seen == {"urls": [str(data)], "token": True}
+    assert [Path(u) for u in seen["urls"]] == [data] and seen["token"]
 
 
 # ---- Lab Control raw records (.lm.h5) open read-only ------------------------------------------------

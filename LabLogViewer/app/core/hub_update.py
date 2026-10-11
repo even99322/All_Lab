@@ -187,7 +187,7 @@ def install_windows(setup: Path, app_exe: Path | None = None) -> Path:
         ":wait\r\n"
         'tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)\r\n'
         f'"{setup}" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /NOCANCEL\r\n'
-        f'start "" "{app_exe}"\r\n', encoding="utf-8")
+        f'start "" "{app_exe}"\r\n', encoding="utf-8", newline="")   # CRLF as written (no \r\r\n on Windows)
     subprocess.Popen(["cmd.exe", "/c", str(script)], **_detached())
     return script
 

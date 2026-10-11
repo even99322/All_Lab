@@ -5,6 +5,12 @@
 
 ---
 
+## 0.0.28 — 2026-10-11
+
+Windows 一鍵安裝（從 NAS 下載量測＋讀檔並安裝）、Lab Control 改用安裝程式；修正檔名沒套用（存成 aaa_1）；不再存 _raw/；DC 微調可選步進；VNA 參數滾輪調位數；流程圖顯示 VNA 設定；讀檔程式「介面 → 量測」與拖曳。詳見 [docs/releases/v0.0.28.md](docs/releases/v0.0.28.md)。
+
+---
+
 ## 0.0.27 — 2026-10-11
 
 程式內更新推播與版本檢查：Hub 一發佈新版，Lab Control 與 LabLogViewer（2.1.2）幾秒內通知，按「立即更新」就在程式裡更新；Lab Control 只改程式碼時只下載約 1 MB 的「功能更新包」，不用換整個 .exe。詳見 [docs/releases/v0.0.27.md](docs/releases/v0.0.27.md)。

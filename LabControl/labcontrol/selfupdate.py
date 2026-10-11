@@ -490,7 +490,7 @@ def run_setup_after_exit(setup: Path, args: Optional[List[str]] = None) -> Path:
         f'"{setup}" /SILENT /SUPPRESSMSGBOXES /NORESTART /NOCANCEL /CLOSEAPPLICATIONS\r\n'
         "set PYINSTALLER_RESET_ENVIRONMENT=1\r\n"
         f'start "" "{exe}" {line_args}\r\n'
-        f'del "{setup}"\r\n', encoding="utf-8")
+        f'del "{setup}"\r\n', encoding="utf-8", newline="")     # CRLF as written (no \r\r\n on Windows)
     kw: Dict[str, Any] = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
                           "close_fds": True}
     if os.name == "nt":
