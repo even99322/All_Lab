@@ -42,7 +42,14 @@ jobs:
         run: |
           python packaging/prepare_build.py
           python packaging/make_icons.py
-          pyinstaller --noconfirm --log-level WARN packaging/lablogviewer.spec
+          set +e
+          pyinstaller --noconfirm --log-level WARN packaging/lablogviewer.spec > pyi.txt 2>&1
+          status=$?
+          set -e
+          tail -30 pyi.txt
+          echo "::notice title=dist ${{ matrix.arch }}::$(ls -la dist | sed ':a;N;$!ba;s/\n/%0A/g')"
+          if [ $status -ne 0 ] || [ ! -d dist/LabLogViewer.app ]; then
+            echo "::error title=pyinstaller ${{ matrix.arch }}::$(grep -v '^[0-9]* WARNING' pyi.txt | tail -25 | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; fi
       - name: Signature is valid (otherwise macOS says "damaged")
         run: |
           if ! out=$(codesign --verify --deep --strict --verbose=2 dist/LabLogViewer.app 2>&1); then
