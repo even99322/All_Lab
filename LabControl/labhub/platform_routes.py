@@ -426,9 +426,25 @@ def _get_setup_plan(h: Handler) -> None:
     """Windows 一鍵安裝程式（QELSetup）讀的清單：量測、讀檔最新的安裝程式（見 appupdates.setup_plan）。"""
     from .appupdates import setup_plan
 
-    body = setup_plan(_plat(h)).encode("utf-8")
+    q = h._query()
+    body = setup_plan(_plat(h), q.get("platform", "windows"), q.get("arch", "x86_64")).encode("utf-8")
     h.send_response(200)
     h.send_header("Content-Type", "text/plain; charset=utf-8")
+    h.send_header("Content-Length", str(len(body)))
+    h.send_header("Cache-Control", "no-store")
+    h.end_headers()
+    h.wfile.write(body)
+
+
+@route("GET", r"/get/mac(?:\.sh)?", auth=False)
+def _get_mac_script(h: Handler) -> None:
+    """Mac 安裝腳本：curl -fsSL http://<NAS>:8765/get/mac | bash（用 curl 下載，不會「已損毀」）。"""
+    from .appupdates import mac_script
+
+    host = h.headers.get("Host") or f"{h.server.server_address[0]}:{h.server.server_address[1]}"
+    body = mac_script(f"http://{host}").encode("utf-8")
+    h.send_response(200)
+    h.send_header("Content-Type", "text/x-shellscript; charset=utf-8")
     h.send_header("Content-Length", str(len(body)))
     h.send_header("Cache-Control", "no-store")
     h.end_headers()

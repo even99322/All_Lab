@@ -82,8 +82,62 @@ jobs:
           $p = Start-Process $boot -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/HUB=http://127.0.0.1:18765" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "second QELSetup run failed" }
           $dirs = (Get-ChildItem "$env:LOCALAPPDATA\Programs" -Directory).Name -join ", "
+          foreach ($d in @("Lab Control", "LabLogViewer")) {
+            $mb = [math]::Round(((Get-ChildItem "$env:LOCALAPPDATA\Programs\$d" -Recurse | Measure-Object Length -Sum).Sum) / 1MB)
+            Write-Output "::notice title=size $d::$mb MB installed" }
+          Get-ChildItem files | ForEach-Object { Write-Output "::notice title=file::$($_.Name) $([math]::Round($_.Length / 1MB)) MB" }
           Write-Output "::notice title=Installed folders::$dirs"
           Stop-Process -Id $hub.Id -ErrorAction SilentlyContinue
+
+  mac-install:
+    name: Mac one-line install (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-15
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v5
+        with:
+          run-id: ${{ inputs.lc_run }}
+          github-token: ${{ github.token }}
+          name: LabControl-macos-${{ matrix.arch }}
+          path: files
+      - uses: actions/download-artifact@v5
+        with:
+          run-id: ${{ inputs.llv_run }}
+          github-token: ${{ github.token }}
+          name: LabLogViewer-macOS-${{ matrix.arch }}-dmg
+          path: files
+      - name: Test Hub, curl | bash, signatures, self-tests
+        run: |
+          set -u
+          note() { echo "::$1 title=$2::$(echo "$3" | tail -30 | sed ':a;N;$!ba;s/\n/%0A/g')"; }
+          ls -la files
+          python LabControl/tools/serve_test_hub.py "$RUNNER_TEMP/hub" 18766 files/*.dmg > hub.log 2>&1 &
+          for i in $(seq 1 60); do grep -q ready hub.log && break; sleep 1; done
+          out=$(curl -fsSL http://127.0.0.1:18766/get/mac | bash 2>&1) || { note error "curl | bash" "$out"; exit 1; }
+          note notice "curl | bash ${{ matrix.arch }}" "$out"
+          for app in "/Applications/Lab Control.app" "/Applications/LabLogViewer.app"; do
+            out=$(codesign --verify --deep --strict --verbose=2 "$app" 2>&1) || { note error "codesign $app" "$out"; exit 1; }
+            q=$(xattr -p com.apple.quarantine "$app" 2>/dev/null || true)
+            [ -z "$q" ] || { note error "quarantine left on $app" "$q"; exit 1; }
+          done
+          export LABCONTROL_SELF_TEST_REPORT="$RUNNER_TEMP/lc.txt" LABCONTROL_NO_UPDATE_CHECK=1
+          "/Applications/Lab Control.app/Contents/MacOS/LabControl" --self-test || { note error "Lab Control self-test" "$(cat $LABCONTROL_SELF_TEST_REPORT)"; exit 1; }
+          note notice "Lab Control self-test ${{ matrix.arch }}" "$(cat $LABCONTROL_SELF_TEST_REPORT)"
+          export LABLOGVIEWER_SELF_TEST_REPORT="$RUNNER_TEMP/llv.txt" QT_QPA_PLATFORM=offscreen
+          "/Applications/LabLogViewer.app/Contents/MacOS/LabLogViewer" --self-test || { note error "LabLogViewer self-test" "$(cat $LABLOGVIEWER_SELF_TEST_REPORT)"; exit 1; }
+          note notice "LabLogViewer self-test ${{ matrix.arch }}" "$(grep -E 'Qt Graphs|SELF-TEST|FAIL' $LABLOGVIEWER_SELF_TEST_REPORT)"
+          du -sh /Applications/LabLogViewer.app "/Applications/Lab Control.app" | while read l; do echo "::notice title=size::$l"; done
 
   llv-windows-tests:
     runs-on: windows-latest

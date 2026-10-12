@@ -23,7 +23,8 @@ import traceback
 
 MODULES = ["numpy", "scipy", "scipy.signal", "scipy.optimize", "h5py", "pyqtgraph", "matplotlib",
            "matplotlib.backends.backend_agg", "imageio", "imageio_ffmpeg", "cryptography", "ezdxf", "shapely",
-           "pptx", "PySide6.QtGraphs", "PySide6.QtGraphsWidgets", "PySide6.QtSvg", "PySide6.QtNetwork"]
+           "pptx", "PySide6.QtGraphs", "PySide6.QtGraphsWidgets", "PySide6.QtSvg", "PySide6.QtNetwork",
+           "PySide6.QtDataVisualization", "PySide6.QtQuickWidgets", "PySide6.QtOpenGLWidgets"]
 
 
 def _say(line: str) -> None:
@@ -94,6 +95,23 @@ def run() -> int:
         return f"{articles} Help articles, {images} pictures, {models} YIG models"
 
     check("bundled files", bundled_files)
+
+    def graphs_qml():
+        """v2.1.3: the build leaves out unused Qt parts; the 3D surface (Qt Graphs on Qt Quick 3D) must still load."""
+        from PySide6.QtCore import QUrl
+        from PySide6.QtQml import QQmlComponent, QQmlEngine
+
+        engine = QQmlEngine()
+        component = QQmlComponent(engine)
+        component.setData(b"import QtQuick\nimport QtQuick3D\nimport QtGraphs\n"
+                          b"Item { Surface3D { anchors.fill: parent } }", QUrl())
+        made = component.create()
+        if made is None:
+            raise RuntimeError(component.errorString().strip() or "Qt Graphs QML could not be created")
+        made.deleteLater()
+        return "QtQuick, QtQuick3D, QtGraphs Surface3D"
+
+    check("Qt Graphs 3D (QML)", graphs_qml)
 
     def licences():
         from app._guard import license as licenses

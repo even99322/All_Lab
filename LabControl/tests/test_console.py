@@ -287,3 +287,26 @@ def test_windows_one_click_setup_plan(hub):
     from labhub.packages import identify_binary
 
     assert identify_binary("QELSetup_v1.0.0_windows.exe")["target"] == "setup"
+
+
+def test_mac_install_script_and_plan(hub):
+    """0.0.29：Mac 一行安裝（curl -fsSL http://<NAS>/get/mac | bash）：清單選這台 Mac 晶片的 .dmg。"""
+    url, state, owner, alice, ac = hub
+    p = state.platform
+    p.add_release("labcontrol", "0.0.29", "LabControl_v0.0.29_macos-arm64.dmg", b"A", "boss")
+    p.add_release("labcontrol", "0.0.29", "LabControl_v0.0.29_macos-x86_64.dmg", b"X", "boss")
+    p.add_release("lablogviewer", "2.1.4", "LabLogViewer_v2.1.4_macos-universal.dmg", b"U", "boss")
+    p.add_release("lablogviewer", "2.1.3", "LabLogViewer_v2.1.3_macos-arm64.dmg", b"old", "boss")
+    for arch, lc in (("arm64", "LabControl_v0.0.29_macos-arm64.dmg"), ("x86_64", "LabControl_v0.0.29_macos-x86_64.dmg")):
+        code, text = _call(url + f"/get/setup.txt?platform=macos&arch={arch}")
+        rows = [ln.split("|") for ln in text.decode().splitlines() if ln and not ln.startswith("#")]
+        assert [r[2] for r in rows] == [lc, "LabLogViewer_v2.1.4_macos-universal.dmg"]   # 新版優先，再挑晶片
+    code, script = _call(url + "/get/mac")
+    text = script.decode()
+    assert code == 200 and text.startswith("#!/bin/bash") and f'BASE="{url}"' in text
+    assert "shasum -a 256 -c" in text and "xattr -dr com.apple.quarantine" in text and 'main "$@"' in text
+    import shutil
+    import subprocess
+
+    if shutil.which("bash"):
+        assert subprocess.run(["bash", "-n"], input=script, capture_output=True).returncode == 0

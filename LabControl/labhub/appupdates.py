@@ -150,24 +150,80 @@ def setup_info(plat) -> Optional[Dict[str, Any]]:
     return win[0] if win else None
 
 
-def setup_plan(plat) -> str:
-    """一鍵安裝程式讀的清單（純文字，一行一個程式）：
+def _plan_file(plat, mid: str, platform: str, arch: str) -> Optional[Dict[str, Any]]:
+    m = plat.modules().get(mid) or {}
+    files = [dict(f, version=v["version"], url=f"/get/{mid}/{v['version']}/{_q(f['name'])}")
+             for v in m.get("versions") or [] for f in v["files"] if f.get("platform") == platform]
+    if platform == "windows":
+        files = [f for f in files if is_setup_name(f["name"])]
+    else:                                                  # macOS：.dmg；同晶片 > universal > 沒寫
+        files = [f for f in files if f["name"].lower().endswith(".dmg")
+                 and (f.get("arch") or "") in (arch, "universal2", "")]
+    if not files:
+        return None
+    best = max(_pv(f["version"]) for f in files)
+    files = [f for f in files if _pv(f["version"]) == best]
+    files.sort(key=lambda f: 0 if (f.get("arch") or "") == arch else 1 if f.get("arch") == "universal2" else 2)
+    return files[0]
+
+
+def setup_plan(plat, platform: str = "windows", arch: str = "x86_64") -> str:
+    """一鍵安裝讀的清單（純文字，一行一個程式）：
         app|版本|檔名|大小|sha256|網址路徑
-    每個程式取最新的 Windows 安裝程式（*setup*.exe，Inno Setup，能用 /SILENT 安裝）。"""
-    lines = ["# QEL setup plan v1: app|version|file|size|sha256|path"]
+    Windows：每個程式最新的安裝程式（*setup*.exe，Inno Setup，能用 /SILENT 安裝）；
+    macOS（?platform=macos&arch=arm64|x86_64）：最新的 .dmg（同晶片優先），給 /get/mac 安裝腳本。"""
+    platform = "macos" if str(platform).lower().startswith("mac") else "windows"
+    arch = "arm64" if str(arch).lower() in ("arm64", "aarch64") else "x86_64"
+    lines = [f"# QEL setup plan v1 ({platform} {arch}): app|version|file|size|sha256|path"]
     for mid in SETUP_APPS:
-        info = app_info(plat, mid)
-        files = [f for f in info["downloads"] if f.get("platform") == "windows" and is_setup_name(f["name"])]
-        if not files:
-            m = plat.modules().get(mid) or {}
-            files = [dict(f, version=v["version"], url=f"/get/{mid}/{v['version']}/{_q(f['name'])}")
-                     for v in m.get("versions") or [] for f in v["files"]
-                     if f.get("platform") == "windows" and is_setup_name(f["name"])]
-        if not files:
-            continue
-        f = max(files, key=lambda x: _pv(x["version"]))
-        lines.append("|".join([mid, f["version"], f["name"], str(f.get("size", 0)), f.get("sha256", ""), f["url"]]))
+        f = _plan_file(plat, mid, platform, arch)
+        if f is not None:
+            lines.append("|".join([mid, f["version"], f["name"], str(f.get("size", 0)), f.get("sha256", ""),
+                                   f["url"]]))
     return "\n".join(lines) + "\n"
+
+
+MAC_SCRIPT = r"""#!/bin/bash
+# 量子工程平台 Mac 安裝（從實驗室 NAS）：在「終端機」貼上
+#     curl -fsSL __BASE__/get/mac | bash
+# 下載量測（Lab Control）與讀檔（LabLogViewer）這台 Mac 晶片的最新版、檢查 sha256、裝到「應用程式」。
+# 用 curl 下載不會被標成「從網路下載」，所以不會出現「已損毀，無法打開」。只裝一個：QEL_APPS=labcontrol
+set -euo pipefail
+main() {
+  local BASE="__BASE__" APPS="${QEL_APPS:-labcontrol lablogviewer}" ARCH DEST TMP PLAN
+  ARCH=$(uname -m); [ "$ARCH" = "arm64" ] || ARCH="x86_64"
+  DEST="/Applications"; [ -w "$DEST" ] || DEST="$HOME/Applications"; mkdir -p "$DEST"
+  TMP=$(mktemp -d); trap "rm -rf '$TMP'" EXIT
+  echo "量子工程平台：$BASE（$ARCH）→ $DEST"
+  PLAN=$(curl -fsSL "$BASE/get/setup.txt?platform=macos&arch=$ARCH")
+  local n=0 app ver name size sha path mnt src dst
+  while IFS='|' read -r app ver name size sha path; do
+    case "$app" in ""|\#*) continue ;; esac
+    case " $APPS " in *" $app "*) ;; *) continue ;; esac
+    echo "⬇ $name"
+    curl -fL --progress-bar "$BASE$path" -o "$TMP/$name"
+    echo "$sha  $TMP/$name" | shasum -a 256 -c - >/dev/null || { echo "✖ $name 檢查碼不符"; exit 1; }
+    mnt=$(mktemp -d)
+    hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$mnt" "$TMP/$name" >/dev/null
+    src=$(ls -d "$mnt"/*.app | head -1)
+    dst="$DEST/$(basename "$src")"
+    osascript -e "quit app \"$(basename "$src" .app)\"" >/dev/null 2>&1 || true
+    rm -rf "$dst"
+    ditto "$src" "$dst"
+    hdiutil detach "$mnt" -quiet || true
+    xattr -dr com.apple.quarantine "$dst" 2>/dev/null || true
+    echo "✔ $dst（$ver）"
+    n=$((n + 1))
+  done <<< "$PLAN"
+  [ "$n" -gt 0 ] || { echo "✖ 平台上還沒有這台 Mac（$ARCH）的安裝檔"; exit 1; }
+  echo "完成。之後兩個程式都會自己收到更新。"
+}
+main "$@"
+"""
+
+
+def mac_script(base: str) -> str:
+    return MAC_SCRIPT.replace("__BASE__", base.rstrip("/"))
 
 
 def public_file(name: str) -> bool:

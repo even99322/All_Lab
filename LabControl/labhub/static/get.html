@@ -33,6 +33,10 @@ ol li { margin:2px 0; }
 .note b { color:var(--warn); }
 .setup { border:2px solid var(--accent); }
 .setup ul { margin:0; padding-left:1.3em; font-size:.92rem; }
+.setup code { font-size:.85rem; word-break:break-all; }
+.cmd { display:flex; gap:8px; align-items:center; background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+.cmd code { flex:1; font-size:.95rem; }
+.cmd button { border:0; background:var(--accent); color:var(--on); border-radius:8px; padding:6px 12px; font:inherit; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -65,7 +69,7 @@ const steps = {
     "第一次開啟後用論文庫的帳號登入（量測：工具列「平台 ▾ → 登入」）。之後有新版，程式會自己提示並更新。",
   ],
   macos: [
-    "按上面的「下載 Mac 版」，打開 .dmg，把 App 拖到「應用程式」。",
+    "建議用最上面的「Mac 一鍵安裝」（終端機貼一行）。或按下面的「下載 Mac 版」，打開 .dmg，把 App 拖到「應用程式」。",
     "第一次開啟：在「應用程式」裡按右鍵 →「打開」→「打開」（之後直接點兩下就可以）。",
     "第一次開啟後用論文庫的帳號登入。之後有新版，程式會自己提示並更新。",
   ],
@@ -74,11 +78,26 @@ const warn = {
   windows: `<b>瀏覽器說「不常下載，開啟前請確定您信任…」？</b>這是實驗室自己做的程式、沒有向微軟買程式碼簽章，下載的人少，瀏覽器就會這樣提醒，檔案本身沒有問題。<br>
     Edge：在下載清單把滑鼠移到這個檔案 →「…」→「保留」→「顯示更多」→「仍要保留」。Chrome：「保留」。<br>
     只有第一次會遇到：裝好之後的更新由程式自己下載，不會再經過瀏覽器。`,
-  macos: `<b>Mac 說「無法打開，因為無法驗證開發者」？</b>在「應用程式」裡按右鍵 →「打開」，或到「系統設定 → 隱私權與安全性」按「強制打開」。只有第一次需要。`,
+  macos: `<b>Mac 說「已損毀，無法打開」或「無法驗證開發者」？</b>實驗室的程式沒有向 Apple 付費簽章，用瀏覽器下載的就會被擋，檔案沒有壞。
+    用最上面的一行指令安裝就不會；已經裝了的，在終端機執行 <code>xattr -dr com.apple.quarantine "/Applications/Lab Control.app"</code>（讀檔改成 LabLogViewer.app）。只有第一次需要，之後的更新由程式自己下載。`,
 };
 fetch("/get/info").then(r => r.json()).then(info => {
   const apps = info.apps || [];
   const su = info.setup;
+  if (OS === "macos") {                               // Mac：終端機一行安裝（curl 下載不會「已損毀」）
+    const box = document.getElementById("setup");
+    const cmd = `curl -fsSL ${location.origin}/get/mac | bash`;
+    box.innerHTML = `<div><h2>Mac 一鍵安裝　<span class="ver">量測＋讀檔</span></h2>
+      <p class="muted">打開「終端機」，貼上下面這一行按 Enter：從實驗室的 NAS 下載這台 Mac 晶片的最新版，裝到「應用程式」。</p></div>
+      <div class="cmd"><code id="maccmd">${esc(cmd)}</code><button id="copycmd">複製</button></div>
+      <ul><li>只裝一個：在指令前面加 <code>QEL_APPS=labcontrol</code> 或 <code>QEL_APPS=lablogviewer</code>（例如 <code>curl -fsSL ${esc(location.origin)}/get/mac | QEL_APPS=labcontrol bash</code>）。</li>
+      <li>用瀏覽器下載 .dmg 打開時說「已損毀，無法打開」？這是 Mac 對「從網路下載、沒有付費簽章」的程式的阻擋，檔案沒有壞。
+      用上面這一行安裝就不會；已經拖進「應用程式」的，在終端機執行：<br><code>xattr -dr com.apple.quarantine "/Applications/Lab Control.app" "/Applications/LabLogViewer.app"</code></li>
+      <li>裝好之後兩個程式都會自己收到更新，不用再回來下載。</li></ul>`;
+    box.hidden = false;
+    document.getElementById("copycmd").onclick = () => navigator.clipboard.writeText(cmd).then(() => {
+      document.getElementById("copycmd").textContent = "已複製"; });
+  }
   if (su && OS !== "mobile" && OS !== "macos") {
     const box = document.getElementById("setup");
     box.innerHTML = `<div><h2>Windows 一鍵安裝　<span class="ver">量測＋讀檔 · ${esc(su.version)}</span></h2>

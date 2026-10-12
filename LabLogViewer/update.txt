@@ -1650,3 +1650,15 @@ Date: 2026-10-11
     a console) before the silent installer runs.
   - packaging/lablogviewer.spec added (it was missing from the shared source; .gitignore keeps it).
   - tests/test_v213_browser_metadata.py.
+
+v2.1.4 - SMALLER BUILDS (UNUSED QT LEFT OUT)
+Date: 2026-10-12
+
+  - packaging/lablogviewer.spec: PySide6 brings every Qt module (and its QML plugins, through the Qt Quick
+    hooks); LabLogViewer uses Widgets / Gui / Core / Svg / Network / OpenGL / Data Visualization and Qt Graphs
+    on Qt Quick + Quick 3D. The rest is left out of the build: Qt WebEngine (~200 MB), Qt 3D, Charts, Location,
+    Positioning, Multimedia, PDF, Quick Controls / Dialogs, Wayland, Qt5Compat, Sql, Test, labs modules, … and all
+    Qt translations except en / zh_TW / zh_CN. cv2, pandas, sklearn, torch, numba never enter the build.
+    (Linux check build: PySide6 461 MB -> 147 MB.)
+  - app/self_test.py: "Qt Graphs 3D (QML)" creates a Surface3D from QML (QtQuick, QtQuick3D, QtGraphs), so a build
+    that left out something the 3D surface needs fails its self-test; Data Visualization / Quick Widgets imports.

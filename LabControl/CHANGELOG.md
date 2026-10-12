@@ -5,6 +5,12 @@
 
 ---
 
+## 0.0.29 — 2026-10-12
+
+修正 Mac「Lab Control 已損毀，無法打開」（改 Info.plist 後沒有重新簽名）；Mac 從 NAS 一行安裝（`curl -fsSL http://<NAS>:8765/get/mac | bash`）；LabLogViewer 2.1.4 不再打包用不到的 Qt（WebEngine 等）。詳見 [docs/releases/v0.0.29.md](docs/releases/v0.0.29.md)。
+
+---
+
 ## 0.0.28 — 2026-10-11
 
 Windows 一鍵安裝（從 NAS 下載量測＋讀檔並安裝）、Lab Control 改用安裝程式；修正檔名沒套用（存成 aaa_1）；不再存 _raw/；DC 微調可選步進；VNA 參數滾輪調位數；流程圖顯示 VNA 設定；讀檔程式「介面 → 量測」與拖曳。詳見 [docs/releases/v0.0.28.md](docs/releases/v0.0.28.md)。

@@ -192,6 +192,9 @@ def build_macos(v: str, work: Path) -> Path:
         info.update(CFBundleShortVersionString=v, CFBundleVersion=v, CFBundleDisplayName=APP_TITLE,
                     CFBundleName=APP_TITLE, NSHighResolutionCapable=True)
         plist.write_bytes(plistlib.dumps(info))
+    # 0.0.28：改了 Info.plist 之後要重新簽名（ad hoc），否則簽名失效 → macOS 說「已損毀，無法打開」
+    run(["codesign", "--force", "--deep", "--sign", "-", nice])
+    run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", nice])
     out = ROOT / "dist" / f"{NAME}_v{v}_macos-{arch}.dmg"
     if out.exists():
         out.unlink()

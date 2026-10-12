@@ -98,6 +98,9 @@
 - 一鍵安裝先試實驗室網路 `192.168.50.2`，再試 VPN `100.114.33.20`；命令列 `/HUB=http://主機:埠` 可以指定。
 - Lab Control 與 LabLogViewer 的 Windows 安裝程式都是 Inno Setup、裝在使用者資料夾（不需要系統管理員）。
 - 打包：All_Lab（GitHub Actions）的 Build Lab Control / Build LabLogViewer；E2E Windows 用測試 Hub 實際跑一次一鍵安裝。
+- **Mac（0.0.29）**：終端機貼 `curl -fsSL http://<NAS>:8765/get/mac | bash`（`/get/setup.txt?platform=macos&arch=…` 選這台晶片的 .dmg，
+  檢查 sha256，裝到「應用程式」）。用 curl 下載不會被標成「從網路下載」，不會「已損毀，無法打開」。
+  沒有向 Apple 付費簽章（Developer ID）的程式用瀏覽器下載會被擋；已經下載的：`xattr -dr com.apple.quarantine "/Applications/Lab Control.app"`。
 
 以下第 1–7 節是 0.0.13–0.0.25（有啟動器時）的說明，平台 API、數據目錄、標籤與論文仍然適用。
 

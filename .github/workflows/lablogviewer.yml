@@ -43,6 +43,10 @@ jobs:
           python packaging/prepare_build.py
           python packaging/make_icons.py
           pyinstaller --noconfirm --log-level WARN packaging/lablogviewer.spec
+      - name: Signature is valid (otherwise macOS says "damaged")
+        run: |
+          if ! out=$(codesign --verify --deep --strict --verbose=2 dist/LabLogViewer.app 2>&1); then
+            echo "::error title=codesign ${{ matrix.arch }}::$(echo "$out" | tail -20 | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; fi
       - name: Self-test (${{ matrix.arch }})
         run: |
           export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME/Documents"
@@ -82,7 +86,12 @@ jobs:
           mkdir arm64 x86_64
           tar -xzf LabLogViewer-arm64.tgz -C arm64
           tar -xzf LabLogViewer-x86_64.tgz -C x86_64
-          python3 packaging/merge_universal.py arm64/LabLogViewer.app x86_64/LabLogViewer.app LabLogViewer.app
+          set +e
+          python3 packaging/merge_universal.py arm64/LabLogViewer.app x86_64/LabLogViewer.app LabLogViewer.app > merge.txt 2>&1
+          status=$?
+          set -e
+          tail -40 merge.txt
+          if [ $status -ne 0 ]; then echo "::error title=merge universal::$(tail -25 merge.txt | sed ':a;N;$!ba;s/\n/%0A/g')"; exit $status; fi
       - name: Self-test (Apple silicon, and Intel through Rosetta when available)
         run: |
           export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME/Documents"
