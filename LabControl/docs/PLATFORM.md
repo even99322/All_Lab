@@ -101,6 +101,16 @@
 - **Mac（0.0.29）**：終端機貼 `curl -fsSL http://<NAS>:8765/get/mac | bash`（`/get/setup.txt?platform=macos&arch=…` 選這台晶片的 .dmg，
   檢查 sha256，裝到「應用程式」）。用 curl 下載不會被標成「從網路下載」，不會「已損毀，無法打開」。
   沒有向 Apple 付費簽章（Developer ID）的程式用瀏覽器下載會被擋；已經下載的：`xattr -dr com.apple.quarantine "/Applications/Lab Control.app"`。
+- **讀檔寵物圖檔（0.0.30）**：`LabLogViewerPets_v<版本>.zip`（模塊 `llvpets`，約 210 MB）不在讀檔程式的安裝檔裡。
+  `/get/setup.txt?pets=1` 多一行 `pets|版本|檔名|大小|sha256|網址`：一鍵安裝 1.1.0 的可選元件「pets」（預設不勾）解壓到
+  `%LOCALAPPDATA%\LabLogViewer\pets`；Mac 腳本詢問（或 `QEL_PETS=1/0`）後解壓到 `~/Library/Application Support/LabLogViewer/pets`；
+  讀檔程式「設定 → 寵物」也能下載。舊的一鍵安裝（1.0.0）不帶 `pets=1`，看不到這行。
+
+### 0c. 0.0.30：存檔位置
+
+- 量測電腦預設存到 `~/Desktop/數據集散地`（`C:\Users\user\Desktop\數據集散地`），資料夾規則 `{project}/{yyyy}/{mm}/Data_{mmdd}`。
+- `{project}` = 檔案設置的「專案資料夾」：空白 = 論文庫專案名稱（沒有就建立），也可以選已有的資料夾（每個專案記在 `LAB/project_folders.json`）。
+- NAS 上的對應位置 `\\192.168.50.2\ccuqel\數據集散地`（VPN `\\100.114.33.20\ccuqel\數據集散地`）：讀檔程式「檔案 → 開啟實驗室數據集散地」。
 
 以下第 1–7 節是 0.0.13–0.0.25（有啟動器時）的說明，平台 API、數據目錄、標籤與論文仍然適用。
 

@@ -412,7 +412,9 @@ class NodeService:
             raise CommandError("方案在節點上檢查失敗：" + "；".join(i.message for i in res.issues if i.level == "error"))
         exp = res.experiment(self.station)
         out = exp.plan_output(root=root)
-        root_dir = Path(root or exp.output_cfg.get("root") or setting("data.root", "") or "./data")
+        from ..data.naming import data_root
+
+        root_dir = data_root(root or exp.output_cfg.get("root"))
         runner = exp.create_runner(out)
         by = str(sender.get("user", "?"))
         self.run_by[runner.run_id] = by

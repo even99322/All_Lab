@@ -75,8 +75,33 @@ begin
     Result := IntToStr(IconPage.SelectedValueIndex + 1);
 end;
 
+{ v2.1.5: the pet pictures are no longer part of the program (optional download to
+  %LOCALAPPDATA%\LabLogViewer\pets). Updating from an older version: move its pictures there instead of
+  leaving 220 MB behind, so the pet keeps working without a download. }
+procedure MoveOldPetPictures;
+var
+  Old, Pets: String;
+begin
+  Old := ExpandConstant('{app}\_internal\app\pet\assets');
+  Pets := ExpandConstant('{localappdata}\LabLogViewer\pets');
+  if not DirExists(Old) then
+    exit;
+  if not DirExists(Pets) then
+  begin
+    ForceDirectories(ExtractFileDir(Pets));
+    if RenameFile(Old, Pets) then
+    begin
+      Log('Moved the old pet pictures to ' + Pets);
+      exit;
+    end;
+  end;
+  DelTree(Old, True, True, True);
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
+  if CurStep = ssInstall then
+    MoveOldPetPictures;
   if CurStep = ssPostInstall then
     SaveStringToFile(ExpandConstant('{app}\app_icon.txt'), IconNumber(''), False);
 end;

@@ -266,9 +266,9 @@ class RemoteMixin:
         if p.get("run_id") not in self._my_remote_runs or not setting("remote.download_results", True):
             self.statusBar().showMessage(f"📁 節點 {node.name} 已把量測檔存到 Hub：{names}", 15000)
             return
-        from pathlib import Path
+        from ....data.naming import data_root
 
-        root = Path(setting("remote.download_root", "") or setting("data.root", "") or "./data")
+        root = data_root(setting("remote.download_root", "") or None)
         hub = node.hub
 
         def work():

@@ -37,7 +37,7 @@ jobs:
       - name: Build, self-test, installer
         run: python packaging/build_app.py
       - name: Windows one-click setup (QELSetup)
-        run: iscc /DSetupVersion=1.0.0 packaging/qel_setup.iss
+        run: iscc packaging/qel_setup.iss        # version: SetupVersion in the .iss (1.1.0: optional pets)
       - uses: actions/upload-artifact@v5
         with:
           name: LabControl-windows

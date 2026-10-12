@@ -38,6 +38,7 @@ TARGETS: Dict[str, tuple] = {
     "monitor": ("module", "平台監控 Monitor"),
     "launcher": ("module", "量子工程平台 App（舊的啟動器，0.0.26 起不再使用）"),
     "setup": ("module", "Windows 安裝程式（量測＋讀檔一起裝，從 NAS 下載）"),
+    "llvpets": ("module", "讀檔程式的寵物圖檔（選擇性下載）"),
 }
 MANIFEST = "qel-module.json"
 #: 安裝檔檔名的開頭 → 模塊
@@ -247,6 +248,12 @@ def _identify_zip(src: Union[str, Path, bytes], filename: str = "") -> Dict[str,
                 if r["partial"]:
                     r["name"] = "論文庫網站（部分更新包）"
                 return r
+        pets = _find(names, "pets_manifest.json")
+        if pets and pets.count("/") <= 1:
+            try:
+                return found("llvpets", str(json.loads(_read(z, pets)).get("version") or ""))
+            except ValueError:
+                raise PackageError("pets_manifest.json 格式錯誤") from None
         app = _find(names, "app/__init__.py")
         if app and "LabLogViewer" in _read(z, _find(names, "main.py")):
             return found("lablogviewer", _ver(_read(z, app)))

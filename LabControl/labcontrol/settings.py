@@ -43,6 +43,19 @@ def deep_merge(base: Dict[str, Any], over: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def migrate(data: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str, Any]:
+    """舊版的預設值（例如 0.0.29 以前的 data.root C:/Users/QEL/Desktop/VNA_data）換成新的預設值。
+    使用者自己改過的值不動。"""
+    from .data.naming import OLD_DEFAULTS
+
+    for key, olds in OLD_DEFAULTS.items():
+        sect, name = key.split(".", 1)
+        node = data.get(sect)
+        if isinstance(node, dict) and node.get(name) in olds:
+            node[name] = copy.deepcopy((defaults.get(sect) or {}).get(name, node[name]))
+    return data
+
+
 class Settings:
     def __init__(self, data: Dict[str, Any], path: Optional[Path] = None) -> None:
         self.data = data
@@ -52,7 +65,7 @@ class Settings:
     def load(cls, path: Optional[Path] = None) -> "Settings":
         path = path or lab_path(SETTINGS_FILE)
         defaults = _load_yaml(DEFAULTS_DIR / SETTINGS_FILE)
-        return cls(deep_merge(defaults, _load_yaml(path)), path)
+        return cls(migrate(deep_merge(defaults, _load_yaml(path)), defaults), path)
 
     def get(self, key: str, default: Any = _MISSING) -> Any:
         node: Any = self.data

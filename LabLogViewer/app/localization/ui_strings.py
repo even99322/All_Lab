@@ -66,7 +66,10 @@ UI = {
     "Save Report...": "儲存報告⋯",
     "Unexpected error": "未預期的錯誤", "File temporarily busy": "檔案暫時忙碌", "Follow main plot": "跟隨主圖", "Single Trace": "單一 Trace",
     "Trace Colors": "Trace 顏色", "Trace Number": "Trace 編號", "Trace Scope": "Trace 範圍", "Trace separator": "Trace 分隔",
-    "Show Data Points": "顯示資料點", "Show values on plot": "在圖上顯示數值", "Show X Cut": "顯示 X 切線",
+    "Show Data Points": "顯示資料點", "Show values on plot": "在圖上顯示數值", "Show X Cut": "顯示 X 切線", "Smooth 2D Heatmap": "2D 熱圖平滑顯示",
+    "Open Lab Data Folder (NAS / VPN)": "開啟實驗室數據集散地（NAS / VPN）",
+    "Interpolate between measured rows / columns on screen. Off: one block per sample (exact). Hover readouts always use the measured samples.":
+        "畫面上在量測的行 / 列之間內插。關閉：每個資料點一格（原始）。游標讀值一律用量測值。",
     "Show Y Cut": "顯示 Y 切線", "X Cut": "X 切線", "Y Cut": "Y 切線", "Unwrap Phase": "相位展開",
     "Unwrapped Phase (deg)": "展開相位（度）", "Unwrapped Phase (rad)": "展開相位（rad）", "Phase (rad)": "相位（rad）",
     "Frequency (GHz)": "頻率（GHz）", "Magnitude |S|": "Magnitude |S|", "Axis Scaling": "座標軸縮放",

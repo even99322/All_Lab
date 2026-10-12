@@ -71,6 +71,7 @@ class PetManager(QObject):
         try:
             char = Character(info.pack, level)
         except (OSError, ValueError, KeyError):
+            self._offer_pictures()
             return                                   # assets missing: never let the pet break the app
         developer = os.environ.get("LLV_PET_DEV") == "1"
         self.window = PetWindow(char, text=self.text, developer=developer,
@@ -88,6 +89,22 @@ class PetManager(QObject):
             self.window.place_bottom_right()
         self.window.show()
         self.changed.emit()
+
+    def _offer_pictures(self) -> None:
+        """v2.1.5: pet pictures are an optional download; offer it once per run when they are missing."""
+        from app.pet import pack
+
+        if getattr(self, "_pictures_offered", False) or pack.available() or os.environ.get("LLV_NO_PET_OFFER"):
+            return
+        self._pictures_offered = True
+
+        def ask():
+            from app.gui import pet_download
+
+            parent = self.tracker.browser() or self.tracker.viewer()
+            if pet_download.offer(parent, lambda key: self.text(key, key)):
+                self.apply()
+        QTimer.singleShot(2500, ask)
 
     def raise_app(self) -> None:
         """Bring LabLogViewer to the front (the Viewer used last, else the Browser)."""

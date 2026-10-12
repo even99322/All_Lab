@@ -6,9 +6,14 @@
   * 右側 ＋ / −（一台或兩台時）：兩台時一次只動一台（+ 動較低的、− 動較高的）；下面選一步多大（0.0.28，像網頁版
     選位數：最小步進、×10、×100…，每組記在這台電腦 LAB/live_steps.json）。
   * 跟隨者的數值一直顯示。群組存在 LAB/live_groups.json（每台電腦 / 節點分開）。
+  * 0.0.30：電流的目標值改成位數旋鈕（digit_dial.DigitDial，跟網頁面板一樣每位 ▲▼、滾輪動那一位，範圍 ±200 mA），
+    停手 0.7 秒後以斜坡移過去；旁邊顯示目前值。所有斜坡的速率不超過「全域最大調整速率」（預設 10 mA/s，
+    面板最上面可以改，記在這台電腦 LAB/live_prefs.json）。
 """
 from __future__ import annotations
 
+import json
+import time
 from typing import Any, Callable, Dict, List, Optional
 
 from PyQt6 import QtCore, QtGui, QtWidgets
@@ -18,7 +23,9 @@ from ....core import live_groups as lg
 from ....paths import lab_path
 from ....settings import setting
 from .. import theme
+from ..digit_edit import WheelLineEdit
 from ..worker import run_bg
+from .digit_dial import DigitDial
 
 MIME = "application/x-labcontrol-source"
 
@@ -197,11 +204,54 @@ class GroupCard(QtWidgets.QFrame):
         self.target.setPlaceholderText(f"目標（{du}）")
         self.target.setMaximumWidth(130)
         self.target.returnPressed.connect(self.go)
+        # 0.0.30：電流 → 位數旋鈕（目標）＋目前值
+        self.dial: Optional[DigitDial] = None
+        self._touched = 0.0
+        self._dial_timer = QtCore.QTimer(self)
+        self._dial_timer.setSingleShot(True)
+        self._dial_timer.setInterval(int(float(setting("live.dial_apply_ms", 700))))
+        self._dial_timer.timeout.connect(self._dial_apply)
+        if self.unit == "A":
+            lim = panel.dial_limit(self.members)
+            self.dial = DigitDial("A", lim)
+            self.dial.edited.connect(self._dial_edited)
+            self.target.hide()
+            dial_row = QtWidgets.QHBoxLayout()
+            dial_row.setSpacing(8)
+            tl = QtWidgets.QLabel("目標")
+            tl.setProperty("role", "muted")
+            dial_row.addWidget(tl)
+            dial_row.addWidget(self.dial)
+            dial_row.addStretch(1)
+            mid.addLayout(dial_row)
+            now = QtWidgets.QHBoxLayout()           # 目標旋鈕下面：目前值、範圍
+            now.setSpacing(8)
+            nl = QtWidgets.QLabel("目前值")
+            nl.setProperty("role", "muted")
+            self.now_value = QtWidgets.QLabel("—")
+            self.now_value.setObjectName("nowValue")
+            f = QtGui.QFont()
+            f.setFamilies(["Consolas", "Menlo", "DejaVu Sans Mono", "monospace"])
+            f.setPointSizeF(15)
+            f.setBold(True)
+            self.now_value.setFont(f)
+            self.now_value.setStyleSheet(f"color:{theme.c('ok')};")
+            self.now_value.setToolTip("master 目前的輸出值（每秒更新）")
+            self.range_badge = QtWidgets.QLabel(f"Range: {lim:g} A")
+            self.range_badge.setStyleSheet(f"border:1px solid {theme.c('border')}; border-radius:9px; padding:1px 8px;")
+            self.range_badge.setToolTip("目標值的範圍：±%g mA（settings.yaml live.dial_range_mA 與儀器上下限取小的）"
+                                        % (lim * 1e3))
+            now.addWidget(nl)
+            now.addWidget(self.now_value)
+            now.addWidget(self.range_badge, 0, Qt.AlignmentFlag.AlignVCenter)
+            now.addStretch(1)
+            mid.addLayout(now)
         self.rate = QtWidgets.QLineEdit()
         self.rate.setPlaceholderText(f"速率 {du}/s")
         self.rate.setToolTip("斜坡速率；空白 = instruments.yaml 的 ramp_rate")
         self.rate.setMaximumWidth(110)
         self.b_go = QtWidgets.QPushButton("▶ 前往")
+        self.b_go.setToolTip("以斜坡移到目標值（速率不超過全域最大調整速率）")
         self.b_go.setProperty("primary", True)
         self.b_go.clicked.connect(self.go)
         self.b_stop = QtWidgets.QPushButton("■ 停止")
@@ -266,6 +316,11 @@ class GroupCard(QtWidgets.QFrame):
     def update_values(self, levels: Dict[str, Any], outputs: Dict[str, Any], errors: Dict[str, str]) -> None:
         for ref, c in self.chips.items():
             c.show_value(levels.get(ref), self.unit, outputs.get(ref), errors.get(ref, ""))
+        if self.dial is not None:
+            master = levels.get(self.members[0])
+            self.now_value.setText("—" if master is None else f"{float(master) * 1e3:+.3f} mA")
+            if master is not None and self.dial_idle():          # 沒在調、沒在斜坡：目標跟著目前值
+                self.dial.set_value(float(master))
         outs = [outputs.get(r) for r in self.members]
         on = bool(outs) and all(bool(o) for o in outs)
         self.b_out.blockSignals(True)
@@ -282,8 +337,21 @@ class GroupCard(QtWidgets.QFrame):
         else:
             self.state.setText(f"斜坡中 → {fmt_level(job.get('target'), self.unit)}")
 
+    def dial_idle(self) -> bool:
+        return (not self._dial_timer.isActive() and self.index not in self.panel.jobs and self.job is None
+                and time.monotonic() - self._touched > 2.0)
+
+    def _dial_edited(self, _value: float) -> None:
+        self._touched = time.monotonic()
+        self._dial_timer.start()
+
+    def _dial_apply(self) -> None:
+        self._touched = time.monotonic()
+        self.go()
+
     def set_enabled(self, on: bool) -> None:
-        for w in [*self.mem_btns, self.b_out, self.target, self.rate, self.b_go, *self.fine]:
+        for w in [*self.mem_btns, self.b_out, self.target, self.rate, self.b_go, *self.fine,
+                  *([self.dial] if self.dial is not None else [])]:
             w.setEnabled(on)
         self.b_stop.setEnabled(True)
         self.setAcceptDrops(on)
@@ -320,7 +388,10 @@ class GroupCard(QtWidgets.QFrame):
 
         du = disp_unit(self.unit)
         try:
-            t = parse_quantity(self.target.text(), du) if self.target.text().strip() else None
+            if self.dial is not None:
+                t = self.dial.value()
+            else:
+                t = parse_quantity(self.target.text(), du) if self.target.text().strip() else None
             if t is None:
                 return
             r = parse_quantity(self.rate.text(), f"{du}/s") if self.rate.text().strip() else None
@@ -377,6 +448,24 @@ class DCGroupsPanel(QtWidgets.QWidget):
         self._gen = 0
         v = QtWidgets.QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
+        top = QtWidgets.QHBoxLayout()
+        top.setContentsMargins(4, 2, 6, 2)
+        lab = QtWidgets.QLabel("全域最大調整速率")
+        lab.setToolTip("即時數據裡所有電流斜坡（目標、記憶、合併）的速率上限；比儀器的 ramp_rate 快時用儀器的")
+        self.max_rate = WheelLineEdit(f"{self.max_rate_mA_s():g}")
+        self.max_rate.setObjectName("maxRate")
+        self.max_rate.setMaximumWidth(80)
+        self.max_rate.setToolTip("mA/s；滾輪或 ↑↓ 調整游標那一位（記在這台電腦）")
+        self.max_rate.editingFinished.connect(self._max_rate_edited)
+        self._rate_timer = QtCore.QTimer(self)
+        self._rate_timer.setSingleShot(True)
+        self._rate_timer.timeout.connect(self._max_rate_edited)
+        self.max_rate.stepped.connect(lambda: self._rate_timer.start(700))
+        top.addWidget(lab)
+        top.addWidget(self.max_rate)
+        top.addWidget(QtWidgets.QLabel("mA/s"))
+        top.addStretch(1)
+        v.addLayout(top)
         self.scroll = QtWidgets.QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
@@ -389,6 +478,19 @@ class DCGroupsPanel(QtWidgets.QWidget):
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.poll)
         self.timer.start(int(float(setting("live.poll_s", 1.0)) * 1000))
+
+    def _max_rate_edited(self) -> None:
+        self._rate_timer.stop()
+        try:
+            v = float(self.max_rate.text().strip())
+        except ValueError:
+            v = 0.0
+        if v <= 0:
+            self.max_rate.setText(f"{self.max_rate_mA_s():g}")
+            return
+        if abs(v - self.max_rate_mA_s()) > 1e-12:
+            self.set_max_rate_mA_s(v)
+            self.message.emit(f"全域最大調整速率：{v:g} mA/s")
 
     # ---- 資料 ---------------------------------------------------------------------
     def set_backend(self, backend, key: str) -> None:
@@ -528,13 +630,70 @@ class DCGroupsPanel(QtWidgets.QWidget):
         if self.busy:
             return
         be, refs, idx = self.backend, list(card.members), card.index
+        rate = self.capped_rate(card.members, rate)
+        old = self.jobs.get(idx)
+
+        def work():
+            if old:                                  # 新的目標：先停掉這組還在跑的斜坡
+                be.group_stop(old)
+                t0 = time.monotonic()
+                while time.monotonic() - t0 < 2.0 and not be.ramp_status(old).get("done"):
+                    time.sleep(0.02)
+            return be.group_ramp(refs, target, rate)
 
         def ok(jid):
             self.jobs[idx] = jid
             card.job = jid
             card.set_job({"target": target, "done": False})
-            self.message.emit(f"{card.g['name']} → {fmt_level(target, card.unit)}")
-        self._run(lambda: be.group_ramp(refs, target, rate), ok, "斜坡")
+            r = f"，{rate * 1e3:g} mA/s" if rate and card.unit == "A" else ""
+            self.message.emit(f"{card.g['name']} → {fmt_level(target, card.unit)}{r}")
+        self._run(work, ok, "斜坡")
+
+    # ---- 全域最大調整速率、目標範圍（0.0.30）-------------------------------------------------
+    def _prefs_file(self):
+        return lab_path("live_prefs.json")
+
+    def _prefs(self) -> Dict[str, Any]:
+        try:
+            d = json.loads(self._prefs_file().read_text(encoding="utf-8"))
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def max_rate_mA_s(self) -> float:
+        """全域最大調整速率（mA/s）：這台電腦改過的值，否則 settings.yaml live.max_ramp_mA_s（預設 10）。"""
+        try:
+            v = float(self._prefs().get("max_rate_mA_s") or setting("live.max_ramp_mA_s", 10.0))
+        except (TypeError, ValueError):
+            v = 10.0
+        return v if v > 0 else 10.0
+
+    def set_max_rate_mA_s(self, v: float) -> None:
+        d = self._prefs()
+        d["max_rate_mA_s"] = float(v)
+        try:
+            self._prefs_file().write_text(json.dumps(d), encoding="utf-8")
+        except OSError as e:
+            self.message.emit(f"無法儲存最大速率：{e}")
+
+    def capped_rate(self, members: List[str], rate: Optional[float]) -> Optional[float]:
+        """實際用的速率：指定的（沒有 → 儀器 ramp_rate 最慢的）和全域最大調整速率取小的（只限電流）。"""
+        units = {self.sources.get(m, {}).get("unit", "A") for m in members}
+        if units != {"A"}:
+            return rate
+        cands = [rate] if rate else [self.sources.get(m, {}).get("rate") for m in members]
+        cands = [float(c) for c in cands if c]
+        cap = self.max_rate_mA_s() * 1e-3
+        return min(cands + [cap])
+
+    def dial_limit(self, members: List[str]) -> float:
+        """目標旋鈕的範圍（A）：settings.yaml live.dial_range_mA（預設 200 mA）與儀器上下限取小的。"""
+        lim = float(setting("live.dial_range_mA", 200.0)) * 1e-3
+        for m in members:
+            for x in self.sources.get(m, {}).get("limits") or []:
+                if x is not None and abs(float(x)) > 0:
+                    lim = min(lim, abs(float(x)))
+        return lim
 
     def stop(self, card: GroupCard) -> None:
         jid = self.jobs.get(card.index)

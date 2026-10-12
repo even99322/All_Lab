@@ -169,7 +169,9 @@ class Uploader:
     def upload(self, job: Dict[str, Any]) -> Dict[str, Any]:
         s = current_session()
         p = Path(job["path"])
-        root = Path(str(setting("data.root", "") or p.parent))
+        from ..data.naming import data_root
+
+        root = data_root() if setting("data.root", "") else p.parent
         try:
             rel = p.resolve().relative_to(root.resolve()).as_posix()
         except ValueError:

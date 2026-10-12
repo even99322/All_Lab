@@ -1,6 +1,6 @@
 # 端對端測試（Windows 雲端機器）：
 #   1. 用兩次打包（Build Lab Control、Build LabLogViewer）的安裝檔開一個測試用 Hub；
-#   2. 執行 QELSetup（一鍵安裝）/VERYSILENT /HUB=測試 Hub：從 Hub 下載、安靜安裝兩個程式；
+#   2. 執行 QELSetup（一鍵安裝）/VERYSILENT /HUB=測試 Hub：從 Hub 下載、安靜安裝兩個程式（＋選擇性的寵物圖檔）；
 #   3. 裝好的 Lab Control、LabLogViewer 各跑一次 --self-test；
 #   4. LabLogViewer 的去背景（.nc 與 Labber）在 Windows 上跑測試（[Errno 9] 的修正）。
 name: E2E Windows
@@ -43,20 +43,27 @@ jobs:
           github-token: ${{ github.token }}
           name: LabLogViewer-Windows-installer
           path: files
+      - uses: actions/download-artifact@v5
+        with:
+          run-id: ${{ inputs.llv_run }}
+          github-token: ${{ github.token }}
+          name: LabLogViewer-pets
+          path: files
       - name: Test Hub, one-click setup, self-tests (one step, so the Hub keeps running)
         shell: pwsh
         run: |
           Get-ChildItem files
           $setups = Get-ChildItem files -Filter "*-setup.exe" | ForEach-Object { $_.FullName }
           $boot = (Get-ChildItem files -Filter "QELSetup_*.exe").FullName
-          $hubArgs = @("LabControl/tools/serve_test_hub.py", "$env:RUNNER_TEMP\hub", "18765") + $setups + @($boot)
+          $pets = (Get-ChildItem files -Filter "LabLogViewerPets_v*.zip").FullName
+          $hubArgs = @("LabControl/tools/serve_test_hub.py", "$env:RUNNER_TEMP\hub", "18765") + $setups + @($boot, $pets)
           $hub = Start-Process python -ArgumentList $hubArgs -RedirectStandardOutput hub.log -RedirectStandardError hub.err -PassThru -WindowStyle Hidden
           for ($i = 0; $i -lt 90; $i++) { Start-Sleep 1; if ((Get-Content hub.log -Raw -ErrorAction SilentlyContinue) -match "ready") { break } }
-          $plan = (Invoke-WebRequest http://127.0.0.1:18765/get/setup.txt -UseBasicParsing).Content
+          $plan = (Invoke-WebRequest "http://127.0.0.1:18765/get/setup.txt?pets=1" -UseBasicParsing).Content
           Write-Output "::notice title=setup.txt::$($plan -replace "`n", '%0A')"
 
-          # 1. one-click setup, silent, from the test Hub
-          $p = Start-Process $boot -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/HUB=http://127.0.0.1:18765", "/LOG=$PWD\qelsetup.log" -Wait -PassThru
+          # 1. one-click setup, silent, from the test Hub, with the optional pet pictures
+          $p = Start-Process $boot -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/HUB=http://127.0.0.1:18765", "/COMPONENTS=labcontrol,lablogviewer,pets", "/LOG=$PWD\qelsetup.log" -Wait -PassThru
           $tail = (Get-Content qelsetup.log -Tail 25) -join "%0A"
           if ($p.ExitCode -ne 0) { Write-Output "::error title=QELSetup exit $($p.ExitCode)::$tail"; throw "QELSetup exit code $($p.ExitCode)" }
           Write-Output "::notice title=QELSetup log::$tail"
@@ -64,6 +71,12 @@ jobs:
           $llv = "$env:LOCALAPPDATA\Programs\LabLogViewer\LabLogViewer.exe"
           if (-not (Test-Path $lc)) { Write-Output "::error title=Lab Control not installed::$tail"; throw "Lab Control not installed" }
           if (-not (Test-Path $llv)) { Write-Output "::error title=LabLogViewer not installed::$tail"; throw "LabLogViewer not installed" }
+          $petsDir = "$env:LOCALAPPDATA\LabLogViewer\pets"
+          if (-not (Test-Path "$petsDir\pets_manifest.json")) { Write-Output "::error title=pet pictures not unpacked::$tail"; throw "pets missing" }
+          $n = (Get-ChildItem $petsDir -Recurse -File | Measure-Object).Count
+          Write-Output "::notice title=pet pictures::$n files in $petsDir"
+          if (Test-Path "$env:LOCALAPPDATA\Programs\LabLogViewer\_internal\app\pet\assets") { throw "pet pictures still inside the program" }
+          $env:LLV_SELF_TEST_REQUIRE_PETS = "1"
 
           # 2. the installed programs check themselves
           $env:LABCONTROL_SELF_TEST_REPORT = "$env:RUNNER_TEMP\lc_self_test.txt"
@@ -117,14 +130,25 @@ jobs:
           github-token: ${{ github.token }}
           name: LabLogViewer-macOS-${{ matrix.arch }}-dmg
           path: files
+      - uses: actions/download-artifact@v5
+        with:
+          run-id: ${{ inputs.llv_run }}
+          github-token: ${{ github.token }}
+          name: LabLogViewer-pets
+          path: files
       - name: Test Hub, curl | bash, signatures, self-tests
         run: |
           set -u
           note() { echo "::$1 title=$2::$(echo "$3" | tail -30 | sed ':a;N;$!ba;s/\n/%0A/g')"; }
           ls -la files
-          python LabControl/tools/serve_test_hub.py "$RUNNER_TEMP/hub" 18766 files/*.dmg > hub.log 2>&1 &
+          python LabControl/tools/serve_test_hub.py "$RUNNER_TEMP/hub" 18766 files/*.dmg files/LabLogViewerPets_v*.zip > hub.log 2>&1 &
           for i in $(seq 1 60); do grep -q ready hub.log && break; sleep 1; done
-          out=$(curl -fsSL http://127.0.0.1:18766/get/mac | bash 2>&1) || { note error "curl | bash" "$out"; exit 1; }
+          out=$(curl -fsSL http://127.0.0.1:18766/get/mac | QEL_PETS=1 bash 2>&1) || { note error "curl | bash" "$out"; exit 1; }
+          PETS="$HOME/Library/Application Support/LabLogViewer/pets"
+          [ -f "$PETS/pets_manifest.json" ] || { note error "pet pictures not unpacked" "$out"; exit 1; }
+          [ ! -d "/Applications/LabLogViewer.app/Contents/Resources/app/pet/assets" ] || { note error "pets inside app" "still bundled"; exit 1; }
+          note notice "pet pictures" "$(find "$PETS" -type f | wc -l) files in $PETS"
+          export LLV_SELF_TEST_REQUIRE_PETS=1
           note notice "curl | bash ${{ matrix.arch }}" "$out"
           for app in "/Applications/Lab Control.app" "/Applications/LabLogViewer.app"; do
             out=$(codesign --verify --deep --strict --verbose=2 "$app" 2>&1) || { note error "codesign $app" "$out"; exit 1; }
@@ -136,7 +160,7 @@ jobs:
           note notice "Lab Control self-test ${{ matrix.arch }}" "$(cat $LABCONTROL_SELF_TEST_REPORT)"
           export LABLOGVIEWER_SELF_TEST_REPORT="$RUNNER_TEMP/llv.txt" QT_QPA_PLATFORM=offscreen
           "/Applications/LabLogViewer.app/Contents/MacOS/LabLogViewer" --self-test || { note error "LabLogViewer self-test" "$(cat $LABLOGVIEWER_SELF_TEST_REPORT)"; exit 1; }
-          note notice "LabLogViewer self-test ${{ matrix.arch }}" "$(grep -E 'Qt Graphs|SELF-TEST|FAIL' $LABLOGVIEWER_SELF_TEST_REPORT)"
+          note notice "LabLogViewer self-test ${{ matrix.arch }}" "$(grep -E 'Qt Graphs|pet pictures|SELF-TEST|FAIL' $LABLOGVIEWER_SELF_TEST_REPORT)"
           du -sh /Applications/LabLogViewer.app "/Applications/Lab Control.app" | while read l; do echo "::notice title=size::$l"; done
 
   llv-windows-tests:
@@ -156,7 +180,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          python -m pytest -q -p no:cacheprovider -rfE --tb=line tests/test_v015b_debackground.py tests/test_v210_labcontrol_nc.py tests/test_v213_browser_metadata.py tests/test_v212_hub_update.py *> pytest.txt
+          python -m pytest -q -p no:cacheprovider -rfE --tb=line tests/test_v015b_debackground.py tests/test_v210_labcontrol_nc.py tests/test_v213_browser_metadata.py tests/test_v212_hub_update.py tests/test_v215_lab_data_smooth_pets.py *> pytest.txt
           $code = $LASTEXITCODE
           $tail = (Get-Content pytest.txt | Select-String -Pattern '^(FAILED|ERROR|E  |[0-9]+ (passed|failed)|.*(passed|failed|error).* in )' | Select-Object -Last 40 | ForEach-Object { $_.Line -replace '%', '%25' }) -join "%0A"
           if ($code -ne 0) { Write-Output "::error title=pytest (Windows)::$tail"; exit $code }

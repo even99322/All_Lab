@@ -1665,3 +1665,28 @@ Date: 2026-10-12
     (Linux check build: PySide6 461 MB -> 147 MB.)
   - app/self_test.py: "Qt Graphs 3D (QML)" creates a Surface3D from QML (QtQuick, QtQuick3D, QtGraphs), so a build
     that left out something the 3D surface needs fails its self-test; Data Visualization / Quick Widgets imports.
+
+v2.1.5 - LAB DATA ON THE NAS, SMOOTH HEATMAPS, OPTIONAL PETS
+Date: 2026-10-12
+
+  - File > Open Lab Data Folder (NAS / VPN) (app/core/lab_share.py): \\192.168.50.2\ccuqel\數據集散地 (lab network),
+    then \\100.114.33.20\ccuqel\數據集散地 (VPN); macOS /Volumes/ccuqel/數據集散地 (offers to mount
+    smb://100.114.33.20/ccuqel). Every place is probed in its own thread with a time limit (an unreachable share can
+    make isdir hang). LABLOGVIEWER_LAB_DATA overrides (";"-separated).
+  - Plot2DWidget: axes with fewer than 1024 samples (or uneven spacing) are resampled linearly onto an even grid
+    for display only (total pixels capped at 8 M); readouts, cuts and exports use the measured samples.
+    View > Smooth 2D Heatmap (QSettings view/smooth_heatmap) switches it for every open plot.
+  - Pet pictures (~210 MB) leave the installer (packaging/lablogviewer.spec skips app/pet/assets). They live in
+    %LOCALAPPDATA%\LabLogViewer\pets, ~/Library/Application Support/LabLogViewer/pets or
+    ~/.local/share/LabLogViewer/pets (LLV_PETS_DIR overrides); running from source still uses app/pet/assets.
+    app/pet/pack.py: pets_dir / assets_root / resolve ("../assets/<id>/lvXX" in the character packs) /
+    find_on_hub (/get/setup.txt?pets=1, line "pets|version|file|size|sha256|url") / install_from_hub (sha256
+    checked, unpacked to a staging folder, then swapped in) / build_zip (python -m app.pet.pack dist ->
+    LabLogViewerPets_v1.0.0.zip, with qel-module.json id "llvpets" for the platform console).
+    Settings > Pet: status and "Download pets from the lab NAS"; adopting waits for the pictures.
+    A chosen pet without pictures: one offer per run to download them ("Don't ask again" remembered).
+    packaging/installer.iss: an update from an older version moves {app}\_internal\app\pet\assets to the pets
+    folder instead of deleting it. Self-test "pet pictures" (LLV_SELF_TEST_REQUIRE_PETS=1 makes "not installed"
+    a failure; the cloud install tests use it).
+  - tests/test_v215_lab_data_smooth_pets.py.
+

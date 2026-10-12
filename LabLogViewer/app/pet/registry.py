@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 PACKS = Path(__file__).resolve().parent / "characters"
-ASSETS = Path(__file__).resolve().parent / "assets"
+ASSETS = Path(__file__).resolve().parent / "assets"     # source folder only; see pack.assets_root()
 MAX_LEVEL = 50          # a pet must reach this level before the user may adopt another one
 
 
@@ -24,7 +24,9 @@ class PetInfo:
 
     @property
     def preview(self) -> Path:
-        return ASSETS / self.id / "lv01" / "idle" / "frame_0001.webp"
+        from app.pet.pack import assets_root
+
+        return assets_root() / self.id / "lv01" / "idle" / "frame_0001.webp"
 
 
 PETS = (

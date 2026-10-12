@@ -310,3 +310,44 @@ def test_mac_install_script_and_plan(hub):
 
     if shutil.which("bash"):
         assert subprocess.run(["bash", "-n"], input=script, capture_output=True).returncode == 0
+
+
+def test_llv_pets_zip_is_optional_in_the_plan(hub):
+    """0.0.30：讀檔的寵物圖檔 LabLogViewerPets_v<版本>.zip（模塊 llvpets）：只有 ?pets=1 的清單會列出（舊的一鍵安裝看不到）。"""
+    import hashlib
+    import io
+    import zipfile
+
+    from labhub.packages import identify
+
+    url, state, owner, alice, ac = hub
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("capybara/lv01/meta.json", "{}")
+        z.writestr("pets_manifest.json", json.dumps({"version": "1.0.0", "pets": ["capybara"]}))
+        z.writestr("qel-module.json", json.dumps({"id": "llvpets", "version": "1.0.0", "kind": "module"}))
+    data = buf.getvalue()
+    assert identify(data, "LabLogViewerPets_v1.0.0.zip")["target"] == "llvpets"
+    buf2 = io.BytesIO()
+    with zipfile.ZipFile(buf2, "w") as z:                                     # 沒有 qel-module.json 也認得
+        z.writestr("pets_manifest.json", json.dumps({"version": "1.0.1"}))
+    r = identify(buf2.getvalue(), "LabLogViewerPets_v1.0.1.zip")
+    assert (r["target"], r["version"]) == ("llvpets", "1.0.1")
+
+    p = state.platform
+    p.add_release("lablogviewer", "2.1.5", "LabLogViewer_v2.1.5_windows-setup.exe", b"MZllv", "boss")
+    p.add_release("llvpets", "1.0.0", "LabLogViewerPets_v1.0.0.zip", data, "boss")
+    code, text = _call(url + "/get/setup.txt")
+    assert "pets|" not in text.decode()
+    for q in ("?pets=1", "?platform=macos&arch=arm64&pets=1"):
+        code, text = _call(url + "/get/setup.txt" + q)
+        rows = [ln.split("|") for ln in text.decode().splitlines() if ln.startswith("pets|")]
+        assert len(rows) == 1
+        app, ver, name, size, sha, path = rows[0]
+        assert (ver, name, int(size), sha) == ("1.0.0", "LabLogViewerPets_v1.0.0.zip", len(data),
+                                               hashlib.sha256(data).hexdigest())
+    assert _call(url + path)[1] == data                                      # 不用登入就能下載
+    code, info = _call(url + "/get/info")
+    assert "llvpets" not in [a["id"] for a in info["apps"]]
+    code, script = _call(url + "/get/mac")
+    assert b"&pets=1" in script and b"QEL_PETS" in script and b"install_pets" in script

@@ -210,6 +210,25 @@ class _ShowFilter(QObject):
         return False
 
 
+
+def _smooth_heatmap_setting() -> bool:
+    from PySide6.QtCore import QSettings
+
+    from app.gui.plot_2d_widget import Plot2DWidget
+
+    on = str(QSettings("CCU QEL", "LabLogViewer").value("view/smooth_heatmap", "true")).lower() != "false"
+    Plot2DWidget.smooth = on
+    return on
+
+
+def _set_smooth_heatmap(on: bool) -> None:
+    from PySide6.QtCore import QSettings
+
+    from app.gui.plot_2d_widget import Plot2DWidget
+
+    QSettings("CCU QEL", "LabLogViewer").setValue("view/smooth_heatmap", "true" if on else "false")
+    Plot2DWidget.set_smooth_all(on)
+
 class MainWindow(QMainWindow):
     workspace_state_changed = Signal()
     _grid_ready = Signal(int, object, object)
@@ -439,6 +458,14 @@ class MainWindow(QMainWindow):
         self.show_menu.addAction(self.show_x_cut_action)
         self.show_menu.addAction(self.show_y_cut_action)
         view_menu.addMenu(self.show_menu)
+        # v2.1.5: interpolate sparse heatmaps for display (readouts / cuts / exports keep the real samples)
+        self.smooth_heatmap_action = QAction("Smooth 2D Heatmap", self)
+        self.smooth_heatmap_action.setCheckable(True)
+        self.smooth_heatmap_action.setChecked(_smooth_heatmap_setting())
+        self.smooth_heatmap_action.setToolTip("Interpolate between measured rows / columns on screen. Off: one block "
+                                              "per sample (exact). Hover readouts always use the measured samples.")
+        self.smooth_heatmap_action.toggled.connect(_set_smooth_heatmap)
+        view_menu.addAction(self.smooth_heatmap_action)
 
         analysis_menu = menu.addMenu("&Analysis")
         self.node_antinode_action = QAction("Open Coarse Detector", self)

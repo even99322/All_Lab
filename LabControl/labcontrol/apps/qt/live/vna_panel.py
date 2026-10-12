@@ -134,10 +134,21 @@ def overlay_sides(views: List[str]) -> List[tuple]:
     return out
 
 
-def _canvas():
+def _canvas(math=None):
     from .canvas import TraceCanvas
 
-    return TraceCanvas(view_data, lambda k: VIEWS[k][1], lambda k: UNITS[k], lambda k: VIEWS[k][0])
+    def view(k, x, z):
+        xx, yy = view_data(k, x, z)
+        if math is None or not math.active:
+            return xx, yy
+        try:
+            out = math.apply(xx, yy)
+            math.error = ""
+            return out
+        except Exception as e:  # noqa: BLE001 — 算不出來：畫原本的，並在面板上顯示錯誤
+            math.error = str(e)
+            return xx, yy
+    return TraceCanvas(view, lambda k: VIEWS[k][1], lambda k: UNITS[k], lambda k: VIEWS[k][0])
 
 
 class PlotCell(QtWidgets.QFrame):
@@ -145,7 +156,7 @@ class PlotCell(QtWidgets.QFrame):
 
     swap = pyqtSignal(str, str)          # 拖來的 key、放到的 key
 
-    def __init__(self, key: str) -> None:
+    def __init__(self, key: str, math=None) -> None:
         super().__init__()
         self.key = key
         self.setAcceptDrops(True)
@@ -158,7 +169,7 @@ class PlotCell(QtWidgets.QFrame):
         self.head.setToolTip("拖曳標題列到另一張圖 = 交換位置")
         self.head.setContentsMargins(6, 2, 6, 2)
         v.addWidget(self.head)
-        self.canvas = _canvas()
+        self.canvas = _canvas(math)
         if key != "overlay":
             self.canvas.set_series([(key, "L")])
         v.addWidget(self.canvas, 1)
@@ -229,6 +240,17 @@ class TracePlots(QtWidgets.QWidget):
         self.points = False
         self.last = None
         self._syncing = False
+        from ....core.axis_math import AxisMath
+
+        self.math = AxisMath()             # 0.0.30：x / y 軸運算（y = y**2、x = log(x)…）
+        self.math.error = ""
+
+    def set_math(self, x_text: str, y_text: str) -> None:
+        """設定軸運算並重畫；寫錯 → AxisMathError（原本的不變）。"""
+        self.math.set(x_text, y_text)
+        self.math.error = ""
+        if self.last is not None:
+            self.update_data(*self.last)
 
     @property
     def plots(self) -> Dict[str, Any]:
@@ -250,7 +272,7 @@ class TracePlots(QtWidgets.QWidget):
     def _cell(self, k: str) -> PlotCell:
         c = self.cells.get(k)
         if c is None:
-            c = PlotCell(k)
+            c = PlotCell(k, self.math)
             c.swap.connect(self.swap)
             c.canvas.set_points(self.points)
             if k not in ("iq", "overlay"):
@@ -325,10 +347,21 @@ class TracePlots(QtWidgets.QWidget):
     def update_data(self, tr: str, x, z, unit: str) -> None:
         self.last = (tr, x, z, unit)
         keys = ["overlay"] if self.mode == "overlay" else self.views
+        m = self.math
         for k in keys:
             c = self._cell(k)
+            c.canvas.x_is_freq = m.fx is None
             c.canvas.update_data(tr, x, z, unit)
-            c.set_title(tr)
+            c.set_title(tr + (f"　·　{self.math_text()}" if m.active else ""))
+            if m.fx is not None and k != "iq":
+                c.canvas.plot.setLabel("bottom", f"x = {m.x_text}（x = 頻率 Hz）", units="")
+            if k != "overlay":
+                y0 = VIEWS[k][1]
+                c.canvas.plot.setLabel("left", f"y = {m.y_text}（y = {y0}）" if m.fy is not None else y0)
+
+    def math_text(self) -> str:
+        m = self.math
+        return "　".join(t for t in ((f"x = {m.x_text}" if m.fx else ""), (f"y = {m.y_text}" if m.fy else "")) if t)
 
     def clear(self) -> None:
         self.last = None
@@ -545,12 +578,44 @@ class VNAPanel(QtWidgets.QWidget):
         hint.setProperty("role", "muted")
         row.addWidget(hint, 1)
         bl.addWidget(self.tool_bar)
+        # 0.0.30：x / y 軸各自運算
+        self.math_bar = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(self.math_bar)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(4)
+        from ....core.axis_math import FUNCS
+
+        tip = ("對曲線的軸做運算（只影響畫面，不改數據）：例如 y = y**2、y = y - mean(y)、x = log(x)、x = x/1e9。\n"
+               "可以用 x、y、數字、+ - * / ** 與函式：" + ", ".join(sorted(FUNCS)) + "\n按 Enter 套用；清空 = 不運算")
+        lab = QtWidgets.QLabel("軸運算")
+        lab.setToolTip(tip)
+        row.addWidget(lab)
+        self.x_expr = QtWidgets.QLineEdit(str(saved.get("x_expr") or ""))
+        self.y_expr = QtWidgets.QLineEdit(str(saved.get("y_expr") or ""))
+        for var, e in (("x", self.x_expr), ("y", self.y_expr)):
+            e.setObjectName(f"{var}Expr")
+            e.setPlaceholderText(f"{var} = {var}")
+            e.setToolTip(tip)
+            e.setClearButtonEnabled(True)
+            e.setMinimumWidth(110)
+            e.editingFinished.connect(self._math_changed)
+            row.addWidget(QtWidgets.QLabel(f"{var} ="))
+            row.addWidget(e, 1)
+        self.math_err = QtWidgets.QLabel("")
+        self.math_err.setStyleSheet(f"color:{theme.c('err')};")
+        self.math_err.setWordWrap(True)
+        row.addWidget(self.math_err, 1)
+        bl.addWidget(self.math_bar)
         self.plots = TracePlots()
         self.plots.set_points(self.points.isChecked())
         self.plots.set_mode("overlay" if self.overlay.isChecked() else "grid")
         self.plots.set_views(self.order)
         self.compact = False
         self.plots.order_changed.connect(self._order_changed)
+        try:
+            self.plots.set_math(self.x_expr.text(), self.y_expr.text())
+        except Exception as e:  # noqa: BLE001
+            self.math_err.setText(f"⚠ {e}")
         self.plot_holder = QtWidgets.QStackedWidget()
         self.plot_holder.addWidget(self.plots)
         away = QtWidgets.QWidget()
@@ -630,7 +695,7 @@ class VNAPanel(QtWidgets.QWidget):
         """嵌在主視窗時只顯示 dB 曲線與「量測 / 循環」；其餘在獨立視窗。"""
         self.compact = bool(on)
         self.top_scroll.setVisible(not on)
-        for w in (self.view_bar, self.tool_bar, self.b_plotwin, self.interval, self.interval_label):
+        for w in (self.view_bar, self.tool_bar, self.math_bar, self.b_plotwin, self.interval, self.interval_label):
             w.setVisible(not on)
         if on:
             if self.plot_window is not None:
@@ -640,6 +705,22 @@ class VNAPanel(QtWidgets.QWidget):
         else:
             self.plots.set_mode("overlay" if self.overlay.isChecked() else "grid")
             self.plots.set_views(self.order)
+
+    def _math_changed(self) -> None:
+        x, y = self.x_expr.text().strip(), self.y_expr.text().strip()
+        if (x, y) == getattr(self, "_math_last", None):
+            return
+        try:
+            self.plots.set_math(x, y)
+        except Exception as e:  # noqa: BLE001
+            self.math_err.setText(f"⚠ {e}")
+            return
+        self._math_last = (x, y)
+        err = getattr(self.plots.math, "error", "")
+        self.math_err.setText(f"⚠ {err}" if err else "")
+        self.ui.save(x_expr=x, y_expr=y)
+        if self.plots.math.active:
+            self.message.emit(f"軸運算：{self.plots.math_text()}")
 
     def _order_changed(self, order: List[str]) -> None:
         self.order = list(order)

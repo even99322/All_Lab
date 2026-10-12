@@ -91,6 +91,7 @@ fetch("/get/info").then(r => r.json()).then(info => {
       <p class="muted">打開「終端機」，貼上下面這一行按 Enter：從實驗室的 NAS 下載這台 Mac 晶片的最新版，裝到「應用程式」。</p></div>
       <div class="cmd"><code id="maccmd">${esc(cmd)}</code><button id="copycmd">複製</button></div>
       <ul><li>只裝一個：在指令前面加 <code>QEL_APPS=labcontrol</code> 或 <code>QEL_APPS=lablogviewer</code>（例如 <code>curl -fsSL ${esc(location.origin)}/get/mac | QEL_APPS=labcontrol bash</code>）。</li>
+      <li>讀檔的桌面寵物（約 220 MB）是選擇性的：安裝時會問要不要下載；不想被問就在 <code>bash</code> 前加 <code>QEL_PETS=1</code>（要）或 <code>QEL_PETS=0</code>（不要）。之後也能在讀檔程式的「設定 → 寵物」下載。</li>
       <li>用瀏覽器下載 .dmg 打開時說「已損毀，無法打開」？這是 Mac 對「從網路下載、沒有付費簽章」的程式的阻擋，檔案沒有壞。
       用上面這一行安裝就不會；已經拖進「應用程式」的，在終端機執行：<br><code>xattr -dr com.apple.quarantine "/Applications/Lab Control.app" "/Applications/LabLogViewer.app"</code></li>
       <li>裝好之後兩個程式都會自己收到更新，不用再回來下載。</li></ul>`;
@@ -104,6 +105,7 @@ fetch("/get/info").then(r => r.json()).then(info => {
       <p class="muted">一個小安裝程式：從實驗室的 NAS 下載量測（Lab Control）與讀檔（LabLogViewer）的最新版並安裝，可以只勾其中一個。</p></div>
       <a class="big" href="${esc(su.url)}">⬇ 下載 Windows 一鍵安裝 <small>${mb(su.size)}</small></a>
       <ul><li>裝好之後兩個程式都會自己收到更新推播、在程式裡更新，不用再回來下載。</li>
+      <li>讀檔的桌面寵物（約 220 MB）是選擇性的元件，預設不勾；要的話在「選擇元件」勾「讀檔的桌面寵物圖檔」，之後也能在讀檔程式的「設定 → 寵物」下載。</li>
       <li>好記的網址：<code>${esc(location.origin)}/get/setup</code></li></ul>`;
     box.hidden = false;
   }

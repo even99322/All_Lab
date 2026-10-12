@@ -18,6 +18,7 @@ cached grid and cursor position.
 from __future__ import annotations
 
 from contextlib import contextmanager
+import weakref
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt, Signal
@@ -54,6 +55,59 @@ def get_colormap(name: str) -> pg.ColorMap:
 AUTO_RANGE_TAIL = 5e-5          # fraction of pixels ignored at each end of the auto range
 
 
+# v2.1.5: "Smooth 2D heatmap" (View menu, default on). A sweep often has few rows (e.g. 77 currents x 10001
+# frequencies): drawn one screen block per sample, the heatmap looks pixelated. Smooth display resamples the
+# image linearly onto an even, finer grid (also correct for unevenly spaced axes); readouts, cuts and exports
+# keep using the real samples.
+SMOOTH_MAX_PIXELS = 8_000_000
+SMOOTH_TARGET = 1024                # rows / columns to reach when an axis has fewer samples
+
+
+def _linear_resample(axis_values: np.ndarray, data: np.ndarray, n_out: int, axis: int) -> np.ndarray:
+    values = np.asarray(axis_values, dtype=float)
+    order = np.argsort(values)
+    values = values[order]
+    data = np.take(data, order, axis=axis)
+    grid = np.linspace(values[0], values[-1], n_out)
+    position = np.interp(grid, values, np.arange(values.size, dtype=float))
+    i0 = np.floor(position).astype(int)
+    i1 = np.minimum(i0 + 1, values.size - 1)
+    t = position - i0
+    shape = [1] * data.ndim
+    shape[axis] = n_out
+    t = t.reshape(shape)
+    return np.take(data, i0, axis=axis) * (1.0 - t) + np.take(data, i1, axis=axis) * t
+
+
+def smooth_display(x: np.ndarray, y: np.ndarray, z: np.ndarray) -> np.ndarray:
+    """z[y, x] resampled for display: axes with fewer than SMOOTH_TARGET samples are linearly interpolated
+    onto an even grid of up to SMOOTH_TARGET (total pixels capped). Returns z_display[y', x']."""
+    ny, nx = z.shape
+    if ny < 2 or nx < 2:
+        return z
+    out = z
+    cols = nx if nx >= SMOOTH_TARGET else SMOOTH_TARGET
+    rows = ny if ny >= SMOOTH_TARGET else SMOOTH_TARGET
+    if cols * rows > SMOOTH_MAX_PIXELS:
+        if rows > ny:
+            rows = max(ny, SMOOTH_MAX_PIXELS // cols)
+        if cols > nx and cols * rows > SMOOTH_MAX_PIXELS:
+            cols = max(nx, SMOOTH_MAX_PIXELS // rows)
+    if cols > nx or not _even(x):
+        out = _linear_resample(x, out, max(cols, nx), axis=1)
+    if rows > ny or not _even(y):
+        out = _linear_resample(y, out, max(rows, ny), axis=0)
+    return out
+
+
+def _even(values: np.ndarray) -> bool:
+    v = np.asarray(values, dtype=float)
+    if v.size < 3:
+        return True
+    d = np.diff(v)
+    return bool(np.all(d > 0) or np.all(d < 0)) and np.allclose(d, d[0], rtol=1e-3, atol=0)
+
+
 def zero_centered_limits(low: float, high: float) -> tuple[float, float]:
     """Symmetric limits for data that really swings both ways (a derivative or a mean-subtracted
     map); one-sided data keeps its own range so the whole colour map is used."""
@@ -88,6 +142,8 @@ def robust_color_limits(values: np.ndarray) -> tuple[float, float]:
 
 
 class Plot2DWidget(QWidget):
+    smooth = True                  # class-wide; View > Smooth 2D heatmap (set_smooth_all)
+    _instances: "weakref.WeakSet" = None
     """Displays a Grid2DData as a heatmap with a colorbar and a
     coordinate-readout crosshair.
 
@@ -174,6 +230,11 @@ class Plot2DWidget(QWidget):
         # the natural numpy/image convention) - so transpose here, at
         # the GUI boundary, rather than anywhere in the data model.
         img_data = z_values.T  # (nx, ny)
+        display = smooth_display(x_values, y_values, z_values).T if Plot2DWidget.smooth else img_data
+        if Plot2DWidget._instances is None:
+            Plot2DWidget._instances = weakref.WeakSet()
+        Plot2DWidget._instances.add(self)
+        self._last_plot = (grid, colormap)
 
         if z_min is None or z_max is None:
             auto_min, auto_max = robust_color_limits(img_data)
@@ -188,7 +249,7 @@ class Plot2DWidget(QWidget):
 
         self._setting_color_levels = True
         try:
-            self.img_item.setImage(img_data, autoLevels=False)
+            self.img_item.setImage(display, autoLevels=False)
             self.img_item.setLevels((z_min, z_max))
 
             cmap = get_colormap(colormap)
@@ -234,6 +295,21 @@ class Plot2DWidget(QWidget):
         self.apply_scientific_plot_appearance(self._plot_colors)
         if cross_on:
             self._cross.on_plot()
+
+    @classmethod
+    def set_smooth_all(cls, on: bool) -> None:
+        """Smooth / exact rendering for every heatmap; re-draws the open ones with their current levels."""
+        cls.smooth = bool(on)
+        for widget in list(cls._instances or []):
+            last = getattr(widget, "_last_plot", None)
+            if last is None or widget._grid is None:
+                continue
+            try:
+                view = widget.view_box.viewRange()
+                widget.plot(last[0], colormap=widget._colormap_name, z_min=widget._z_min, z_max=widget._z_max)
+                widget.view_box.setRange(xRange=view[0], yRange=view[1], padding=0)
+            except RuntimeError:                       # widget already deleted
+                pass
 
     # ---- X/Y cross-section ----------------------------------------------------
 

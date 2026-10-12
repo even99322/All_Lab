@@ -355,7 +355,8 @@ class TraceCanvas(QtWidgets.QWidget):
                 else:
                     u = self.unit_fn(k)
                     parts.append(f"{self.short_fn(k)} <b>{v:.5g}</b>{(' ' + u) if u else ''}")
+            where = f"{mv['freq'] / 1e9:.6f} GHz" if getattr(self, "x_is_freq", True) else f"x = {mv['freq']:.6g}"
             rows.append(f"<span style='color:{mv['color']}'><b>{mv['name']}</b></span> "
-                        f"{mv['freq'] / 1e9:.6f} GHz　" + "　".join(parts))
+                        f"{where}　" + "　".join(parts))
         self.readout.setText("<br>".join(rows))
         self.readout.setVisible(bool(rows))

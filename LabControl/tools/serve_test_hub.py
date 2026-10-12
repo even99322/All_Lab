@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def main(argv) -> int:
-    from labhub.packages import identify_binary
+    from labhub.packages import identify, identify_binary
     from labhub.server import Config, make_server
 
     data, port, files = Path(argv[1]), int(argv[2]), [Path(p) for p in argv[3:]]
@@ -19,7 +19,7 @@ def main(argv) -> int:
     srv, state = make_server(cfg, "127.0.0.1", port)
     for f in files:
         raw = f.read_bytes()
-        b = identify_binary(f.name, raw)
+        b = identify(raw, f.name) if f.suffix.lower() == ".zip" else identify_binary(f.name, raw)   # 寵物圖檔 zip
         if b is None:
             raise SystemExit(f"認不出 {f.name}")
         state.platform.add_release(b["target"], b["version"], f.name, raw, "ci", notes="CI")

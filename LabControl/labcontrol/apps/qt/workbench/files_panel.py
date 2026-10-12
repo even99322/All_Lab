@@ -16,7 +16,9 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt
 
 from ....core.units import parse_quantity
-from ....data.naming import day_folder, stale_date_in_filename
+from ....data.naming import (data_root, day_folder, folder_pattern, list_project_folders,
+                             project_folder, project_folder_name, remember_folder, remembered_folder,
+                             stale_date_in_filename)
 from ....scheme.compile import file_settings, format_duration
 from ....settings import setting
 from .. import theme
@@ -63,6 +65,21 @@ class FilePanel(QtWidgets.QTabWidget):
         proj_row = QtWidgets.QHBoxLayout()
         proj_row.addWidget(self.lab_project, 1)
         proj_row.addWidget(proj_refresh)
+        # 0.0.30：專案資料夾（資料根目錄底下，每個專案一個）：自動用專案名稱建立，或選已經有的資料夾
+        self.proj_folder = QtWidgets.QComboBox()
+        self.proj_folder.setObjectName("projectFolder")
+        self.proj_folder.setEditable(True)
+        self.proj_folder.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+        self.proj_folder.setToolTip("資料根目錄底下這個專案的資料夾（資料夾規則裡的 {project}）。\n"
+                                    "空白 = 自動用論文庫專案的名稱（沒有就建立）；也可以從清單選已經有的資料夾，\n"
+                                    "或打一個新名稱。每個專案選過的資料夾這台電腦會記住。")
+        folder_open = QtWidgets.QToolButton()
+        folder_open.setText("📂")
+        folder_open.setToolTip("在檔案總管打開存檔的資料夾")
+        folder_open.clicked.connect(self._open_folder)
+        folder_row = QtWidgets.QHBoxLayout()
+        folder_row.addWidget(self.proj_folder, 1)
+        folder_row.addWidget(folder_open)
         self.fname = QtWidgets.QLineEdit()
         self.date_hint = QtWidgets.QPushButton()
         self.date_hint.setFlat(True)
@@ -92,7 +109,8 @@ class FilePanel(QtWidgets.QTabWidget):
         root_row.addWidget(self.root, 1)
         root_row.addWidget(browse)
         r = 0
-        for label, widget in (("論文庫專案", proj_row), ("檔名", self.fname), ("", self.date_hint), ("資料根目錄", root_row),
+        for label, widget in (("論文庫專案", proj_row), ("專案資料夾", folder_row), ("檔名", self.fname),
+                              ("", self.date_hint), ("資料根目錄", root_row),
                               ("資料夾規則", self.pattern), ("同名檔案", self.collision), ("格式", fmts)):
             grid.addWidget(QtWidgets.QLabel(label), r, 0)
             if isinstance(widget, QtWidgets.QLayout):
@@ -130,6 +148,8 @@ class FilePanel(QtWidgets.QTabWidget):
         outer.addStretch()
 
         self.lab_project.activated.connect(self._project_chosen)
+        self.proj_folder.activated.connect(lambda _i: self._folder_chosen())
+        self.proj_folder.lineEdit().editingFinished.connect(self._folder_chosen)
         self.fname.editingFinished.connect(self._commit_fname)
         # 0.0.28：打字時就記下檔名（之前只有按 Enter / 換到別的欄位才記：直接按「▶ 開始量測」或 F5
         # 時，工具列按鈕不會拿走焦點，打好的檔名沒有套用，存成舊的 aaa_1）
@@ -138,9 +158,10 @@ class FilePanel(QtWidgets.QTabWidget):
         self._fname_timer.timeout.connect(self._commit_fname)
         self.fname.textEdited.connect(lambda _t: self._fname_timer.start(400))
         self.date_hint.clicked.connect(self._fix_date)
-        self.root.editingFinished.connect(lambda: self._out("root", self.root.text().strip()))
+        self.root.editingFinished.connect(lambda: (self._out("root", self.root.text().strip()), self._fill_folders()))
         browse.clicked.connect(self._browse)
-        self.pattern.editingFinished.connect(lambda: self._out("folder_pattern", self.pattern.text().strip()))
+        self.pattern.editingFinished.connect(lambda: (self._out("folder_pattern", self.pattern.text().strip()),
+                                                      self._fill_folders()))
         self.collision.currentIndexChanged.connect(lambda _i: self._out("collision", self.collision.currentData()))
         self.f_nc.toggled.connect(lambda _v: self._formats())
         self.f_hdf5.toggled.connect(lambda _v: self._formats())
@@ -217,6 +238,8 @@ class FilePanel(QtWidgets.QTabWidget):
         for key, widget in (("root", self.root), ("folder_pattern", self.pattern), ("project", self.project)):
             if widget.text().strip() != (out.get(key) or ""):
                 self._out(key, widget.text().strip())
+        if self.proj_folder.currentText().strip() != (out.get("project_folder") or ""):
+            self._folder_chosen()
         if self.user.text().strip() != (out.get("user") or ""):
             self._out("user", self.user.text().strip() or None)
         current = ", ".join(out["tags"]) if out.get("tags") is not None else ""
@@ -310,8 +333,60 @@ class FilePanel(QtWidgets.QTabWidget):
                 self._fill_projects(self._project_items())
                 return
             d = {"id": str(p["id"]), "name": p["name"]}
-        self._out("lab_project", d)
+        folder = remembered_folder(d["id"]) if isinstance(d, dict) else ""
+
+        def fn(s):
+            if d:
+                s.output["lab_project"] = d
+            else:
+                s.output.pop("lab_project", None)
+            if folder:                                  # 這台電腦上次替這個專案選的資料夾
+                s.output["project_folder"] = folder
+            else:
+                s.output.pop("project_folder", None)
+        self._mutate(fn)
         self._fill_projects(self._project_items())
+        self._fill_folders()
+
+    # ---- 專案資料夾（0.0.30）-----------------------------------------------------
+    def _root(self):
+        return data_root(self.doc.scheme.output.get("root") or None)
+
+    def _fill_folders(self) -> None:
+        o = self.doc.scheme.output
+        cb = self.proj_folder
+        cb.blockSignals(True)
+        cb.clear()
+        for name in list_project_folders(self._root()):
+            cb.addItem(name)
+        cb.setEditText(o.get("project_folder") or "")
+        auto = project_folder({k: v for k, v in o.items() if k != "project_folder"})
+        exists = (self._root() / auto).is_dir()
+        cb.lineEdit().setPlaceholderText(f"自動：{auto}" + ("（已有這個資料夾）" if exists else "（會建立）"))
+        uses = "{project}" in folder_pattern(o.get("folder_pattern"))
+        cb.setEnabled(uses)
+        if not uses:
+            cb.lineEdit().setPlaceholderText("資料夾規則沒有 {project}：不分專案資料夾")
+        cb.blockSignals(False)
+
+    def _folder_chosen(self) -> None:
+        text = self.proj_folder.currentText().strip()
+        name = project_folder_name(text) if text else ""
+        if name != text:
+            self.proj_folder.setEditText(name)
+        if name == (self.doc.scheme.output.get("project_folder") or ""):
+            return
+        self._out("project_folder", name or None)
+        remember_folder(self.current_project().get("id", ""), name)
+        self._fill_folders()
+
+    def _open_folder(self) -> None:
+        o = self.doc.scheme.output
+        folder = day_folder(self._root(), folder_pattern(o.get("folder_pattern")), _dt.datetime.now(),
+                            project_folder(o))
+        while not folder.is_dir() and folder != folder.parent:       # 還沒建立：打開最近一層已經有的
+            folder = folder.parent
+        QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(folder)))
 
     @staticmethod
     def _project_items() -> list:
@@ -355,11 +430,11 @@ class FilePanel(QtWidgets.QTabWidget):
         self._mutate(fn)
 
     def _browse(self) -> None:
-        d = QtWidgets.QFileDialog.getExistingDirectory(self, "資料根目錄", self.root.text() or
-                                                       str(setting("data.root", "")))
+        d = QtWidgets.QFileDialog.getExistingDirectory(self, "資料根目錄", str(data_root(self.root.text() or None)))
         if d:
             self.root.setText(d)
             self._out("root", d)
+            self._fill_folders()
 
     def _fix_date(self) -> None:
         w = stale_date_in_filename(self.fname.text())
@@ -384,9 +459,10 @@ class FilePanel(QtWidgets.QTabWidget):
                 self.fname.setText(o.get("file_name", ""))
             self.fname.setPlaceholderText(fs["file_name"])
             self.root.setText(o.get("root", ""))
-            self.root.setPlaceholderText(str(setting("data.root", "")))
+            self.root.setPlaceholderText(str(data_root()))
             self.pattern.setText(o.get("folder_pattern", ""))
-            self.pattern.setPlaceholderText(str(setting("data.folder_pattern", "{yyyy}/{mm}/Data_{mmdd}")))
+            self.pattern.setPlaceholderText(folder_pattern())
+            self._fill_folders()
             self.collision.setCurrentIndex(max(0, self.collision.findData(fs["collision"])))
             self.f_nc.setChecked("netcdf" in fs["formats"])
             self.f_hdf5.setChecked("hdf5" in fs["formats"])
@@ -420,10 +496,9 @@ class FilePanel(QtWidgets.QTabWidget):
         self.date_hint.setVisible(bool(w))
         if w:
             self.date_hint.setText(f"⚠ 檔名日期 {w[0]} 不是今天 → 按這裡改成「{w[2]}」")
-        root = s.output.get("root") or setting("data.root", "") or "./data"
-        pattern = s.output.get("folder_pattern") or setting("data.folder_pattern", "{yyyy}/{mm}/Data_{mmdd}")
         try:
-            folder = day_folder(root, pattern, now, (s.output.get("lab_project") or {}).get("name", ""))
+            folder = day_folder(data_root(s.output.get("root") or None), folder_pattern(s.output.get("folder_pattern")),
+                                now, project_folder(s.output))
         except Exception as e:  # noqa: BLE001
             folder = Path(f"（資料夾規則錯誤：{e}）")
         if not fs["formats"]:

@@ -60,6 +60,9 @@ DEFAULT_MODULES: Dict[str, Dict[str, Any]] = {
     # 0.0.28：Windows 一鍵安裝（QELSetup_v<版本>_windows.exe）：從 NAS 下載最新的量測、讀檔安裝程式並安裝
     "setup": {"name": "Windows 安裝程式", "kind": "app", "hidden": True, "order": 92,
               "description": "量測＋讀檔一起裝：從 NAS 下載最新的安裝程式"},
+    # 0.0.30：讀檔程式的寵物圖檔（LabLogViewerPets_v<版本>.zip）：安裝時選擇要不要，或在讀檔程式裡下載
+    "llvpets": {"name": "讀檔寵物圖檔", "kind": "app", "hidden": True, "order": 93,
+                "description": "LabLogViewer 桌面寵物的圖檔（約 220 MB，選擇性下載）"},
 }
 #: 下載頁 /get 列出、不用登入就能下載的獨立程式
 APPS = ("labcontrol", "lablogviewer")

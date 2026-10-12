@@ -447,13 +447,21 @@ class StepDialog(QtWidgets.QDialog):
 
 # ---------------------------------------------------------------------------
 class MeasureDialog(QtWidgets.QDialog):
-    """量測節點（Labber 的 Log channels + 儀器設定）。"""
+    """量測節點（Labber 的 Log channels + 儀器設定）。
+
+    0.0.30：
+      * VNA 的頻率可以用「起始 / 終止」或「中心 / 頻寬（span）」設定（切換時自動換算）；
+      * 「⤓ 套用儀器目前值」：讀這台儀器現在的設定（例如在即時數據調好的頻率、功率）填進來。
+    """
+
+    FREQ_MODES = (("startstop", "起始 / 終止"), ("center", "中心 / 頻寬（span）"))
+    CENTER_UNITS = (("center_freq", "中心頻率", "GHz"), ("span", "頻寬（span）", "MHz"))
 
     def __init__(self, parent, doc: WorkbenchDoc, b: Block) -> None:
         super().__init__(parent)
         self.doc, self.b = doc, copy.deepcopy(b)
         self.setWindowTitle("量測設定")
-        self.resize(460, 520)
+        self.resize(480, 560)
         lay = QtWidgets.QVBoxLayout(self)
         form = QtWidgets.QFormLayout()
         self.inst = QtWidgets.QComboBox()
@@ -465,6 +473,17 @@ class MeasureDialog(QtWidgets.QDialog):
         self.traces.setMaximumHeight(90)
         form.addRow("量測通道（Log channels）", self.traces)
         lay.addLayout(form)
+        cur_row = QtWidgets.QHBoxLayout()
+        self.b_current = QtWidgets.QPushButton("⤓ 套用儀器目前值")
+        self.b_current.setObjectName("applyCurrent")
+        self.b_current.setToolTip("讀取這台儀器現在的設定（頻率、點數、IF 頻寬、功率…，例如在即時數據調好的值）填進下面的欄位")
+        self.b_current.clicked.connect(self.apply_current)
+        self.cur_note = QtWidgets.QLabel("")
+        self.cur_note.setProperty("role", "muted")
+        self.cur_note.setWordWrap(True)
+        cur_row.addWidget(self.b_current)
+        cur_row.addWidget(self.cur_note, 1)
+        lay.addLayout(cur_row)
         self.box = QtWidgets.QGroupBox("儀器設定（開始量測時寫入儀器；會存進資料檔）")
         self.sform = QtWidgets.QFormLayout(self.box)
         lay.addWidget(self.box, 1)
@@ -478,7 +497,17 @@ class MeasureDialog(QtWidgets.QDialog):
         lay.addWidget(bb)
         self.inst.currentIndexChanged.connect(self._on_inst)
         self._fields: Dict[str, Any] = {}
+        self.freq_mode: Optional[QtWidgets.QComboBox] = None
+        st = self.b.settings or {}
+        self._mode = "center" if (("center_freq" in st or "span" in st)
+                                  and not ("start_freq" in st or "stop_freq" in st)) else "startstop"
         self._build()
+
+    # ---- 欄位 -------------------------------------------------------------------------
+    def _has_freq(self) -> bool:
+        m = self.doc.catalog.measurer(self.b.instrument)
+        keys = {f.key for f in (m.fields if m else [])}
+        return {"start_freq", "stop_freq"} <= keys
 
     def _on_inst(self) -> None:
         ref = self.inst.currentData()
@@ -487,6 +516,7 @@ class MeasureDialog(QtWidgets.QDialog):
             self.b.instrument = ref
             self.b.traces = [m.traces[0]] if m and m.traces else []
             self.b.settings = dict(m.defaults) if m else {}
+            self._mode = "startstop"
             self._build()
 
     def _build(self) -> None:
@@ -501,7 +531,28 @@ class MeasureDialog(QtWidgets.QDialog):
         while self.sform.rowCount():
             self.sform.removeRow(0)
         self._fields = {}
-        for f in (m.fields if m else []):
+        self.freq_mode = None
+        fields = list(m.fields if m else [])
+        if self._has_freq():
+            self.freq_mode = QtWidgets.QComboBox()
+            self.freq_mode.setObjectName("freqMode")
+            for k, label in self.FREQ_MODES:
+                self.freq_mode.addItem(label, k)
+            self.freq_mode.setCurrentIndex(max(0, self.freq_mode.findData(self._mode)))
+            self.freq_mode.currentIndexChanged.connect(self._mode_changed)
+            self.sform.addRow("頻率設定", self.freq_mode)
+            if self._mode == "center":
+                for key, label, unit in self.CENTER_UNITS:
+                    w = dspin(0, 1e12, decimals(unit), unit)
+                    raw = (b.settings or {}).get(key)
+                    try:
+                        w.setValue(parse_quantity(raw, unit) / split_unit(unit)[1] if raw is not None else 0.0)
+                    except Exception:  # noqa: BLE001
+                        w.setValue(0.0)
+                    self._fields[key] = (_Field(key, label, unit), w)
+                    self.sform.addRow(label, w)
+                fields = [f for f in fields if f.key not in ("start_freq", "stop_freq")]
+        for f in fields:
             raw = (b.settings or {}).get(f.key)
             if f.kind == "bool":
                 w = QtWidgets.QCheckBox()
@@ -527,11 +578,8 @@ class MeasureDialog(QtWidgets.QDialog):
             self._fields[f.key] = (f, w)
             self.sform.addRow(f.label, w)
 
-    def result_block(self) -> Block:
-        b = self.b
-        b.traces = [self.traces.item(i).text() for i in range(self.traces.count())
-                    if self.traces.item(i).checkState() == Qt.CheckState.Checked]
-        s = dict(b.settings or {})
+    def _collect(self) -> Dict[str, Any]:
+        s = dict(self.b.settings or {})
         for key, (f, w) in self._fields.items():
             if isinstance(w, QtWidgets.QCheckBox):
                 s[key] = w.isChecked()
@@ -543,8 +591,100 @@ class MeasureDialog(QtWidgets.QDialog):
                 s[key] = int(w.value())
             else:
                 s[key] = f"{w.value():.9g} {f.unit}"
-        b.settings = s
+        if self.freq_mode is not None:                 # 只留一種頻率設定（儀器先設起訖再設中心，會互相蓋掉）
+            drop = ("start_freq", "stop_freq") if self._mode == "center" else ("center_freq", "span")
+            for k in drop:
+                s.pop(k, None)
+        return s
+
+    def _mode_changed(self, _i: int) -> None:
+        new = self.freq_mode.currentData()
+        if new == self._mode:
+            return
+        s = self._collect()
+        try:
+            if new == "center":
+                a, b = parse_quantity(s.get("start_freq"), "Hz"), parse_quantity(s.get("stop_freq"), "Hz")
+                s["center_freq"] = f"{(a + b) / 2 / 1e9:.9g} GHz"
+                s["span"] = f"{abs(b - a) / 1e6:.9g} MHz"
+            else:
+                c, w = parse_quantity(s.get("center_freq"), "Hz"), parse_quantity(s.get("span"), "Hz")
+                s["start_freq"] = f"{(c - w / 2) / 1e9:.9g} GHz"
+                s["stop_freq"] = f"{(c + w / 2) / 1e9:.9g} GHz"
+        except Exception:  # noqa: BLE001
+            pass
+        self.b.settings = s
+        self._mode = new
+        self._build()
+
+    # ---- 套用儀器目前值 ------------------------------------------------------------------
+    def _backend(self):
+        w = self.parent()
+        win = w.window() if isinstance(w, QtWidgets.QWidget) else None
+        live = getattr(win, "live", None)
+        return getattr(live, "backend", None)
+
+    def apply_current(self) -> None:
+        be, inst = self._backend(), self.b.instrument
+        if be is None or not inst:
+            self.cur_note.setText("沒有可以讀取的儀器（先在即時數據連線）")
+            return
+        keys = list(self._fields)
+        refs = [f"{inst}.{k}" for k in keys]
+        self.b_current.setEnabled(False)
+        self.cur_note.setText("讀取中…")
+
+        def ok(vals):
+            self.b_current.setEnabled(True)
+            done, errs = self.fill_values({k: vals.get(f"{inst}.{k}", (None, "")) for k in keys})
+            self.cur_note.setText(f"✔ 已填入 {done} 項目前值" + (f"；讀不到：{'、'.join(errs)}" if errs else ""))
+
+        def fail(m):
+            self.b_current.setEnabled(True)
+            self.cur_note.setText(f"❌ 讀取失敗：{m}")
+        from ..worker import run_bg
+
+        run_bg(lambda: be.get(refs, connect=True), ok, fail)
+
+    def fill_values(self, vals: Dict[str, Any]) -> tuple:
+        """{key: (SI 值, 錯誤)} → 填進欄位；回傳 (填了幾項, 讀不到的欄位名稱)。"""
+        done, errs = 0, []
+        for key, (v, err) in vals.items():
+            if key not in self._fields:
+                continue
+            f, w = self._fields[key]
+            if err or v is None:
+                errs.append(f.label)
+                continue
+            try:
+                if isinstance(w, QtWidgets.QCheckBox):
+                    w.setChecked(bool(v) if not isinstance(v, str) else v.strip().upper() in ("1", "ON", "TRUE"))
+                elif isinstance(w, QtWidgets.QComboBox):
+                    w.setCurrentText(str(v))
+                elif isinstance(w, QtWidgets.QLineEdit):
+                    w.setText(str(v))
+                elif isinstance(w, QtWidgets.QSpinBox):
+                    w.setValue(int(round(float(v))))
+                else:
+                    w.setValue(float(v) / split_unit(f.unit)[1])
+                done += 1
+            except Exception:  # noqa: BLE001
+                errs.append(f.label)
+        return done, errs
+
+    def result_block(self) -> Block:
+        b = self.b
+        b.traces = [self.traces.item(i).text() for i in range(self.traces.count())
+                    if self.traces.item(i).checkState() == Qt.CheckState.Checked]
+        b.settings = self._collect()
         return b
+
+
+class _Field:
+    """中心頻率 / span 用的欄位描述（它們不是 measure_setting，型別比照 MeasureField）。"""
+
+    def __init__(self, key: str, label: str, unit: str) -> None:
+        self.key, self.label, self.unit, self.kind, self.choices = key, label, unit, "float", None
 
 
 class WaitDialog(QtWidgets.QDialog):

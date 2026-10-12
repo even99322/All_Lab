@@ -23,7 +23,7 @@ from ..core.errors import ConfigError
 from ..core.registry import PROCEDURES, WRITERS
 from ..core.station import Station
 from ..data.dataset import Dataset
-from ..data.naming import day_folder, stale_date_in_filename, unique_filename
+from ..data.naming import data_root, day_folder, folder_pattern, project_folder, stale_date_in_filename, unique_filename
 from ..data.writers.hdf5_native import HDF5Writer
 from ..settings import setting
 from .hooks import build_hook
@@ -85,9 +85,9 @@ class Experiment:
         now = now or _dt.datetime.now()
         o = self.output_cfg
         # 優先順序：呼叫參數 > 實驗 output: > settings.yaml data:
-        root = root or o.get("root") or setting("data.root", "") or "./data"
-        folder = day_folder(root, o.get("folder_pattern") or setting("data.folder_pattern", "{yyyy}/{mm}/Data_{mmdd}"),
-                            now, self.output_project().get("name", ""))
+        root = data_root(root or o.get("root"))
+        folder = day_folder(root, folder_pattern(o.get("folder_pattern")), now,
+                            project_folder({**o, "lab_project": self.output_project()}))
         fname = file_name or o.get("file_name") or f"{self.name}.hdf5"
         raw = None
         if o.get("raw", raw_backup()):

@@ -113,6 +113,24 @@ def run() -> int:
 
     check("Qt Graphs 3D (QML)", graphs_qml)
 
+    def pet_pictures():
+        """v2.1.5: pet pictures are an optional download (not in the program). When they are installed every
+        pet must load; LLV_SELF_TEST_REQUIRE_PETS=1 (the install tests) makes "not installed" a failure."""
+        import os
+
+        from app.pet import pack, registry
+        from app.pet.character import Character
+
+        if not pack.available():
+            if os.environ.get("LLV_SELF_TEST_REQUIRE_PETS") == "1":
+                raise RuntimeError(f"not installed in {pack.pets_dir()}")
+            return f"not installed (optional download; {pack.pets_dir()})"
+        loaded = [Character(info.pack, 1).id for info in registry.PETS if not info.hidden]
+        version = (pack.installed_info() or {}).get("version", "source folder")
+        return f"{', '.join(loaded)} from {pack.assets_root()} ({version})"
+
+    check("pet pictures", pet_pictures)
+
     def licences():
         from app._guard import license as licenses
         from app._guard.machine import machine_code

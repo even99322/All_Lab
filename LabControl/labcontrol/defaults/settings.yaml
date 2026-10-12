@@ -15,8 +15,8 @@ app:
 
 # ---- 存檔 --------------------------------------------------------------------
 data:
-  root: C:/Users/QEL/Desktop/VNA_data     # 資料根目錄
-  folder_pattern: "{yyyy}/{mm}/Data_{mmdd}"   # 可用 {yyyy} {mm} {dd} {mmdd} {yyyymmdd}
+  root: ~/Desktop/數據集散地      # 資料根目錄（~ = 使用者資料夾，量測電腦是 C:\Users\user\Desktop\數據集散地）
+  folder_pattern: "{project}/{yyyy}/{mm}/Data_{mmdd}"   # {project} = 專案資料夾；另可用 {yyyy} {mm} {dd} {mmdd} {yyyymmdd}
   split_pattern: "{stem}_{index:03d}_{label}" # 分檔檔名：stem=檔名、index=外圈序號、label=外圈值（如 52mA）
   collision: underscore        # 同名檔案：underscore（_2）| paren（(2)）| overwrite
   raw_backup: false            # 0.0.28 起不另存 _raw/（true = 量測時逐點另存原生 HDF5 到 _raw/，當機時救資料用）
@@ -135,6 +135,14 @@ estimate:                      # 預估時間用（每點量測時間 = 點數 /
   vna: {overhead: 1.1, fixed_s: 0.03}
   shfqc: {overhead: 1.1, fixed_s: 0.05}
   default_s: 0.1
+
+# ---- 即時數據（電源群組、VNA）--------------------------------------------------------
+live:
+  poll_s: 1.0                  # 每幾秒讀一次電源目前值
+  memory_ramp_mA_s: 0.05       # M1/M2/M3 回到記憶值的速率
+  max_ramp_mA_s: 10            # 0.0.30：全域最大調整速率（所有即時數據的電流斜坡都不超過；面板上可以改）
+  dial_range_mA: 200           # 0.0.30：目標旋鈕的範圍 ±200 mA（儀器上下限更小時用儀器的）
+  dial_apply_ms: 700           # 0.0.30：旋鈕停手多久後開始斜坡
 
 # ---- Hooks 預設參數 -------------------------------------------------------------
 hooks:

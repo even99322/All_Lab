@@ -36,7 +36,8 @@ def test_labber_script_is_standalone():
 
 def test_naming(tmp_path):
     now = dt.datetime(2026, 9, 29)
-    assert day_folder("/r", now=now).as_posix() == "/r/2026/09/Data_0929"
+    assert day_folder("/r", "{yyyy}/{mm}/Data_{mmdd}", now=now).as_posix() == "/r/2026/09/Data_0929"
+    assert day_folder("/r", now=now, project="YIG").as_posix() == "/r/YIG/2026/09/Data_0929"      # 0.0.30 預設
     assert stale_date_in_filename("0901 RSMEP_13.hdf5", now) == ("0901", "0929", "0929 RSMEP_13.hdf5")
     assert stale_date_in_filename("0929 x.hdf5", now) is None
     (tmp_path / "a.hdf5").touch()

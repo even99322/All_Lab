@@ -164,3 +164,20 @@ jobs:
           name: LabLogViewer-Windows-installer
           path: LabLogViewer/dist/LabLogViewer_v*_windows-setup.exe
           retention-days: 30
+
+  pets:
+    name: Pet pictures (optional download)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: LabLogViewerPets_v<version>.zip
+        run: |
+          python3 -m app.pet.pack dist
+          ls -la dist
+          python3 -c "import zipfile,sys,glob; z=zipfile.ZipFile(glob.glob('dist/LabLogViewerPets_v*.zip')[0]); n=z.namelist(); assert 'pets_manifest.json' in n and 'qel-module.json' in n and any(x.endswith('lv01/idle/frame_0001.webp') for x in n), n[:5]"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: LabLogViewer-pets
+          path: LabLogViewer/dist/LabLogViewerPets_v*.zip
+          retention-days: 30
+          compression-level: 0

@@ -167,11 +167,13 @@ def _plan_file(plat, mid: str, platform: str, arch: str) -> Optional[Dict[str, A
     return files[0]
 
 
-def setup_plan(plat, platform: str = "windows", arch: str = "x86_64") -> str:
+def setup_plan(plat, platform: str = "windows", arch: str = "x86_64", pets: bool = False) -> str:
     """一鍵安裝讀的清單（純文字，一行一個程式）：
         app|版本|檔名|大小|sha256|網址路徑
     Windows：每個程式最新的安裝程式（*setup*.exe，Inno Setup，能用 /SILENT 安裝）；
-    macOS（?platform=macos&arch=arm64|x86_64）：最新的 .dmg（同晶片優先），給 /get/mac 安裝腳本。"""
+    macOS（?platform=macos&arch=arm64|x86_64）：最新的 .dmg（同晶片優先），給 /get/mac 安裝腳本。
+    pets（?pets=1，0.0.30 的一鍵安裝、Mac 腳本、讀檔程式）：多一行 pets|…，讀檔的寵物圖檔 zip。
+    舊的一鍵安裝（1.0.0）不帶 pets=1，不會看到這行。"""
     platform = "macos" if str(platform).lower().startswith("mac") else "windows"
     arch = "arm64" if str(arch).lower() in ("arm64", "aarch64") else "x86_64"
     lines = [f"# QEL setup plan v1 ({platform} {arch}): app|version|file|size|sha256|path"]
@@ -180,7 +182,21 @@ def setup_plan(plat, platform: str = "windows", arch: str = "x86_64") -> str:
         if f is not None:
             lines.append("|".join([mid, f["version"], f["name"], str(f.get("size", 0)), f.get("sha256", ""),
                                    f["url"]]))
+    f = pets_file(plat) if pets else None
+    if f is not None:                                      # 0.0.30：寵物圖檔（安裝時選擇要不要）
+        lines.append("|".join(["pets", f["version"], f["name"], str(f.get("size", 0)), f.get("sha256", ""),
+                               f["url"]]))
     return "\n".join(lines) + "\n"
+
+
+def pets_file(plat) -> Optional[Dict[str, Any]]:
+    """最新的讀檔寵物圖檔 LabLogViewerPets_v<版本>.zip（所有作業系統共用）；沒有 → None。"""
+    m = plat.modules().get("llvpets") or {}
+    for v in m.get("versions") or []:                      # 新到舊
+        z = [f for f in v["files"] if f["name"].lower().endswith(".zip")]
+        if z:
+            return dict(z[0], version=v["version"], url=f"/get/llvpets/{v['version']}/{_q(z[0]['name'])}")
+    return None
 
 
 MAC_SCRIPT = r"""#!/bin/bash
@@ -188,6 +204,7 @@ MAC_SCRIPT = r"""#!/bin/bash
 #     curl -fsSL __BASE__/get/mac | bash
 # 下載量測（Lab Control）與讀檔（LabLogViewer）這台 Mac 晶片的最新版、檢查 sha256、裝到「應用程式」。
 # 用 curl 下載不會被標成「從網路下載」，所以不會出現「已損毀，無法打開」。只裝一個：QEL_APPS=labcontrol
+# 讀檔程式的桌面寵物（約 220 MB）會問要不要下載；不問直接決定：QEL_PETS=1（要）或 QEL_PETS=0（不要）
 set -euo pipefail
 # 變數一律 ${VAR}：macOS 的 bash 3.2 會把 $VAR 後面緊接的中文位元組當成變數名稱的一部分
 main() {
@@ -196,10 +213,11 @@ main() {
   DEST="/Applications"; [ -w "${DEST}" ] || DEST="${HOME}/Applications"; mkdir -p "${DEST}"
   TMP=$(mktemp -d); trap "rm -rf '${TMP}'" EXIT
   echo "量子工程平台：${BASE}（${ARCH}）→ ${DEST}"
-  PLAN=$(curl -fsSL "${BASE}/get/setup.txt?platform=macos&arch=${ARCH}")
-  local n=0 app ver name size sha path mnt src dst
+  PLAN=$(curl -fsSL "${BASE}/get/setup.txt?platform=macos&arch=${ARCH}&pets=1")
+  local n=0 app ver name size sha path mnt src dst PETS_LINE="" WANT
   while IFS='|' read -r app ver name size sha path; do
     case "${app}" in ""|\#*) continue ;; esac
+    if [ "${app}" = "pets" ]; then PETS_LINE="${ver}|${name}|${size}|${sha}|${path}"; continue; fi
     case " ${APPS} " in *" ${app} "*) ;; *) continue ;; esac
     echo "⬇ ${name}"
     curl -fL --progress-bar "${BASE}${path}" -o "${TMP}/${name}"
@@ -217,7 +235,31 @@ main() {
     n=$((n + 1))
   done <<< "${PLAN}"
   [ "${n}" -gt 0 ] || { echo "✖ 平台上還沒有這台 Mac（${ARCH}）的安裝檔"; exit 1; }
+  WANT="${QEL_PETS:-}"
+  case " ${APPS} " in *" lablogviewer "*) ;; *) WANT="0" ;; esac
+  if [ -n "${PETS_LINE}" ] && [ -z "${WANT}" ] && (exec </dev/tty) 2>/dev/null; then
+    IFS='|' read -r ver name size sha path <<< "${PETS_LINE}"
+    printf "要下載讀檔程式的桌面寵物嗎？（約 %s MB，之後也能在讀檔程式的「設定 → 寵物」下載）[y/N] " \
+      "$(( size / 1000000 ))"
+    read -r WANT </dev/tty || WANT=""
+  fi
+  case "${WANT}" in
+    y|Y|yes|YES|1) install_pets "${BASE}" "${TMP}" "${PETS_LINE}" ;;
+    *) [ -z "${PETS_LINE}" ] || echo "（沒有下載桌面寵物：之後可以在讀檔程式的「設定 → 寵物」下載）" ;;
+  esac
   echo "完成。之後兩個程式都會自己收到更新。"
+}
+install_pets() {
+  local BASE="${1}" TMP="${2}" ver name size sha path PETS
+  IFS='|' read -r ver name size sha path <<< "${3}"
+  PETS="${HOME}/Library/Application Support/LabLogViewer/pets"
+  echo "⬇ ${name}"
+  curl -fL --progress-bar "${BASE}${path}" -o "${TMP}/${name}"
+  echo "${sha}  ${TMP}/${name}" | shasum -a 256 -c - >/dev/null || { echo "✖ ${name} 檢查碼不符"; exit 1; }
+  rm -rf "${PETS}.new"; mkdir -p "${PETS}.new"
+  ditto -x -k "${TMP}/${name}" "${PETS}.new"
+  rm -rf "${PETS}"; mv "${PETS}.new" "${PETS}"
+  echo "✔ 桌面寵物（${ver}）→ ${PETS}"
 }
 main "$@"
 """

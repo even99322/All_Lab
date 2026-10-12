@@ -38,7 +38,7 @@ jobs:
         run: |
           ls -la artifacts
           mkdir files
-          find artifacts -type f \( -name "*.exe" -o -name "*.dmg" \) -exec cp {} files/ \;
+          find artifacts -type f \( -name "*.exe" -o -name "*.dmg" -o -name "LabLogViewerPets_v*.zip" \) -exec cp {} files/ \;
           ls -la files
           test -n "$(ls files)"
           {

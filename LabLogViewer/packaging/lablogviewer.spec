@@ -5,7 +5,8 @@
 #     Windows -> dist/LabLogViewer/LabLogViewer.exe (folder; packaging/installer.iss makes the installer)
 #     macOS   -> dist/LabLogViewer.app
 # Bundled next to the code: help/, icons/ (found through sys._MEIPASS) and every non-code file under app/
-# (pet pictures, YIG models, json ...).
+# (YIG models, json ...). v2.1.5: NOT the pet pictures (app/pet/assets, ~220 MB): they are an optional download
+# (LabLogViewerPets_v*.zip, see app/pet/pack.py), built by the workflow with python -m app.pet.pack.
 import re
 import sys
 from pathlib import Path
@@ -22,12 +23,15 @@ sys.path.insert(0, str(SRC))                                # the compiled licen
 VERSION = re.search(r'__version__ = "(.+)"', (SRC / "app" / "__init__.py").read_text(encoding="utf-8")).group(1)
 CODE = {".py", ".pyc", ".pyd", ".so"}
 MODELS = SRC / "app" / "analysis" / "yig_fitting" / "models"      # read as files by the YIG fitter
+PET_PICTURES = SRC / "app" / "pet" / "assets"
 
 datas = [(str(SRC / "help"), "help"), (str(SRC / "icons"), "icons")]
 for path in sorted((SRC / "app").rglob("*")):
     if not path.is_file() or "__pycache__" in path.parts:
         continue
     if path.suffix.lower() in CODE and MODELS not in path.parents:
+        continue
+    if PET_PICTURES in path.parents:
         continue
     datas.append((str(path), str(path.parent.relative_to(SRC))))
 

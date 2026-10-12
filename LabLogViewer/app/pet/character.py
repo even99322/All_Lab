@@ -9,6 +9,8 @@ Missing clips fall back so every character answers every event (see FALLBACK).
 import json
 from pathlib import Path
 
+from app.pet.pack import resolve as _resolve
+
 # Shared pet events. Function events (receive, recent, notify, dock, dashboard) are raised by
 # LabLogViewer; interaction events by the pet window itself. Animations never award EXP.
 EVENTS = ('idle', 'click', 'drag', 'land', 'receive', 'recent', 'notify', 'alert',
@@ -41,9 +43,9 @@ class Character:
         # use the highest unlocked level whose sprites are actually present
         candidates = [lv for lv in sorted(levels, reverse=True) if lv <= level] or [min(levels)]
         self.available_levels = [lv for lv in sorted(levels)
-                                 if (pack_path.parent / levels[lv] / 'idle').is_dir()]
+                                 if (_resolve(pack_path.parent, levels[lv]) / 'idle').is_dir()]
         for lv in candidates:
-            root = (pack_path.parent / levels[lv]).resolve()
+            root = _resolve(pack_path.parent, levels[lv]).resolve()
             if (root / 'meta.json').exists() and (root / 'idle').is_dir():
                 break
         else:
@@ -57,7 +59,7 @@ class Character:
         self.pupil_ratio = self.pack.get('pupil_radius_ratio', self.meta.get('pupil_radius_ratio', 0.085))
         self.display_scale = self.pack.get('display_scale', 0.5)
         sp = self.pack.get('secret_painting')
-        self.secret_painting = (pack_path.parent / sp) if sp else None
+        self.secret_painting = _resolve(pack_path.parent, sp) if sp else None
         self.eye_style = self.pack.get('eye_style', self.meta.get('eye_style', 'pupil'))
         self.clips = {}
         for name, info in self.meta['clips'].items():

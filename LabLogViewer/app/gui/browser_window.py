@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import threading
+
+import sys
+
 from datetime import datetime
 import logging
 import time
@@ -232,6 +236,12 @@ class BrowserWindow(QMainWindow):
         open_action.setShortcut("Ctrl+O")
         open_action.triggered.connect(self.open_database_dialog)
         file_menu.addAction(open_action)
+        # v2.1.5: the lab's shared folder on the NAS (lab network or VPN)
+        self.open_lab_data_action = QAction("Open Lab Data Folder (NAS / VPN)", self)
+        self.open_lab_data_action.setObjectName("browserOpenLabData")
+        self.open_lab_data_action.setShortcut("Ctrl+Shift+O")
+        self.open_lab_data_action.triggered.connect(lambda _checked=False: self.open_lab_data())
+        file_menu.addAction(self.open_lab_data_action)
         self.reload_action = QAction("&Reload Database", self)
         self.reload_action.setShortcut("Ctrl+R")
         self.reload_action.setEnabled(False)
@@ -914,6 +924,46 @@ class BrowserWindow(QMainWindow):
         path = QFileDialog.getExistingDirectory(self, "Open Database Folder")
         if path:
             self.open_database(path)
+
+    def open_lab_data(self, *, ask: bool = True) -> bool:
+        """File > Open Lab Data Folder: 數據集散地 on the NAS (lab network first, then VPN). True when opened."""
+        from app.core import lab_share
+
+        self.statusBar().showMessage(self.localizer.text("labdata.searching"))
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            place = self._find_lab_share(lab_share)
+        finally:
+            QApplication.restoreOverrideCursor()
+        if place is None and sys.platform == "darwin" and ask:
+            if QMessageBox.question(self, self.localizer.text("labdata.title"),
+                                    self.localizer.text("labdata.mount_mac")) == QMessageBox.Yes:
+                lab_share.mount_macos()
+                QMessageBox.information(self, self.localizer.text("labdata.title"),
+                                        self.localizer.text("labdata.after_mount"))
+                QApplication.setOverrideCursor(Qt.WaitCursor)
+                try:
+                    place = self._find_lab_share(lab_share)
+                finally:
+                    QApplication.restoreOverrideCursor()
+        if place is None:
+            self.statusBar().clearMessage()
+            if ask:
+                QMessageBox.warning(self, self.localizer.text("labdata.title"),
+                                    self.localizer.text("labdata.unreachable").format(
+                                        places="\n".join(lab_share.candidates())))
+            return False
+        self.open_database(place)
+        return True
+
+    def _find_lab_share(self, lab_share) -> str | None:
+        result: dict = {}
+        worker = threading.Thread(target=lambda: result.__setitem__("place", lab_share.find()), daemon=True)
+        worker.start()
+        while worker.is_alive():                          # keep the window responsive while the share answers
+            QApplication.processEvents()
+            worker.join(0.05)
+        return result.get("place")
 
     def open_database(self, root_path: str) -> None:
         self.scanner_root = str(Path(root_path).expanduser().resolve())

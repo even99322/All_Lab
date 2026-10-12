@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.pet import progress, registry, store
+from app.pet import pack, progress, registry, store
 
 
 def _preview_pixmap(info: registry.PetInfo):
@@ -68,7 +68,7 @@ class PetCard(QFrame):
         else:
             self.status.setText("" if allowed else t(reason).format(max=registry.MAX_LEVEL))
             self.button.setText(t("pet.choose"))
-            self.button.setEnabled(allowed)
+            self.button.setEnabled(allowed and pack.available())
 
 
 class PetPage(QWidget):
@@ -91,7 +91,15 @@ class PetPage(QWidget):
         self.exp_bar = QProgressBar(); self.exp_bar.setObjectName("petExpBar"); self.exp_bar.setTextVisible(False)
         self.exp_bar.setFixedHeight(10)
         self.exp_label = QLabel(); self.exp_label.setObjectName("petExp"); self.exp_label.setWordWrap(True)
-        for w in (self.title, self.intro, self.show_box, self.float_box, self.current, self.exp_bar, self.exp_label):
+        # v2.1.5: the pictures are an optional download (app/pet/pack.py)
+        self.pics_status = QLabel(); self.pics_status.setObjectName("petPictures"); self.pics_status.setWordWrap(True)
+        self.pics_button = QPushButton(); self.pics_button.setObjectName("petDownload")
+        self.pics_button.clicked.connect(self._download_pictures)
+        pics_row = QHBoxLayout(); pics_row.addWidget(self.pics_status, 1); pics_row.addWidget(self.pics_button)
+        for w in (self.title, self.intro):
+            layout.addWidget(w)
+        layout.addLayout(pics_row)
+        for w in (self.show_box, self.float_box, self.current, self.exp_bar, self.exp_label):
             layout.addWidget(w)
         look_row = QHBoxLayout()
         self.look_label = QLabel()
@@ -122,6 +130,16 @@ class PetPage(QWidget):
         t = self.t
         self.title.setText(t("pet.page_title"))
         self.intro.setText(t("pet.page_intro"))
+        have = pack.available()
+        manifest = pack.installed_info()
+        if not have:
+            self.pics_status.setText("⚠ " + t("pet.pics.missing"))
+        elif manifest:
+            self.pics_status.setText(t("pet.pics.installed").format(version=manifest.get("version", "?")))
+        else:
+            self.pics_status.setText(t("pet.pics.bundled").format(folder=pack.assets_root()))
+        self.pics_button.setText(t("pet.pics.download") if not have else t("pet.pics.redownload"))
+        self.pics_button.setVisible(not have or pack.assets_root() != pack.BUNDLED)
         self.show_box.blockSignals(True)
         self.show_box.setText(t("pet.show"))
         self.show_box.setChecked(state["enabled"])
@@ -193,6 +211,15 @@ class PetPage(QWidget):
         except PermissionError as error:
             QMessageBox.information(self, name, self.t(str(error)).format(max=registry.MAX_LEVEL))
         self._apply()
+
+    def _download_pictures(self) -> None:
+        from app.gui import pet_download
+
+        if pet_download.download(self, self.t):
+            for card in self.cards:                       # previews were blank without the pictures
+                card.setParent(None); card.deleteLater()
+            self.cards = []
+            self._apply()
 
     def _look_chosen(self, index: int) -> None:
         state = store.load()

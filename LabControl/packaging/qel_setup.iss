@@ -6,8 +6,10 @@
 ; 所以它幾乎不用更新：站長在網頁控制台發佈新版，下一個人用一鍵安裝就會裝到新版。
 ; Hub 位址：先 http://192.168.50.2:8765（實驗室網路），再 http://100.114.33.20:8765（VPN）；
 ; 也可以用命令列 /HUB=http://主機:埠 指定。
+; 1.1.0（0.0.30）：多一個選擇性的元件「pets」（讀檔的桌面寵物圖檔，預設不勾），解壓到 %LOCALAPPDATA%\LabLogViewer\pets。
+;   安靜安裝要寵物：/COMPONENTS="labcontrol,lablogviewer,pets"
 #ifndef SetupVersion
-  #define SetupVersion "1.0.0"
+  #define SetupVersion "1.1.0"
 #endif
 
 [Setup]
@@ -46,6 +48,7 @@ Name: "custom"; Description: "自訂"; Flags: iscustom
 [Components]
 Name: "labcontrol"; Description: "量測 Lab Control（流程圖量測、即時數據、儀器伺服器）"; Types: full custom
 Name: "lablogviewer"; Description: "讀檔 LabLogViewer（Labber / .nc 量測檔、擬合、圖）"; Types: full custom
+Name: "pets"; Description: "讀檔的桌面寵物圖檔（約 220 MB，選擇性；之後也能在讀檔程式裡下載）"
 
 [Run]
 Filename: "{localappdata}\Programs\Lab Control\LabControl.exe"; Description: "開啟 Lab Control"; Flags: postinstall nowait skipifsilent unchecked; Check: Installed('labcontrol')
@@ -117,7 +120,7 @@ begin
   for i := 0 to Hubs.Count - 1 do
   begin
     try
-      DownloadTemporaryFile(Hubs[i] + '/get/setup.txt', 'qel_setup_plan.txt', '', nil);
+      DownloadTemporaryFile(Hubs[i] + '/get/setup.txt?pets=1', 'qel_setup_plan.txt', '', nil);
       if LoadStringsFromFile(ExpandConstant('{tmp}\qel_setup_plan.txt'), Text) then
       begin
         Lines.Clear;
@@ -139,6 +142,27 @@ procedure Fail(Msg: String);
 begin
   Log(Msg);
   RaiseException(Msg);
+end;
+
+{ 寵物圖檔 zip → %LOCALAPPDATA%\LabLogViewer\pets（先解到 pets.new，成功才換掉舊的）}
+procedure UnpackPets(Zip: String);
+var
+  Dest, Cmd: String;
+  Code: Integer;
+begin
+  Dest := ExpandConstant('{localappdata}\LabLogViewer\pets');
+  ForceDirectories(ExtractFileDir(Dest));
+  Cmd := '-NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference=''Stop''; ' +
+    'Add-Type -AssemblyName System.IO.Compression.FileSystem; $d=''' + Dest + '''; $n=$d+''.new''; ' +
+    'if (Test-Path -LiteralPath $n) { Remove-Item -LiteralPath $n -Recurse -Force }; ' +
+    '[IO.Compression.ZipFile]::ExtractToDirectory(''' + Zip + ''', $n); ' +
+    'if (Test-Path -LiteralPath $d) { Remove-Item -LiteralPath $d -Recurse -Force }; ' +
+    'Move-Item -LiteralPath $n -Destination $d"';
+  Log('powershell ' + Cmd);
+  if not Exec('powershell.exe', Cmd, '', SW_HIDE, ewWaitUntilTerminated, Code) then
+    Fail('無法解壓寵物圖檔：' + SysErrorMessage(Code));
+  if Code <> 0 then
+    Fail('解壓寵物圖檔失敗（錯誤碼 ' + IntToStr(Code) + '）。');
 end;
 
 procedure InstallAll;
@@ -171,6 +195,14 @@ begin
       Path := ExpandConstant('{tmp}\') + Name;
       WizardForm.StatusLabel.Caption := '安裝 ' + CurrentName + ' …';
       WizardForm.ProgressGauge.Style := npbstMarquee;
+      if App = 'pets' then
+      begin
+        UnpackPets(Path);
+        WizardForm.ProgressGauge.Style := npbstNormal;
+        Done.Add(App);
+        Log('Installed ' + CurrentName);
+        continue;
+      end;
       if not Exec(Path, '/SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /SP-', '', SW_SHOW,
                   ewWaitUntilTerminated, Code) then
         Fail('無法執行 ' + Name + '：' + SysErrorMessage(Code));

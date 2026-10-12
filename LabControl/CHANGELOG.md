@@ -5,6 +5,12 @@
 
 ---
 
+## 0.0.30 — 2026-10-12
+
+預設存到桌面「數據集散地」，每個專案一個資料夾（可選已有的資料夾）；即時數據的電流目標改成位數旋鈕（±200 mA、每位 ▲▼、滾輪、顯示目前值），全域最大調整速率預設 10 mA/s；VNA 量測方塊可用中心頻率 / span、「套用儀器目前值」；即時曲線 x / y 軸運算。LabLogViewer 2.1.5：開啟 NAS 數據集散地、2D 熱圖平滑、寵物改為選擇性下載。詳見 [docs/releases/v0.0.30.md](docs/releases/v0.0.30.md)。
+
+---
+
 ## 0.0.29 — 2026-10-12
 
 修正 Mac「Lab Control 已損毀，無法打開」（改 Info.plist 後沒有重新簽名）；Mac 從 NAS 一行安裝（`curl -fsSL http://<NAS>:8765/get/mac | bash`）；LabLogViewer 2.1.4 不再打包用不到的 Qt（WebEngine 等）。詳見 [docs/releases/v0.0.29.md](docs/releases/v0.0.29.md)。
