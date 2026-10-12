@@ -52,8 +52,12 @@ jobs:
             echo "::error title=pyinstaller ${{ matrix.arch }}::$(grep -v '^[0-9]* WARNING' pyi.txt | tail -25 | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; fi
       - name: Signature is valid (otherwise macOS says "damaged")
         run: |
-          if ! out=$(codesign --verify --deep --strict --verbose=2 dist/LabLogViewer.app 2>&1); then
-            echo "::error title=codesign ${{ matrix.arch }}::$(echo "$out" | tail -20 | sed ':a;N;$!ba;s/\n/%0A/g')"; exit 1; fi
+          j() { sed ':a;N;$!ba;s/\n/%0A/g'; }
+          echo "::notice title=app ${{ matrix.arch }}::$(ls -la dist dist/LabLogViewer.app/Contents 2>&1 | j)"
+          broken=$(find dist/LabLogViewer.app -type l ! -exec test -e {} \; -print 2>&1 | head -20)
+          [ -z "$broken" ] || echo "::error title=broken links ${{ matrix.arch }}::$(echo "$broken" | j)"
+          if ! out=$(codesign --verify --deep --strict --verbose=4 dist/LabLogViewer.app 2>&1); then
+            echo "::error title=codesign ${{ matrix.arch }}::$(echo "$out" | tail -20 | j)"; exit 1; fi
       - name: Self-test (${{ matrix.arch }})
         run: |
           export HOME="$RUNNER_TEMP/home" && mkdir -p "$HOME/Documents"
