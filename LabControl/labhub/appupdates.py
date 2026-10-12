@@ -189,33 +189,34 @@ MAC_SCRIPT = r"""#!/bin/bash
 # 下載量測（Lab Control）與讀檔（LabLogViewer）這台 Mac 晶片的最新版、檢查 sha256、裝到「應用程式」。
 # 用 curl 下載不會被標成「從網路下載」，所以不會出現「已損毀，無法打開」。只裝一個：QEL_APPS=labcontrol
 set -euo pipefail
+# 變數一律 ${VAR}：macOS 的 bash 3.2 會把 $VAR 後面緊接的中文位元組當成變數名稱的一部分
 main() {
   local BASE="__BASE__" APPS="${QEL_APPS:-labcontrol lablogviewer}" ARCH DEST TMP PLAN
-  ARCH=$(uname -m); [ "$ARCH" = "arm64" ] || ARCH="x86_64"
-  DEST="/Applications"; [ -w "$DEST" ] || DEST="$HOME/Applications"; mkdir -p "$DEST"
-  TMP=$(mktemp -d); trap "rm -rf '$TMP'" EXIT
-  echo "量子工程平台：$BASE（$ARCH）→ $DEST"
-  PLAN=$(curl -fsSL "$BASE/get/setup.txt?platform=macos&arch=$ARCH")
+  ARCH=$(uname -m); [ "${ARCH}" = "arm64" ] || ARCH="x86_64"
+  DEST="/Applications"; [ -w "${DEST}" ] || DEST="${HOME}/Applications"; mkdir -p "${DEST}"
+  TMP=$(mktemp -d); trap "rm -rf '${TMP}'" EXIT
+  echo "量子工程平台：${BASE}（${ARCH}）→ ${DEST}"
+  PLAN=$(curl -fsSL "${BASE}/get/setup.txt?platform=macos&arch=${ARCH}")
   local n=0 app ver name size sha path mnt src dst
   while IFS='|' read -r app ver name size sha path; do
-    case "$app" in ""|\#*) continue ;; esac
-    case " $APPS " in *" $app "*) ;; *) continue ;; esac
-    echo "⬇ $name"
-    curl -fL --progress-bar "$BASE$path" -o "$TMP/$name"
-    echo "$sha  $TMP/$name" | shasum -a 256 -c - >/dev/null || { echo "✖ $name 檢查碼不符"; exit 1; }
+    case "${app}" in ""|\#*) continue ;; esac
+    case " ${APPS} " in *" ${app} "*) ;; *) continue ;; esac
+    echo "⬇ ${name}"
+    curl -fL --progress-bar "${BASE}${path}" -o "${TMP}/${name}"
+    echo "${sha}  ${TMP}/${name}" | shasum -a 256 -c - >/dev/null || { echo "✖ ${name} 檢查碼不符"; exit 1; }
     mnt=$(mktemp -d)
-    hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$mnt" "$TMP/$name" >/dev/null
-    src=$(ls -d "$mnt"/*.app | head -1)
-    dst="$DEST/$(basename "$src")"
-    osascript -e "quit app \"$(basename "$src" .app)\"" >/dev/null 2>&1 || true
-    rm -rf "$dst"
-    ditto "$src" "$dst"
-    hdiutil detach "$mnt" -quiet || true
-    xattr -dr com.apple.quarantine "$dst" 2>/dev/null || true
-    echo "✔ $dst（$ver）"
+    hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "${mnt}" "${TMP}/${name}" >/dev/null
+    src=$(ls -d "${mnt}"/*.app | head -1)
+    dst="${DEST}/$(basename "${src}")"
+    osascript -e "quit app \"$(basename "${src}" .app)\"" >/dev/null 2>&1 || true
+    rm -rf "${dst}"
+    ditto "${src}" "${dst}"
+    hdiutil detach "${mnt}" -quiet || true
+    xattr -dr com.apple.quarantine "${dst}" 2>/dev/null || true
+    echo "✔ ${dst}（${ver}）"
     n=$((n + 1))
-  done <<< "$PLAN"
-  [ "$n" -gt 0 ] || { echo "✖ 平台上還沒有這台 Mac（$ARCH）的安裝檔"; exit 1; }
+  done <<< "${PLAN}"
+  [ "${n}" -gt 0 ] || { echo "✖ 平台上還沒有這台 Mac（${ARCH}）的安裝檔"; exit 1; }
   echo "完成。之後兩個程式都會自己收到更新。"
 }
 main "$@"
