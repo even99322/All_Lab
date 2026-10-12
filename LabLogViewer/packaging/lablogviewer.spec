@@ -83,20 +83,58 @@ KEEP_TRANSLATION = re.compile(r"_(zh_tw|zh_cn|en)\.qm$", re.I)
 
 def _keep(entry) -> bool:
     dest = entry[0].replace("\\", "/")
-    if not dest.lower().startswith("pyside6"):
+    low = dest.lower()
+    # macOS: PyInstaller also puts a top-level link per Qt framework (e.g. "QtWebSockets" -> PySide6/Qt/lib/...)
+    qt_top = "/" not in dest and dest.startswith("Qt")
+    if not (low.startswith("pyside6") or qt_top):
         return True
     if DROP_QT.search(dest) or DROP_QML_DIR.search("/" + dest):
         return False
-    if "/translations/" in dest.lower() and dest.lower().endswith(".qm") and not KEEP_TRANSLATION.search(dest):
+    if "/translations/" in low and low.endswith(".qm") and not KEEP_TRANSLATION.search(dest):
         return False
-    if "qtwebengine_locales" in dest.lower():
+    if "qtwebengine_locales" in low:
         return False
     return True
+
+
+def _no_dangling_links(binaries, datas):
+    """Links whose target was left out (macOS .app: a broken link makes the signature invalid -> "damaged").
+    Follows links through linked folders (Versions/Current -> A)."""
+    import posixpath
+
+    kept, links = set(), {}
+    for e in binaries + datas:
+        path = e[0].replace("\\", "/")
+        if e[2] == "SYMLINK":
+            links[path] = posixpath.normpath(posixpath.join(posixpath.dirname(path), str(e[1]).replace("\\", "/")))
+            continue
+        while path:
+            kept.add(path)
+            path = posixpath.dirname(path)
+
+    def resolve(path, depth=0):
+        if depth > 20:
+            return None
+        parts = path.split("/")
+        for n in range(len(parts), 0, -1):
+            head = "/".join(parts[:n])
+            if head in links:
+                rest = "/".join(parts[n:])
+                return resolve(posixpath.normpath(links[head] + ("/" + rest if rest else "")), depth + 1)
+        return path
+
+    def ok(e):
+        if e[2] != "SYMLINK":
+            return True
+        target = resolve(e[0].replace("\\", "/"))
+        return target is not None and target in kept
+    return [e for e in binaries if ok(e)], [e for e in datas if ok(e)]
 
 
 before = len(a.binaries) + len(a.datas)
 a.binaries = [e for e in a.binaries if _keep(e)]
 a.datas = [e for e in a.datas if _keep(e)]
+a.binaries, a.datas = _no_dangling_links(a.binaries, a.datas)
 print(f"LabLogViewer spec: left out {before - len(a.binaries) - len(a.datas)} unused Qt files")
 pyz = PYZ(a.pure)
 icon = str(ROOT / "build" / ("LabLogViewer.icns" if sys.platform == "darwin" else "LabLogViewer.ico"))
