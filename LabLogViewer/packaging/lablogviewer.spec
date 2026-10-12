@@ -59,7 +59,9 @@ a = Analysis(
     hookspath=[],
     runtime_hooks=[],
     excludes=["tkinter", "PyQt5", "PyQt6", "IPython", "notebook", "pytest", "cv2", "pandas", "sklearn", "torch",
-              "numba", "jupyter", "sphinx", "docutils"] + UNUSED_QT_PY,
+              "numba", "jupyter", "sphinx", "docutils",
+              # build tools (prepare_build.py compiles the licence code with Cython; nothing needs them at run time)
+              "Cython", "pyximport", "setuptools", "pip", "wheel", "PyInstaller"] + UNUSED_QT_PY,
     noarchive=False,
 )
 
