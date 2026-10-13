@@ -142,6 +142,7 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
 
         self.doc.roles = role_lists(station.config.get("instruments") or {},   # 0.0.31：依量測電腦換儀器
                                     setting("lab_nodes", []))                # 0.0.32：量測電腦對應
+        self.doc.run_node = self.local_lab_node()                                # 1.0.1：這台是哪台量測電腦
         self.doc.remapped.connect(self._remapped)
         self.doc.remap()
         self.files = FilePanel(self.doc)
@@ -383,6 +384,13 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
 
         ArchiveDialog(self, project=self.files.current_project() or None, sources=sources).exec()
 
+    def local_lab_node(self):
+        """這台電腦在「量測電腦對應」裡是哪一台（LAB-1 / LAB-2…）；不是 → None。"""
+        from ....core.nodes import my_names
+        from ....scheme.remap import current_node
+
+        return current_node(self.doc.roles, my_names())
+
     def edit_node_map(self) -> None:
         """0.0.32：量測電腦對應（settings.yaml lab_nodes、instruments.yaml node:）。"""
         from ....scheme.remap import role_lists
@@ -401,6 +409,8 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         except Exception:  # noqa: BLE001
             pass
         self.doc.roles = role_lists(conf, res["lab_nodes"])
+        if not getattr(self, "remote_target", None):
+            self.doc.run_node = self.local_lab_node()
         self.doc.remap()
         msg = "✔ 量測電腦對應已儲存"
         if res.get("changed"):

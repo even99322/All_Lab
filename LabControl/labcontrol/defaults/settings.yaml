@@ -149,6 +149,7 @@ live:
 lab_nodes:
   - {node: LAB-1, magnet: [magnet_A, magnet_B], vna: [VNA1]}
   - {node: LAB-2, magnet: [magnet_C, magnet_D], vna: [VNA2]}
+lab_node_self: ""             # 1.0.1：這台電腦是哪台量測電腦（空白 = 依電腦 / 量測節點名稱自動判斷；"-" = 客戶端）
 
 # ---- 讀檔程式（LabLogViewer）---------------------------------------------------------
 lablogviewer:

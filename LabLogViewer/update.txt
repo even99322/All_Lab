@@ -1747,3 +1747,16 @@ Date: 2026-10-13
       new 1.0.0 notes.
   - Computers with 2.x install 1.0.0 once by hand; later 1.0.x versions arrive by push.
   - tests/test_v100_official_release.py.
+
+v1.0.1 - FASTER TRACE SWITCHING, ASYNC 2D REBUILDS, VIEWER STRAIGHT FROM LAB CONTROL
+Date: 2026-10-13
+
+  - Plot1DWidget / Plot2DWidget: axes use QGraphicsItem.DeviceCoordinateCache (an unchanged axis is not repainted
+    from its QPicture; that replay was most of a trace switch); plot_traces reuses a curve for a new trace and sets
+    axis labels / title only when they change. 201 x 10001 test file: ~65 ms -> ~17 ms per switch (offscreen).
+  - MainWindow._on_trace_selection_changed: while traces change within 0.3 s and the last redraw took > 30 ms, the
+    redraw is deferred to a 10 ms single-shot timer (only the last trace is drawn).
+  - _rebuild_2d_plot: grids over 500k points are always built on a worker thread (was: only when opening, > 1M).
+  - BrowserWindow.open_path(file) opens the Viewer without showing / raising the Browser; main.py: a file argument
+    always starts single-file mode (also after an unclean exit).
+  - tests/test_v101_viewer_speed_and_open.py.

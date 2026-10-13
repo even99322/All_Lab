@@ -51,6 +51,8 @@ class WorkbenchDoc(QObject):
         self._redo: List[dict] = []
         #: instruments.yaml 各量測電腦的電磁鐵組 / VNA（scheme.remap.role_lists）；有的話換儀器時自動對應
         self.roles: Dict[str, Dict[str, List[str]]] = {}
+        #: 1.0.1：方案在哪台量測電腦執行（本機 = 這台的名稱；遠端 = 選的節點）；None = 不知道
+        self.run_node: Optional[str] = None
         self.result: CompileResult = compile_scheme(self.scheme, catalog)
 
     # ---- 讀取 -------------------------------------------------------------
@@ -96,7 +98,7 @@ class WorkbenchDoc(QObject):
             return {}
         from ....scheme.remap import remap_scheme
 
-        m = remap_scheme(self.scheme, self.catalog, self.roles)
+        m = remap_scheme(self.scheme, self.catalog, self.roles, self.run_node)
         if m:
             self.remapped.emit(m)
         return m
@@ -107,7 +109,7 @@ class WorkbenchDoc(QObject):
         if self.roles:
             from ....scheme.remap import remap_scheme
 
-            m = remap_scheme(scheme, self.catalog, self.roles)
+            m = remap_scheme(scheme, self.catalog, self.roles, self.run_node)
             if m:
                 self.remapped.emit(m)
         self._undo.clear()

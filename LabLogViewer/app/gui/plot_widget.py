@@ -48,6 +48,14 @@ class Plot1DWidget(QWidget):
         self.plot_widget.getPlotItem().getViewBox().sigRangeChanged.connect(
             lambda *_args: self.refresh_data_points()
         )
+        # 1.0.1: the axes keep a cached picture of themselves; a trace switch that does not change an axis no longer
+        # redraws its tick labels (the slow part of a redraw on Windows)
+        from PySide6.QtWidgets import QGraphicsItem
+
+        for name in ("left", "bottom", "right", "top"):
+            axis = self.plot_widget.getPlotItem().getAxis(name)
+            if axis is not None:
+                axis.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
 
     def plot(self, x: np.ndarray, y: np.ndarray, *, x_label: str = "", y_label: str = "",
              title: str = "", name: str = "") -> None:
@@ -83,9 +91,12 @@ class Plot1DWidget(QWidget):
                 continue
             valid[trace] = (x, y)
 
-        for trace in tuple(self._curves):
-            if trace not in valid:
-                self.plot_widget.removeItem(self._curves.pop(trace))
+        spare = [self._curves.pop(trace) for trace in tuple(self._curves) if trace not in valid]
+        for trace in valid:                     # 1.0.1: switching traces reuses the curve (no remove / add)
+            if trace not in self._curves and spare:
+                self._curves[trace] = spare.pop()
+        for curve in spare:
+            self.plot_widget.removeItem(curve)
         for trace in tuple(self._data_point_items):
             if trace not in valid:
                 self.plot_widget.removeItem(self._data_point_items.pop(trace))
@@ -114,9 +125,13 @@ class Plot1DWidget(QWidget):
             self._curve = self._curves[next(iter(valid))]
 
         self._update_legend(tuple(valid), active_trace, trace_labels or {})
-        self.plot_widget.setLabel("bottom", x_label)
-        self.plot_widget.setLabel("left", y_label)
-        self.plot_widget.setTitle(title)
+        item = self.plot_widget.getPlotItem()        # 1.0.1: unchanged labels are not set again (axis redraw)
+        if getattr(item.getAxis("bottom"), "labelText", None) != x_label:
+            self.plot_widget.setLabel("bottom", x_label)
+        if getattr(item.getAxis("left"), "labelText", None) != y_label:
+            self.plot_widget.setLabel("left", y_label)
+        if getattr(getattr(item, "titleLabel", None), "text", None) != title:
+            self.plot_widget.setTitle(title)
         if auto_range:
             self.plot_widget.autoRange()
         self.refresh_data_points()

@@ -64,9 +64,10 @@ def my_names() -> Set[str]:
         from ..settings import setting
 
         cfg = setting("remote.node.name", "") or ""
+        me = setting("lab_node_self", "") or ""          # 1.0.1：「量測電腦對應」裡選的「這台電腦是」
     except Exception:  # noqa: BLE001
-        cfg = ""
-    for v in (os.environ.get("LAB_CONTROL_NODE_NAME"), cfg, _node_state().get("name")):
+        cfg = me = ""
+    for v in (os.environ.get("LAB_CONTROL_NODE_NAME"), cfg, me, _node_state().get("name")):
         if v:
             names.add(_low(v))
     names.discard("")

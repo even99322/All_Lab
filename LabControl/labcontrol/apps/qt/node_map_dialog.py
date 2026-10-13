@@ -32,7 +32,7 @@ def _split(text: str) -> List[str]:
 
 class NodeMapDialog(QtWidgets.QDialog):
     def __init__(self, parent=None, instruments_path: Optional[Path] = None,
-                 lab_nodes: Optional[List[Dict[str, Any]]] = None) -> None:
+                 lab_nodes: Optional[List[Dict[str, Any]]] = None, self_node: str = "") -> None:
         super().__init__(parent)
         self.setWindowTitle("量測電腦對應")
         self.resize(760, 620)
@@ -52,6 +52,22 @@ class NodeMapDialog(QtWidgets.QDialog):
             "方案裡的電磁鐵組與 VNA 會依「在哪台量測電腦執行」自動換成那台的：同一台的第幾個對到另一台的第幾個。")
         intro.setWordWrap(True)
         v.addWidget(intro)
+
+        # 1.0.1：這台電腦是哪台量測電腦（電腦名稱和表裡的名稱不一樣時，在這裡指定）
+        from ...core.nodes import my_names
+
+        me_row = QtWidgets.QHBoxLayout()
+        me_row.addWidget(QtWidgets.QLabel("這台電腦是："))
+        self.self_combo = QtWidgets.QComboBox()
+        self.self_combo.setObjectName("labNodeSelf")
+        self.self_combo.setEditable(True)
+        me_row.addWidget(self.self_combo, 1)
+        names = sorted(n for n in my_names() if n)
+        self.self_hint = QtWidgets.QLabel(f"（電腦 / 節點名稱：{'、'.join(names) or '—'}）")
+        self.self_hint.setProperty("role", "muted")
+        me_row.addWidget(self.self_hint)
+        v.addLayout(me_row)
+        self._self_node = str(self_node or "")
 
         box = QtWidgets.QGroupBox("每台量測電腦的儀器（依序，逗號分隔）")
         bl = QtWidgets.QVBoxLayout(box)
@@ -104,6 +120,28 @@ class NodeMapDialog(QtWidgets.QDialog):
 
         self._fill(lab_nodes if lab_nodes else DEFAULT_LAB_NODES)
         self._fill_instruments()
+        self._fill_self()
+        self.table.itemChanged.connect(lambda _it: self._fill_self())
+
+    AUTO = "自動（依電腦 / 量測節點名稱）"
+    CLIENT = "不是量測電腦（客戶端）"
+
+    def _fill_self(self) -> None:
+        cur = self.self_combo.currentText() if self.self_combo.count() else (self._self_node or self.AUTO)
+        if cur in ("", None):
+            cur = self.AUTO
+        self.self_combo.blockSignals(True)
+        self.self_combo.clear()
+        self.self_combo.addItems([self.AUTO] + [e["node"] for e in self.lab_nodes()] + [self.CLIENT])
+        if self.self_combo.findText(cur) < 0:
+            self.self_combo.addItem(cur)
+        self.self_combo.setCurrentText(cur)
+        self.self_combo.blockSignals(False)
+
+    def self_node(self) -> str:
+        """settings lab_node_self："" = 自動；"-" = 客戶端；其他 = 量測電腦名稱。"""
+        t = self.self_combo.currentText().strip()
+        return "" if t in ("", self.AUTO) else "-" if t == self.CLIENT else t
 
     # ---- 每台的儀器 -------------------------------------------------------------------------------
     def _add_row(self, entry: Dict[str, Any]) -> None:
@@ -206,11 +244,14 @@ def edit_node_map(parent, instruments_path: Path) -> Optional[Dict[str, Any]]:
     from ...settings import settings
 
     st = settings()
-    dlg = NodeMapDialog(parent, instruments_path, st.get("lab_nodes", []))
+    cur = str(st.get("lab_node_self", "") or "")
+    dlg = NodeMapDialog(parent, instruments_path, st.get("lab_nodes", []),
+                        NodeMapDialog.CLIENT if cur == "-" else cur)
     if dlg.exec() != QtWidgets.QDialog.DialogCode.Accepted:
         return None
     nodes = dlg.lab_nodes()
     st.set("lab_nodes", nodes)
+    st.set("lab_node_self", dlg.self_node())
     try:
         st.save()
     except Exception as e:  # noqa: BLE001
@@ -220,7 +261,7 @@ def edit_node_map(parent, instruments_path: Path) -> Optional[Dict[str, Any]]:
     except Exception as e:  # noqa: BLE001
         QtWidgets.QMessageBox.warning(parent, "量測電腦對應", f"無法寫入 instruments.yaml：{e}")
         changed = []
-    return {"lab_nodes": nodes, "changed": changed, "node_yaml": {k: node_yaml(v) for k, v in dlg.node_changes().items()}}
+    return {"lab_nodes": nodes, "self_node": dlg.self_node(), "changed": changed, "node_yaml": {k: node_yaml(v) for k, v in dlg.node_changes().items()}}
 
 
 __all__ = ["NodeMapDialog", "edit_node_map", "DEFAULT_LAB_NODES"]

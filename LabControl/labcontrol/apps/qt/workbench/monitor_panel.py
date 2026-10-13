@@ -33,10 +33,13 @@ DISPLAY = {"db": ("|S| (dB)", lambda z: 20 * np.log10(np.abs(z) + 1e-30)),
 class MonitorPanel(QtWidgets.QWidget):
     start_requested = pyqtSignal()
     finished = pyqtSignal(str)
+    #: 1.0.1：匯出執行緒存好檔 → 回到主執行緒才叫讀檔程式（本機連線要在 Qt 的主執行緒）
+    open_reader = pyqtSignal(object, bool)
 
     def __init__(self, station: Station, parent=None, bus=None) -> None:
         super().__init__(parent)
         self.station = station
+        self.open_reader.connect(lambda paths, split: open_in_lablogviewer(self.station, paths, split))
         self.runner: Optional[Runner] = None
         self.exp: Optional[Experiment] = None
         self.output: Optional[OutputPlan] = None
@@ -406,7 +409,10 @@ class MonitorPanel(QtWidgets.QWidget):
         except Exception as e:  # noqa: BLE001
             self.station.bus.log(f"❌ 匯出失敗：{e}", "error")
             return
-        open_in_lablogviewer(self.station, paths, bool(output.split_by))
+        try:
+            self.open_reader.emit(list(paths or []), bool(output.split_by))
+        except RuntimeError:                       # 視窗已經關了
+            pass
 
     def close_bridge(self) -> None:
         self.bridge.close()

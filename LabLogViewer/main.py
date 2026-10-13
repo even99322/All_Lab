@@ -120,8 +120,9 @@ def main() -> int:
     if arg and Path(arg).exists() and local_link.send({"cmd": "open", "path": str(Path(arg).resolve())}):
         return 0
 
-    if arg and Path(arg).is_file() and not startup_recovery.safe_recovery:
-        # Backward-compatible single-file mode (v0.7 behavior).
+    if arg and Path(arg).is_file():
+        # Single-file mode: a data file (Lab Control after a measurement, a double click) opens only its Viewer,
+        # also after an unclean exit (1.0.1; the Browser's Safe Recovery is for the Browser's session).
         window = MainWindow()
         window.operation_journal = lifecycle.record_operation
         window.show()

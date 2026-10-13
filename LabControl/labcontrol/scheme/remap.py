@@ -85,13 +85,46 @@ def available(cat: Catalog) -> Dict[str, List[str]]:
             VNA: [m.ref for m in cat.measurers if (m.kind or "").lower() == VNA]}
 
 
-def mapping(names: List[str], cat: Catalog, roles: Dict[str, Dict[str, List[str]]]) -> Dict[str, str]:
-    """方案用到、但目前清單沒有的儀器 → 這台的對應儀器。"""
+def node_lists(roles: Dict[str, Dict[str, List[str]]], node: Optional[str]) -> Optional[Dict[str, List[str]]]:
+    """roles 裡 node 這台的清單（名稱不分大小寫；沒有 → None）。"""
+    if not node:
+        return None
+    return next((v for k, v in roles.items() if k and k.lower() == str(node).strip().lower()), None)
+
+
+def current_node(roles: Dict[str, Dict[str, List[str]]], names) -> Optional[str]:
+    """roles 裡哪一台是 names（這台電腦的名稱們）之一；都不是 → None。"""
+    low = {str(n).strip().lower() for n in names or [] if str(n).strip()}
+    return next((k for k in roles if k and k.lower() in low), None)
+
+
+def mapping(names: List[str], cat: Catalog, roles: Dict[str, Dict[str, List[str]]],
+            node: Optional[str] = None) -> Dict[str, str]:
+    """方案用到的別台儀器 → 這台的對應儀器。
+
+    1.0.1：知道在哪台執行（node）時，別台的電磁鐵組 / VNA 一律換成這台的「第幾個」（就算這台的儀器清單也看得到
+    別台的網路儀器，例如 VNA1）；不知道時只換目前清單裡沒有的名稱（舊做法）。"""
     have = available(cat)
     present = set(have[MAGNET]) | set(have[VNA]) | {t.ref for t in cat.targets} | {m.ref for m in cat.measurers}
+    mine = node_lists(roles, node)
     out: Dict[str, str] = {}
     for n in names:
-        if not n or n in present or n in out:
+        if not n or n in out:
+            continue
+        if mine is not None:
+            if n in mine.get(MAGNET, []) or n in mine.get(VNA, []):
+                continue
+            others = {k: v for k, v in roles.items() if k.lower() != str(node).strip().lower()}
+            s = _slot(n, others)
+            if s is None:
+                continue
+            role, idx = s
+            own = [x for x in mine.get(role, []) if x in present]
+            cand = own if idx < len(own) else (have.get(role) or [])
+            if idx < len(cand) and cand[idx] != n:
+                out[n] = cand[idx]
+            continue
+        if n in present:
             continue
         s = _slot(n, roles)
         if s is None:
@@ -103,7 +136,8 @@ def mapping(names: List[str], cat: Catalog, roles: Dict[str, Dict[str, List[str]
     return out
 
 
-def remap_scheme(scheme: Scheme, cat: Catalog, roles: Dict[str, Dict[str, List[str]]]) -> Dict[str, str]:
+def remap_scheme(scheme: Scheme, cat: Catalog, roles: Dict[str, Dict[str, List[str]]],
+                 node: Optional[str] = None) -> Dict[str, str]:
     """把方案裡的儀器換成這台的（直接改 scheme）；回傳 {舊: 新}。"""
     used: List[str] = []
     for b in scheme.flat():
@@ -111,7 +145,7 @@ def remap_scheme(scheme: Scheme, cat: Catalog, roles: Dict[str, Dict[str, List[s
             used.append(b.target.split(".")[0] if "." in b.target else b.target)
         elif b.kind == "measure" and b.instrument:
             used.append(b.instrument)
-    m = mapping(used, cat, roles)
+    m = mapping(used, cat, roles, node)
     if not m:
         return {}
     for b in (scheme.graph.nodes.values() if scheme.graph is not None else scheme.flat()):

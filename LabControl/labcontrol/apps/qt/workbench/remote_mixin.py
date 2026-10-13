@@ -186,6 +186,7 @@ class RemoteMixin:
             from ....remote.hub import hostname
 
             self.set_live_backend(LocalBackend(self.station), f"local:{hostname()}", "本機")
+            self.doc.run_node = self.local_lab_node() if hasattr(self, "local_lab_node") else None
             self.doc.set_catalog(build_catalog(self.station))
             self._refresh()
             return
@@ -198,6 +199,7 @@ class RemoteMixin:
         def ok(mirror):
             self.remote_target, self.remote_node, self.remote_mirror = name, node, mirror
             self._build_remote_panels(node, mirror)
+            self.doc.run_node = name                               # 1.0.1：在那台執行 → 換成那台的儀器
             self.doc.set_catalog(build_catalog(mirror))
             self._update_banner(self.remote.nodes)
             self.statusBar().showMessage(f"執行於節點 {name}：流程圖與儀器參數已換成該電腦的儀器", 8000)
@@ -289,8 +291,7 @@ class RemoteMixin:
             self.statusBar().showMessage(f"📥 已從 Hub 下載 {len(paths)} 個量測檔到 {root}", 20000)
             from .monitor_panel import open_in_lablogviewer
 
-            run_bg(lambda: open_in_lablogviewer(self.station, [Path(p) for p in paths], split), lambda _r: None,
-                   lambda _m: None)
+            open_in_lablogviewer(self.station, [Path(p) for p in paths], split)   # 主執行緒（本機連線）
             if hasattr(self.monitor, "_log"):
                 self.monitor._log(f"📥 已下載：{'、'.join(paths)}")
 

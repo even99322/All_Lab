@@ -7095,7 +7095,29 @@ class MainWindow(QMainWindow):
         self._update_trace_display()
 
     def _on_trace_selection_changed(self) -> None:
+        """1.0.1: while traces are being stepped through quickly (arrow keys held down, scrolling the list) and a
+        redraw takes a while, only the last trace is drawn — the key presses no longer queue up behind redraws."""
+        from time import perf_counter
+
         self._update_trace_display()
+        now = perf_counter()
+        rapid = now - getattr(self, "_last_trace_change", 0.0) < 0.3 and getattr(self, "_last_trace_redraw_s", 0.0) > 0.03
+        self._last_trace_change = now
+        if rapid:
+            timer = getattr(self, "_trace_redraw_timer", None)
+            if timer is None:
+                timer = self._trace_redraw_timer = QTimer(self)
+                timer.setSingleShot(True)
+                timer.setInterval(10)
+                timer.timeout.connect(self._redraw_after_trace_change)
+            timer.start()
+            return
+        self._redraw_after_trace_change()
+
+    def _redraw_after_trace_change(self) -> None:
+        from time import perf_counter
+
+        started = perf_counter()
         self._refresh_multi_trace_panel()
         self._preserve_overlay_view_once = True
         if not self.multi_pane_splitter.isHidden():
@@ -7108,6 +7130,7 @@ class MainWindow(QMainWindow):
             self._render_multi_panes()
         else:
             self.update_plot()
+        self._last_trace_redraw_s = perf_counter() - started
 
     def _on_trace_color_changed(self, _mode: str) -> None:
         self._preserve_overlay_view_once = True
@@ -7810,7 +7833,9 @@ class MainWindow(QMainWindow):
         self._refresh_2d_slice_dimensions()
         self._grid_job += 1
         self._grid_pending = False
-        if self._open_async_2d and not self._restoring_session and self._grid_is_heavy(z_name):
+        # 1.0.1: a large map is rebuilt on a worker thread for every change (Transform, Operation, Smooth …),
+        # not only when the file opens: the window stays responsive, the old picture stays until the new one is ready
+        if not self._restoring_session and self._grid_is_heavy(z_name):
             self._start_async_2d_build()
             return
         try:
@@ -7840,12 +7865,12 @@ class MainWindow(QMainWindow):
         return not self._grid_pending
 
     def _grid_is_heavy(self, z_name: str) -> bool:
-        """A grid big enough (>1M points) that building it would stall the window."""
+        """A grid big enough (>500k points) that building it would stall the window."""
         try:
             total = 1
             for dim in self.mgr.list_dimensions(z_name):
                 total *= int(dim.size)
-            return total > 1_000_000
+            return total > 500_000                      # 1.0.1: 1 M → 500 k points
         except Exception:
             return False
 

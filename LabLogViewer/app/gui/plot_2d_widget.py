@@ -181,6 +181,12 @@ class Plot2DWidget(QWidget):
         self.plot_item.layout.setVerticalSpacing(1)
         self.plot_item.setAspectLocked(False)
         self.view_box = self.plot_item.getViewBox()
+        from PySide6.QtWidgets import QGraphicsItem
+
+        for name in ("left", "bottom"):              # 1.0.1: cached axis pictures (faster redraws)
+            axis = self.plot_item.getAxis(name)
+            if axis is not None:
+                axis.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
 
         self.img_item = pg.ImageItem()
         self.plot_item.addItem(self.img_item)

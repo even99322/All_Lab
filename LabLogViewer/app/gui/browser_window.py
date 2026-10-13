@@ -1749,9 +1749,9 @@ class BrowserWindow(QMainWindow):
     def open_path(self, path: str) -> None:
         """v2.1.6: open a data file (in a Viewer) or a folder (as the Database) — drag-drop, Lab Control."""
         target = Path(path).expanduser()
-        if self.isMinimized():
-            self.showNormal()
         if target.is_dir():
+            if self.isMinimized():
+                self.showNormal()
             self.show(); self.raise_(); self.activateWindow()
             self.open_database(str(target))
             return
@@ -1765,8 +1765,11 @@ class BrowserWindow(QMainWindow):
                           if e.status == "ok" and Path(e.absolute_path).resolve() == resolved), None)
         if entry is None:
             entry = DatabaseScanner._scan_one(target.parent, target)
+        # 1.0.1: a data file opens only its Viewer (the Browser stays where it is, e.g. minimized)
         viewer = self._open_viewer_for(entry)
         if viewer is not None:
+            if viewer.isMinimized():
+                viewer.showNormal()
             viewer.raise_()
             viewer.activateWindow()
 
