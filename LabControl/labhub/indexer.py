@@ -66,6 +66,29 @@ def preview_path(rel: str, data: Optional[Path] = None) -> Path:
     return index_dir(data) / "previews" / h[:2] / f"{h}.npz"
 
 
+_STATUS_EXTRA: Dict[str, Any] = {}          # 每次都帶的欄位（例如 key_ok）
+
+
+def write_status(data: Optional[Path] = None, **kw: Any) -> None:
+    """index/status.json：目前在做什麼（啟動、安裝套件、錯誤…）；資料庫還沒建立前 Hub 也看得到。"""
+    try:
+        d = index_dir(data)
+        d.mkdir(parents=True, exist_ok=True)
+        tmp = d / "status.json.part"
+        body = dict(_STATUS_EXTRA, **kw, time=time.time(), pid=os.getpid())
+        tmp.write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, d / "status.json")
+    except OSError:
+        pass
+
+
+def read_status(data: Optional[Path] = None) -> Optional[Dict[str, Any]]:
+    try:
+        return json.loads((index_dir(data) / "status.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
 def parser_id() -> str:
     """解析程式的版本：llvcore 的內容或預覽格式改了 → 全部重新解析。"""
     src = LLVCORE / "SOURCE.json"
@@ -94,15 +117,22 @@ def ensure_deps(target: Optional[Path] = None) -> None:
         pass
     target.mkdir(parents=True, exist_ok=True)
     log.info("第一次啟動：安裝 numpy、h5py 到 %s（約 1–2 分鐘）", target)
+    write_status(state="installing", message="第一次啟動：安裝 numpy、h5py（約 1–2 分鐘，NAS 要能上網）")
+    err = ""
     for spec in (list(DEPS), [d.split("==")[0] for d in DEPS]):          # 指定版本不行時用最新版
         r = subprocess.run([sys.executable, "-m", "pip", "install", "--quiet", "--no-cache-dir", "--upgrade",
                             "--target", str(target), *spec], capture_output=True, text=True)
         if r.returncode == 0:
             break
-        log.warning("安裝 %s 失敗：%s", " ".join(spec), (r.stderr or r.stdout)[-800:])
+        err = (r.stderr or r.stdout)[-600:]
+        log.warning("安裝 %s 失敗：%s", " ".join(spec), err)
     importlib.invalidate_caches()
-    import h5py  # noqa: F401,F811
-    import numpy  # noqa: F401,F811
+    try:
+        import h5py  # noqa: F401,F811
+        import numpy  # noqa: F401,F811
+    except ImportError:
+        write_status(state="error", message="安裝 numpy、h5py 失敗（NAS 的容器連得到網路嗎？）", detail=err)
+        raise
 
 
 def _llvcore() -> None:
@@ -348,13 +378,17 @@ class Indexer:
         interval = float(os.environ.get("LABHUB_INDEX_INTERVAL", "300"))
         while not self.stop:
             if not self.root.is_dir():
-                set_meta(self.con, state="no_share", error=f"找不到 {self.root}（docker-compose.yml 的數據集散地掛載）")
+                msg = f"找不到 {self.root}（docker-compose.yml 的數據集散地掛載）"
+                set_meta(self.con, state="no_share", error=msg)
                 self.con.commit()
+                write_status(self.data, state="error", message=msg)
                 log.warning("找不到 %s，60 秒後再試", self.root)
                 self._sleep(60)
                 continue
             try:
+                write_status(self.data, state="indexing", message="")
                 r = self.pass_once()
+                write_status(self.data, state="idle" if r["indexed"] >= r["todo"] else "indexing", message="")
                 log.info("索引：%s 個檔，這輪解析 %s 個（還有 %s 個在寫入），移除 %s 個",
                          r["files"], r["indexed"], r["pending"], r["removed"])
                 if r["indexed"] < r["todo"]:
@@ -375,9 +409,12 @@ def main() -> None:
         os.nice(10)                     # 讓 Hub、論文庫優先
     except (AttributeError, OSError):
         pass
-    ensure_deps()
     data = _env_path("LABHUB_DATA", "/data")
+    write_status(data, state="starting", message="啟動中")
+    ensure_deps()
     ensure_key(data)
+    keydir = _env_path("LABHUB_INDEX_KEYDIR", "/share_key")
+    _STATUS_EXTRA["key_ok"] = (keydir / "index_key").is_file()      # False：讀檔程式拿不到鑰匙（.qel 掛載有問題）
     ix = Indexer(share_root(), data)
 
     def _term(*_a: Any) -> None:

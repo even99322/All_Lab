@@ -125,6 +125,29 @@ class Docker:
             return None
         return self._ok(st, data, "讀取容器資訊")
 
+    def logs(self, cid: str, tail: int = 20) -> List[str]:
+        """容器最後幾行紀錄（stdout＋stderr；沒有 TTY 時 Docker 每段前面有 8 bytes 標頭）。"""
+        c = self._conn(15)
+        try:
+            c.request("GET", f"/containers/{cid}/logs?stdout=1&stderr=1&tail={int(tail)}")
+            r = c.getresponse()
+            data = r.read()
+            if r.status != 200:
+                return []
+        except OSError:
+            return []
+        finally:
+            c.close()
+        out, i = b"", 0
+        if len(data) >= 8 and data[0] in (0, 1, 2) and data[1:4] == b"\0\0\0":
+            while i + 8 <= len(data):
+                n = int.from_bytes(data[i + 4:i + 8], "big")
+                out += data[i + 8:i + 8 + n]
+                i += 8 + n
+        else:
+            out = data
+        return [ln for ln in out.decode("utf-8", "replace").splitlines() if ln.strip()][-tail:]
+
     def stop(self, cid: str, t: int = 15) -> None:
         st, data = self.req("POST", f"/containers/{cid}/stop?t={t}", timeout=t + 30)
         self._ok(st, data, "停止容器")
@@ -342,11 +365,29 @@ class Agent:
             c.update(status="unknown", error=str(e))
         ping = self.hub_ping()
         cur = self.current
-        return {"agent_version": __version__, "container": c, "hub_online": ping is not None,
+        return {"agent_version": __version__, "container": c, "indexer": self.indexer_status(),
+                "hub_online": ping is not None,
                 "hub_version": (ping or {}).get("version"), "code_version": package_version(self.code_dir),
                 "hub_dir": str(self.cfg.hub_dir), "backups": self.backups()[:10],
                 "paperlib": self.paperlib_status(),
                 "job": cur.view(len(cur.lines)) if cur is not None else None, "time": time.time()}
+
+    def indexer_status(self) -> Dict[str, Any]:
+        """1.0.4 數據索引容器：在不在、有沒有在跑、重新啟動幾次、Docker 的錯誤與最後幾行紀錄（控制台顯示原因）。"""
+        c: Dict[str, Any] = {"name": self.cfg.indexer_container}
+        try:
+            info = self.docker.inspect(self.cfg.indexer_container)
+        except DockerError as e:
+            c.update(status="unknown", error=str(e))
+            return c
+        if not info:
+            c["status"] = "missing"
+            return c
+        stt = info.get("State") or {}
+        c.update(status=stt.get("Status"), running=bool(stt.get("Running")), restarts=info.get("RestartCount"),
+                 exit_code=stt.get("ExitCode"), error=stt.get("Error") or "", started=stt.get("StartedAt"))
+        c["log"] = self.docker.logs(info["Id"], 12)
+        return c
 
     # ---- 啟動工作 --------------------------------------------------------
     STEPS = {

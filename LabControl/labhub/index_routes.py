@@ -17,7 +17,7 @@ import re
 import sqlite3
 from typing import Any, Dict, Optional
 
-from .indexer import connect, db_path, get_meta, key_path, preview_path
+from .indexer import connect, db_path, get_meta, key_path, preview_path, read_status
 from .server import Handler, HubHTTPError, route
 
 MTIME_TOLERANCE = 2.0          # 秒：SMB 看到的時間與 NAS 上的時間可能差一點點
@@ -48,10 +48,29 @@ def _allowed(h: Handler) -> None:
     raise HubHTTPError(401, "需要登入，或數據集散地的 .qel/index_key")
 
 
+NOT_RUNNING = ("NAS 的數據索引沒有在執行：先在數據集散地建資料夾 .qel，再到 Container Manager → 專案 qelplatform →「建置」"
+               "（docker-compose.yml 要有 indexer 服務）；建置後看「容器 → qel-indexer → 紀錄」")
+
+
+def phase_message(st: Optional[Dict[str, Any]]) -> str:
+    """索引程式寫的 status.json → 給人看的一句話；None = 索引程式從來沒有啟動過。"""
+    if not st:
+        return NOT_RUNNING
+    state, msg = st.get("state"), st.get("message") or ""
+    if state == "installing":
+        return "NAS 的數據索引第一次啟動，正在安裝 numpy、h5py（約 1–2 分鐘）"
+    if state == "starting":
+        return "NAS 的數據索引啟動中"
+    if state == "error":
+        return "NAS 的數據索引出錯：" + msg + (("（" + str(st.get("detail"))[-300:] + "）") if st.get("detail") else "")
+    return msg or str(state)
+
+
 def _db(h: Handler) -> sqlite3.Connection:
     path = db_path(h.hub.cfg.data_dir)
     if not path.is_file():
-        raise HubHTTPError(404, "NAS 上還沒有數據索引（docker-compose.yml 加上 indexer 服務）")
+        st = read_status(h.hub.cfg.data_dir)
+        raise HubHTTPError(503 if st else 404, phase_message(st))
     try:
         return connect(path, readonly=True)
     except sqlite3.Error as e:
@@ -66,11 +85,35 @@ def _send_json(h: Handler, obj: Any) -> None:
         h._send(200, body, "application/json; charset=utf-8")
 
 
-def status_dict(con: sqlite3.Connection) -> Dict[str, Any]:
+def status_dict(con: sqlite3.Connection, data=None) -> Dict[str, Any]:
     meta = get_meta(con)
     keys = ("state", "files", "folders", "todo", "done", "pending", "indexed", "errors", "last_pass",
             "pass_seconds", "complete", "llv_version", "parser", "schema", "error")
-    return {k: meta.get(k) for k in keys}
+    out = {k: meta.get(k) for k in keys}
+    st = read_status(data) if data is not None else None
+    if st:
+        out["phase"] = st.get("state")
+        out["key_ok"] = st.get("key_ok")
+        out["status_time"] = st.get("time")
+        if st.get("state") == "error":
+            out["error"] = phase_message(st)
+    return out
+
+
+def index_summary(data) -> Dict[str, Any]:
+    """控制台用：索引在不在、在做什麼（不需要權限檢查，呼叫的地方自己檢查）。"""
+    path = db_path(data)
+    st = read_status(data)
+    if not path.is_file():
+        return {"available": False, "phase": (st or {}).get("state"), "message": phase_message(st)}
+    try:
+        con = connect(path, readonly=True)
+    except sqlite3.Error as e:
+        return {"available": False, "phase": "error", "message": f"讀不到索引：{e}"}
+    try:
+        return dict(status_dict(con, data), available=True)
+    finally:
+        con.close()
 
 
 @route("GET", r"/api/index/status", auth=False)
@@ -78,7 +121,7 @@ def _status(h: Handler) -> None:
     _allowed(h)
     con = _db(h)
     try:
-        h._json(dict(status_dict(con), ok=True))
+        h._json(dict(status_dict(con, h.hub.cfg.data_dir), ok=True))
     finally:
         con.close()
 
@@ -112,7 +155,7 @@ def _tree(h: Handler) -> None:
             cut, exists = 0, True
         if not exists:
             raise HubHTTPError(404, f"索引裡沒有 {root}")
-        _send_json(h, {"ok": True, "root": root, "status": status_dict(con),
+        _send_json(h, {"ok": True, "root": root, "status": status_dict(con, h.hub.cfg.data_dir),
                        "folders": folders, "entries": [_entry(r, cut) for r in rows]})
     finally:
         con.close()

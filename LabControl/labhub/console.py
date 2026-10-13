@@ -269,7 +269,7 @@ class Console:
             a = self.agent.status()
             out["agent"] = {"online": True, "version": a.get("agent_version"), "hub_container": a.get("container"),
                             "paperlib": a.get("paperlib"), "backups": len(a.get("backups") or []),
-                            "job": a.get("job")}
+                            "job": a.get("job"), "indexer": a.get("indexer")}
         except ConsoleError as e:
             out["agent"] = {"online": False, "error": str(e)}
         try:
@@ -278,6 +278,12 @@ class Console:
         except OSError:
             out["disk"] = None
         out["platform"] = self.hub.platform.status()
+        try:                                              # 1.0.4 數據索引
+            from .index_routes import index_summary
+
+            out["index"] = index_summary(self.hub.cfg.data_dir)
+        except Exception as e:  # noqa: BLE001
+            out["index"] = {"available": False, "message": f"{type(e).__name__}: {e}"}
         snap = self.hub.snapshot()
         out["nodes"] = [{k: n.get(k) for k in ("name", "online", "state", "user", "host", "version", "run",
                                                "simulate", "last_seen")} for n in snap.get("nodes", [])]

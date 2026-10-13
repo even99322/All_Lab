@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.5 — 2026-10-14
+
+Hub：控制台「數據索引」卡，直接顯示索引容器沒建置、一直重新啟動（附錯誤與紀錄）、安裝套件中、索引進度或完成；`/api/index/status` 說明原因。只需要更新 Hub。詳見 [docs/releases/v1.0.5.md](docs/releases/v1.0.5.md)。
+
+---
+
 ## 1.0.4 — 2026-10-14
 
 NAS 上的數據索引：先算好數據集散地每個檔的資訊與預覽，讀檔程式 1.0.3 用 VPN 開大資料夾也馬上完成；手機看即時量測（`http://<NAS>:8765/m`，Android / iOS，可以加到主畫面）。NAS 要更新 Hub、建 `.qel` 資料夾、換 docker-compose.yml。詳見 [docs/releases/v1.0.4.md](docs/releases/v1.0.4.md)。

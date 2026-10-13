@@ -585,6 +585,27 @@ async function followJob(x) {
     renderItems();
   }
 }
+// 1.0.4 數據索引：容器（控制代理看到的）＋索引程式自己回報的進度
+function indexCard(ix, c) {
+  const k = "數據索引";
+  if (c && c.status === "missing")
+    return [k, `<span class="err">● 沒有容器</span>`, "先在數據集散地建 .qel 資料夾，再到 Container Manager → qelplatform →「建置」"];
+  if (c && c.status && !c.running) {
+    const why = c.error || (c.log || []).slice(-2).join(" ") || `結束碼 ${c.exit_code}`;
+    return [k, `<span class="err">● ${esc(c.status === "restarting" ? "一直重新啟動" : "停止")}</span>`, esc(why).slice(0, 300)];
+  }
+  if (!ix.available) {
+    const tail = c && (c.log || []).length ? `<br><span class="small">${esc(c.log.slice(-1)[0]).slice(0, 200)}</span>` : "";
+    return [k, `<span class="${ix.phase === "error" ? "err" : "muted"}">● ${ix.phase === "installing" ? "安裝套件中" : ix.phase === "starting" ? "啟動中" : ix.phase === "error" ? "出錯" : "還沒有"}</span>`,
+            esc(ix.message || "") + tail];
+  }
+  const key = ix.key_ok === false ? `<br><span class="err">讀檔程式拿不到鑰匙：數據集散地的 .qel 資料夾掛載有問題</span>` : "";
+  if (ix.phase === "error") return [k, `<span class="err">● 出錯</span>`, esc(ix.error || "") + key];
+  if (ix.state === "indexing" || ix.state === "listing")
+    return [k, `${esc(ix.done ?? 0)} / ${esc(ix.todo ?? "…")}`, `索引中（共 ${esc(ix.files ?? "…")} 個檔，新的先做）` + key];
+  const ago = ix.last_pass ? Math.max(0, Math.round((Date.now() / 1000 - ix.last_pass) / 60)) : null;
+  return [k, `${esc(ix.indexed ?? 0)}`, `個檔已索引${ix.errors ? `（${esc(ix.errors)} 個讀不了）` : ""}${ago != null ? ` · ${ago} 分鐘前檢查` : ""}` + key];
+}
 async function loadStatus() {
   let s;
   try { s = await api("/api/platform/console/status"); } catch (e) { $("#sys").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
@@ -599,6 +620,7 @@ async function loadStatus() {
     ["量測電腦", `${nodesOn} / ${(s.nodes || []).length}`, "線上 / 全部"],
     ["數據", esc(p.catalog ?? "—"), "筆"],
     ["登入中", esc(p.users_logged_in ?? "—"), "人"],
+    indexCard(s.index || {}, a.online ? (a.indexer || null) : undefined),
   ].map(([k, v, sub]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="k">${sub}</div></div>`).join("");
   const ns = s.nodes || [];
   $("#nodes").innerHTML = ns.length ? `<table><tr><th>名稱</th><th>狀態</th><th>電腦</th><th>版本</th><th>量測</th></tr>${ns.map(n => {
