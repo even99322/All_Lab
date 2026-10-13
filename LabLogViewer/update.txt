@@ -1731,3 +1731,19 @@ Date: 2026-10-13
     "Update now" also without installer details (hub_update.installer_for asks the hub). Windows install script:
     hidden console, bounded wait for the old process, /LOG, interactive setup when the exe is missing.
   - tests/test_v216_link_and_update.py, test_v216_shortcuts_phase_delay.py, test_v216_network_and_big_folders.py.
+
+v1.0.0 - OFFICIAL RELEASE (VERSION NUMBERS START AGAIN)
+Date: 2026-10-13
+
+  - LabLogViewer and Lab Control are both 1.0.0. The features are those of 2.1.6; the numbering starts again,
+    so 1.0.0 sorts below the old 2.x versions:
+    - app/core/app_update.py: VERSION_LINE = 1, LEGACY_LAST = "2.1.6". The data folder marker records
+      "version_line"; a folder last used by 2.x (no version_line) counts as an upgrade (UpdateResult.from_legacy,
+      What's New lists the new numbering from the start). legacy_feed(info, current): a feed without "line" is the
+      old numbering and is not offered to a program below 2.0.0 (update_feed.newer_info, hub_update.newer).
+    - UpdateInfo.line (feed "line"); the hub's feed (Lab Control Hub 1.0.0) sends "line": 1 and moves the old
+      2.x LabLogViewer versions to data/modules_legacy once.
+    - help/whats_new: the notes of 0.x - 2.1.6 move to help/whats_new/legacy/ (whats_new_text(..., folder=));
+      new 1.0.0 notes.
+  - Computers with 2.x install 1.0.0 once by hand; later 1.0.x versions arrive by push.
+  - tests/test_v100_official_release.py.

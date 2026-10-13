@@ -303,10 +303,13 @@ def test_rename_and_new_folder_offer_keep_both(qapp, tmp_path):
 def test_whats_new_lists_every_version_since_the_previous_one():
     from app.core.app_update import whats_new_text
 
-    skipped = whats_new_text("1.0.3", "en", since="0.19E")
+    from app.gui.help_content import help_directory
+
+    legacy = help_directory() / "whats_new" / "legacy"                # 1.0.0 正式版：舊版號的說明
+    skipped = whats_new_text("1.0.3", "en", since="0.19E", folder=legacy)
     assert "## v1.0.3" in skipped and "## v1.01" in skipped
     assert skipped.index("## v1.0.3") < skipped.index("## v1.01")
-    only = whats_new_text("1.0.3", "zh", since="1.01")
+    only = whats_new_text("1.0.3", "zh", since="1.01", folder=legacy)
     assert "## v1.01" not in only and "兩者都保留" in only
 
 

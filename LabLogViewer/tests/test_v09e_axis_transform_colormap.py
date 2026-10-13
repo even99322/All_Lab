@@ -24,7 +24,7 @@ real_data_required = pytest.mark.skipif(
 
 
 def test_version_reports_current_release():
-    assert __version__ == "2.1.6"
+    assert __version__ == "1.0.0"
 
 
 def test_main_window_title_reports_current_release():

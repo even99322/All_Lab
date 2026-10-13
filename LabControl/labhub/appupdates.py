@@ -123,7 +123,7 @@ def lablogviewer_feed(plat, mid: str = "lablogviewer") -> Dict[str, Any]:
             items.append({"category": "improved", "zh": line, "en": line})
     t = next((f for f in info["downloads"] if f["version"] == ver), None)
     date = time.strftime("%Y-%m-%d", time.localtime(info.get("time") or time.time())) if t else ""
-    return {"version": ver, "date": date, "items": items[:200],
+    return {"version": ver, "date": date, "items": items[:200], "line": 1,   # 1.0.0 正式版起的版號
             "downloads": [f for f in info["downloads"] if f["version"] == ver]}
 
 

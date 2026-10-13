@@ -43,6 +43,7 @@ class UpdateInfo:
     package: str | None = None
     sha256: str | None = None
     items: list[dict] = field(default_factory=list)      # {"category", "en", "zh"}
+    line: int = 0                                        # 1.0.0 正式版起的 feed 帶 "line": 1（舊的 2.x 沒有）
 
     def details(self) -> dict:
         return {"version": self.version, "date": self.date, "items": [dict(i) for i in self.items]}
@@ -147,7 +148,7 @@ def _parse_feed(data) -> UpdateInfo | None:
         version=version.strip(), date=str(data.get("date") or "")[:32],
         package=package if isinstance(package, str) and package else None,
         sha256=digest.lower() if isinstance(digest, str) and re.fullmatch(r"[0-9a-fA-F]{64}", digest) else None,
-        items=items)
+        items=items, line=int(data.get("line") or 0) if str(data.get("line") or "0").isdigit() else 0)
 
 
 def newer_update(folder: str | Path, current_version: str, skipped=()) -> UpdateInfo | None:
@@ -158,6 +159,10 @@ def newer_update(folder: str | Path, current_version: str, skipped=()) -> Update
 def newer_info(info: UpdateInfo | None, current_version: str, skipped=()) -> UpdateInfo | None:
     if info is None or info.version in set(skipped):
         return None
+    from app.core.app_update import legacy_feed
+
+    if legacy_feed(info, current_version):
+        return None                                      # 舊版號的 2.x：不要「更新」回去
     return info if version_key(info.version) > version_key(current_version) else None
 
 

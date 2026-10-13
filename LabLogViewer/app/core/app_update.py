@@ -35,6 +35,17 @@ BACKUPS = "update_backups"
 UPGRADES: list[tuple[int, int, str, Callable[[Path], None]]] = []
 
 
+#: 1.0.0 正式版起是新的一條版號（之前是 0.x → 2.1.6）。新版號的 1.0.0 比舊的 2.1.6「小」，所以：
+#: 資料夾記 "version_line"；沒記的（2.x 用過的資料夾）換到新版號時當成升級，What's New 從頭列。
+VERSION_LINE = 1
+LEGACY_LAST = "2.1.6"
+
+
+def legacy_feed(info, current_version: str) -> bool:
+    """更新通知（GitHub / Hub 的 feed）沒有 "line"、而這個程式是新版號（< 2.0.0）：那是舊版號的 2.x，不提供。"""
+    return int(getattr(info, "line", 0) or 0) < VERSION_LINE and version_key(current_version) < version_key("2.0.0")
+
+
 @dataclass
 class UpdateResult:
     previous_version: str | None = None       # None: first start of any version on this data
@@ -45,6 +56,7 @@ class UpdateResult:
     backup: Path | None = None
     error: str | None = None
     newer_data: bool = False                  # the data was written by a newer program
+    from_legacy: bool = False                 # 1.0.0: the folder was used by the old 2.x numbering
 
 
 def _read(path: Path) -> dict:
@@ -107,6 +119,9 @@ def check(root: str | Path, current_version: str, *, had_data: bool | None = Non
         result.show_whats_new = had_data      # data from a version before 1.01 (which did not record itself)
     elif result.previous_version != current_version:
         result.show_whats_new = version_key(current_version) > version_key(result.previous_version)
+        if (not result.show_whats_new and int(marker.get("version_line", 0) or 0) < VERSION_LINE
+                and version_key(result.previous_version) <= version_key(LEGACY_LAST)):
+            result.show_whats_new = result.from_legacy = True      # 2.x → 1.0.0 正式版：是升級
     steps = [step for step in upgrades if step[0] >= data_format and step[1] <= target]
     steps.sort(key=lambda step: step[0])
     if steps and had_data:
@@ -134,7 +149,8 @@ def check(root: str | Path, current_version: str, *, had_data: bool | None = Non
     elif steps:
         data_format = max(step[1] for step in steps)       # nothing to convert in a new folder
     marker = _read(marker_path)
-    marker.update({"last_app_version": current_version, "data_format": max(data_format, 1)})
+    marker.update({"last_app_version": current_version, "data_format": max(data_format, 1),
+                   "version_line": VERSION_LINE})
     history = marker.get("versions_used")
     history = history if isinstance(history, list) else []
     if not history or history[-1].get("version") != current_version:
@@ -144,7 +160,7 @@ def check(root: str | Path, current_version: str, *, had_data: bool | None = Non
     return result
 
 
-def whats_new_text(version: str, language: str, since: str | None = None) -> str:
+def whats_new_text(version: str, language: str, since: str | None = None, folder: Path | None = None) -> str:
     """Markdown for the What's New window (help/whats_new/<version>.<en|zh>.md).
 
     Every version after ``since`` up to ``version`` is included, newest first, so an update
@@ -152,7 +168,7 @@ def whats_new_text(version: str, language: str, since: str | None = None) -> str
     """
     from app.gui.help_content import help_directory
 
-    folder = help_directory() / "whats_new"
+    folder = Path(folder) if folder is not None else help_directory() / "whats_new"   # legacy/: 0.x – 2.1.6
     versions = sorted({path.name.split(".en.md")[0] for path in folder.glob("*.en.md")}, key=version_key,
                       reverse=True) if folder.is_dir() else []
     chosen = [v for v in versions if version_key(v) <= version_key(version)

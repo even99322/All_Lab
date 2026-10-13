@@ -44,8 +44,9 @@ def after_start(result, localizer, parent=None) -> QDialog | None:
                             text("whatsnew.upgrade_failed").format(reason=result.error))
     if not result.show_whats_new:
         return None
+    since = None if getattr(result, "from_legacy", False) else result.previous_version
     dialog = WhatsNewDialog(localizer, result.current_version, result.previous_version or text("whatsnew.earlier"),
-                            parent, since=result.previous_version)
+                            parent, since=since)
     dialog.show()
     dialog.raise_()
     return dialog

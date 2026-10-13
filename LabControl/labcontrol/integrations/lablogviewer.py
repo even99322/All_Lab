@@ -1,6 +1,6 @@
 """量完自動用讀檔程式（LabLogViewer）開啟新數據（0.0.31）。
 
-* LabLogViewer 開著（2.1.6 以上）→ 透過本機連線 qel-lablogviewer-<使用者> 送 {"cmd": "open", "path": …}；
+* LabLogViewer 開著（1.0.0 正式版；開發版 2.1.6 以上）→ 透過本機連線 qel-lablogviewer-<使用者> 送 {"cmd": "open", "path": …}；
 * 沒開 → 啟動它並開這個檔：它上次開啟時記在 ~/.qel/lablogviewer/app.json 的程式，否則一般的安裝位置
   （Windows：%LOCALAPPDATA%\\Programs\\LabLogViewer\\LabLogViewer.exe；macOS：/Applications/LabLogViewer.app）。
 * settings.yaml lablogviewer.open_after_measure: false 可以關掉；分檔量測（雙層分檔，一個外圈值一個檔）不開。

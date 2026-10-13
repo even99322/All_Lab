@@ -102,7 +102,7 @@ def test_whats_new_window_in_both_languages(tmp_path):
     from app.localization import initialize_localization
 
     localizer = initialize_localization(app)
-    for language, needle in (("en", "refreshes itself"), ("zh_TW", "自動刷新")):
+    for language, needle in (("en", "Official release"), ("zh_TW", "正式發佈版")):
         localizer.set_language(language)
         dialog = after_start(check(_folder(tmp_path / language), __version__), localizer)
         assert dialog is not None and needle in dialog.body.toPlainText()

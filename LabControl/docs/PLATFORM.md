@@ -136,6 +136,14 @@
 - **上傳完整性**：控制台上傳帶 `?size=`；Hub 收到的長度不對就回 400，控制台顯示 sha256。
 - **讀檔程式讀 NAS**：網路磁碟上的檔案先複製到本機快取（`%LOCALAPPDATA%\LabLogViewer\netcache`）再讀；副本與原檔相同時才使用。
 
+### 0e. 1.0.0 正式版
+
+- 量測（Lab Control）、讀檔（LabLogViewer）、Hub、Monitor 都是 1.0.0。讀檔程式的版號重新開始（之前 0.x – 2.1.6）：
+  Hub 1.0.0 第一次啟動把讀檔程式比 1.0.0 大的舊版本搬到 `data/modules_legacy/lablogviewer/`（只做一次，標記
+  `data/modules/.legacy_archived_lablogviewer`）；讀檔 feed 帶 `"line": 1`，讀檔 1.0.0 起不理沒有 line 的舊 feed。
+  已裝 2.x 的電腦手動安裝一次 1.0.0。
+- 控制台上傳用 XMLHttpRequest 顯示進度（進度條、速度、剩餘時間、取消）。
+
 以下第 1–7 節是 0.0.13–0.0.25（有啟動器時）的說明，平台 API、數據目錄、標籤與論文仍然適用。
 
 ## 1. 組成

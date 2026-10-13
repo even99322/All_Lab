@@ -75,5 +75,7 @@ def test_2d_resample_difference_zero_for_same_map():
 
 def test_whats_new_shows_104_and_105_together():
     from app.core.app_update import whats_new_text
-    text = whats_new_text("2.0.0", "en", "1.0.3")
+    from app.gui.help_content import help_directory
+
+    text = whats_new_text("2.0.0", "en", "1.0.3", folder=help_directory() / "whats_new" / "legacy")
     assert "Compare Traces" in text and "range" in text.lower()

@@ -298,5 +298,8 @@ def install(install_info: dict, progress: Callable[[int, int], None] | None = No
 
 
 def newer(info: UpdateInfo | None, current_version: str) -> bool:
-    return info is not None and version_key(info.version) > version_key(current_version)
+    from app.core.app_update import legacy_feed
+
+    return (info is not None and not legacy_feed(info, current_version)
+            and version_key(info.version) > version_key(current_version))
 

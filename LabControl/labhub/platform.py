@@ -231,6 +231,7 @@ class Platform:
         self.files_dir = Path(files_dir)
         self.modules_dir = self.data_dir / "modules"
         self.modules_dir.mkdir(parents=True, exist_ok=True)
+        self._archive_legacy_versions()
         self.paperlib = PaperlibClient(paperlib_url) if paperlib_url else None
         # 給瀏覽器 / 桌面程式開論文連結的網址；可以用逗號列出多個（內網、VPN），依使用者連進 Hub 的位址挑同一台
         self.paperlib_publics = [u.strip().rstrip("/") for u in (paperlib_public or paperlib_url or "").split(",")
@@ -396,6 +397,30 @@ class Platform:
             rows = con.execute("SELECT username, created, expires, client FROM sessions WHERE expires > ? "
                                "ORDER BY created DESC", (time.time(),)).fetchall()
         return [dict(r) for r in rows]
+
+    #: 1.0.0 正式版：版本號重新開始的模塊（讀檔程式之前是 0.x – 2.1.6）
+    LEGACY_LINES = {"lablogviewer": "1.0.0"}
+
+    def _archive_legacy_versions(self) -> None:
+        """Hub 1.0.0 第一次啟動：把讀檔程式舊版號（比 1.0.0 大的 2.x）搬到 data/modules_legacy/，
+        否則 2.1.6 會一直被當成最新版。只做一次（之後發佈的 1.0.x 不受影響）。"""
+        from .server import parse_version
+
+        for mid, start in self.LEGACY_LINES.items():
+            marker = self.modules_dir / f".legacy_archived_{mid}"
+            base = self.modules_dir / mid
+            if marker.exists():
+                continue
+            try:
+                if base.is_dir():
+                    dest = self.data_dir / "modules_legacy" / mid
+                    for d in list(base.iterdir()):
+                        if d.is_dir() and parse_version(d.name) > parse_version(start):
+                            dest.mkdir(parents=True, exist_ok=True)
+                            shutil.move(str(d), str(dest / d.name))
+                marker.write_text(f"versions above {start} moved to modules_legacy/{mid}\n", encoding="utf-8")
+            except OSError as e:
+                log.warning("搬移 %s 的舊版號失敗：%s", mid, e)
 
     # ---- 模塊與權限 ------------------------------------------------------------------
     def modules(self) -> Dict[str, Dict[str, Any]]:
