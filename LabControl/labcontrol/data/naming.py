@@ -28,7 +28,9 @@ DEFAULT_PATTERN = "{project}/{yyyy}/{mm}/Data_{mmdd}"
 #: 舊版的預設值：設定檔裡還是這些值時，換成新的預設（見 settings.migrate）
 OLD_DEFAULTS = {"data.root": ("C:/Users/QEL/Desktop/VNA_data",), "data.folder_pattern": ("{yyyy}/{mm}/Data_{mmdd}",),
                 # 0.0.31：電流斜坡預設 10 mA/s
-                "run_defaults.approach_rate": ("0.5 mA/s",), "run_defaults.park_rate": ("1 mA/s",)}
+                "run_defaults.approach_rate": ("0.5 mA/s",), "run_defaults.park_rate": ("1 mA/s",),
+                # 1.0.2：分檔檔名 data_100350mA、data_p1（不再有 _001_）
+                "data.split_pattern": ("{stem}_{index:03d}_{label}",)}
 
 
 def data_root(root: str | Path | None = None) -> Path:

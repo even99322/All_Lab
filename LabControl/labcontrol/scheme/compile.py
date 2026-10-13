@@ -9,7 +9,9 @@
     量測方塊所在的迴圈鏈（外 → 內）       → sweep 軸（外 → 內）
     固定值的 set 方塊                     → setup（開始前設定一次）
     量測方塊的儀器設定                     → setup[儀器]
-    Data 方塊在第 d 層迴圈內               → output.split_by = 最外面 d 個軸（每個外圈值一個檔）
+    Data 方塊在第 d 層迴圈內               → output.split_by = 最外面 d 個軸（外圈每走一次一個檔）
+    迴圈之後的「固定設定 → 量測 → Data」     → config.post[]（背景量測，主量測完成後執行，1.0.2）
+    去背方塊                              → config.debg（主數據 ÷ 背景，存成 *_debg，1.0.2）
     第 2 個以後的 Data 方塊                → output.extra[]（各自的檔名、格式、分檔層數）
     set 方塊「電流異步」（交錯電磁鐵組）     → 軸步進 = step/2，setup 設定交錯網格（每台步進、原點）
     wait 方塊                             → 加到所在迴圈的 settle（最外層 → 開始前等待）
@@ -18,6 +20,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import numpy as np
@@ -61,9 +64,13 @@ class CompileResult:
     save: Optional[Block] = None
     saves: List[Block] = field(default_factory=list)
     extras: List[Dict[str, Any]] = field(default_factory=list)   # 第 2 個以後的 Data：{block, depth, split_by, file_name, formats, collision}
+    post: List["CompileResult"] = field(default_factory=list)     # 1.0.2：主量測之後的背景量測
+    post_blocks: List[List[str]] = field(default_factory=list)    # 每個背景階段的方塊 id
+    debg: Optional[Block] = None                                  # 1.0.2：去背方塊
     split_depth: int = 0
     total_points: int = 0
     n_files: int = 0
+    n_files_main: int = 0
     est_seconds: Optional[float] = None
     est_breakdown: Dict[str, float] = field(default_factory=dict)
 
@@ -171,6 +178,8 @@ def block_caption(b: Block, cat: Catalog) -> str:
         return f"{b.file_name or '（自動檔名）'}  [{', '.join(b.formats)}]"
     if b.kind == "wait":
         return f"等待 {_fmt(b.seconds)} s"
+    if b.kind == "debg":
+        return f"去背 → *{b.suffix or '_debg'}" + (f"（{b.dest}）" if b.dest else "")
     return ""
 
 
@@ -204,7 +213,102 @@ def _measure_time(b: Block, cat: Catalog) -> float:
 
 
 # ---------------------------------------------------------------------------
+def _has_measure(b: Block) -> bool:
+    return b.kind == "measure" or any(_has_measure(c) for c in b.children)
+
+
+def split_stages(scheme: Scheme):
+    """方塊樹 → (主量測的方塊, [背景階段的方塊…], 去背方塊或 None)。
+
+    主量測 = 第一個含量測的最上層方塊（通常是最外圈迴圈）以及之前的方塊，加上緊接在後面的 Data / 等待；
+    之後若還有量測 → 背景階段（固定設定、等待、量測、Data），去背方塊放在最後。"""
+    top = list(scheme.blocks)
+    r = next((i for i, b in enumerate(top) if _has_measure(b)), None)
+    debg = [b for b in top if b.kind == "debg"]
+    if r is None:
+        return [b for b in top if b.kind != "debg"], [], (debg[0] if debg else None)
+    i = r + 1
+    while i < len(top) and top[i].kind in ("save", "wait") and not any(_has_measure(b) for b in top[i:i + 1]):
+        i += 1
+    rest = [b for b in top[i:] if b.kind != "debg"]
+    main = list(top[:i])
+    if not any(_has_measure(b) for b in rest):
+        return main + rest, [], (debg[0] if debg else None)     # 迴圈後只有固定設定（舊做法：開始前設定）
+    stages: List[List[Block]] = []
+    cur: List[Block] = []
+    seen_measure = False
+    for b in rest:
+        if seen_measure and b.kind in ("set", "measure") and cur:
+            stages.append(cur)
+            cur, seen_measure = [], False
+        cur.append(b)
+        seen_measure = seen_measure or _has_measure(b)
+    if cur:
+        stages.append(cur)
+    return main, stages, (debg[0] if debg else None)
+
+
 def compile_scheme(scheme: Scheme, cat: Catalog) -> CompileResult:
+    """量測方案 → 實驗設定。1.0.2：迴圈之後可以接背景量測與去背（主量測完成後依序執行）。"""
+    main, stages, debg = split_stages(scheme)
+    if not stages and debg is None:
+        return _compile_stage(scheme, cat)
+    sub = Scheme(name=scheme.name, blocks=main, snake=scheme.snake, run=dict(scheme.run), hooks=list(scheme.hooks),
+                 output=dict(scheme.output), notes=scheme.notes, template=scheme.template)
+    res = _compile_stage(sub, cat)
+    for nid in scheme.loose_ids:
+        res.issues.append(Issue("warning", "這個節點沒有接到流程上（從「開始」連不到），不會執行", nid))
+    res.debg = debg
+    main_stem = Path(res.config["output"]["file_name"] if res.config else
+                     (scheme.output.get("file_name") or f"{scheme.name}.nc")).stem
+    for k, blocks in enumerate(stages):
+        for b in [b for b in blocks if b.is_loop]:
+            res.issues.append(Issue("error", "迴圈之後的背景量測只能是「固定設定 → 量測 → Data」（不能再有迴圈）",
+                                    b.id))
+        saves = [b for b in blocks if b.kind == "save"]
+        sv = saves[0] if saves else None
+        name = (sv.file_name if sv and sv.file_name else f"{main_stem}_bg{'' if k == 0 else k + 1}.nc")
+        out = {key: v for key, v in scheme.output.items() if key not in ("file_name", "formats")}
+        out["file_name"] = name
+        if sv is not None:
+            out["formats"] = list(sv.formats) or list(scheme.output.get("formats") or ["netcdf"])
+        bg = Scheme(name=f"{scheme.name}（背景）", blocks=list(blocks), run=dict(scheme.run), output=out)
+        pr = _compile_stage(bg, cat)
+        for it in pr.issues:
+            if it.level in ("error", "warning"):
+                res.issues.append(it)
+        if sv is None:
+            res.issues.append(Issue("warning", "背景量測後面沒有 Data：背景不會存檔（去背仍可使用）",
+                                    next((b.id for b in blocks if b.kind == "measure"), None)))
+        res.post.append(pr)
+        res.post_blocks.append([b.id for b in blocks])
+        res.n_files += pr.n_files
+        if res.est_seconds is not None and pr.est_seconds is not None:
+            res.est_seconds += pr.est_seconds
+            res.est_breakdown["背景量測"] = res.est_breakdown.get("背景量測", 0.0) + pr.est_seconds
+    if debg is not None:
+        if not stages:
+            res.issues.append(Issue("error", "去背需要背景：在迴圈之後接「固定設定（例如電流）→ 量測 → Data（背景）」，"
+                                             "再接去背", debg.id))
+        else:
+            main_tr = {(m.instrument, t) for m in res.measures for t in m.traces}
+            bg_tr = {(m.instrument, t) for p in res.post[:1] for m in p.measures for t in m.traces}
+            if main_tr and bg_tr and {t for _, t in main_tr} - {t for _, t in bg_tr}:
+                res.issues.append(Issue("error", "背景量測的通道要包含主量測的通道（例如都量 S21）", debg.id))
+            if res.config is not None:
+                res.n_files += res.n_files_main
+    ok = res.ok and all(p.config is not None for p in res.post)
+    if ok and res.config is not None:
+        res.config["post"] = [p.config for p in res.post]
+        if debg is not None:
+            res.config["debg"] = {"dest": debg.dest or "", "suffix": debg.suffix or "_debg"}
+        res.config["scheme"] = scheme.to_dict()
+    else:
+        res.config = None
+    return res
+
+
+def _compile_stage(scheme: Scheme, cat: Catalog) -> CompileResult:
     res = CompileResult(config=None)
     issues = res.issues
     err = lambda msg, b=None: issues.append(Issue("error", msg, b.id if b else None))  # noqa: E731
@@ -217,6 +321,10 @@ def compile_scheme(scheme: Scheme, cat: Catalog) -> CompileResult:
     if not flat:
         err("方案是空的：從左下的儀器參數列表把電源、量測拖進流程圖，並從「開始」連線")
         return res
+    for b in flat:
+        if b.kind == "debg":
+            err("去背方塊要放在最後：迴圈之後「固定設定 → 量測 → Data（背景）→ 去背」", b)
+    flat = [b for b in flat if b.kind != "debg"]
     order = {b.id: i for i, b in enumerate(flat)}
     measures = [b for b in flat if b.kind == "measure"]
     saves = [b for b in flat if b.kind == "save"]
@@ -385,7 +493,8 @@ def compile_scheme(scheme: Scheme, cat: Catalog) -> CompileResult:
                 warn("這個 Data 沒有選存檔格式，不會存檔", sv)
             extras.append({"block": sv.id, "depth": depth, "split_by": by,
                            "file_name": sv.file_name or f"{scheme.name}_{k + 1}.hdf5",
-                           "formats": list(sv.formats), "collision": sv.collision or fs["collision"]})
+                           "formats": list(sv.formats), "collision": sv.collision or fs["collision"],
+                           "split_pattern": sv.name_pattern or "", "label_style": sv.label_style or ""})
         key = ((fs["file_name"] if k == 0 else (sv.file_name or f"{scheme.name}_{k + 1}.hdf5")), depth)
         if key in names_files:
             warn(f"和另一個 Data 的檔名與分檔方式相同（{key[0]}），會存成 _2、_3…", sv)
@@ -400,6 +509,7 @@ def compile_scheme(scheme: Scheme, cat: Catalog) -> CompileResult:
     ns = [lp.n for lp in res.loops]
     res.total_points = int(np.prod(ns)) if ns else 1
     res.n_files = (int(np.prod(ns[:res.split_depth])) if res.split_depth else 1) if fs["formats"] else 0
+    res.n_files_main = res.n_files
     for e in extras:
         if e["formats"]:
             res.n_files += int(np.prod(ns[:e["depth"]])) if e["depth"] else 1
@@ -469,10 +579,17 @@ def compile_scheme(scheme: Scheme, cat: Catalog) -> CompileResult:
                   collision=fs["collision"])
     if split_by:
         output["split_by"] = split_by
+    if save is not None and save.name_pattern:
+        output["split_pattern"] = save.name_pattern
+    if save is not None and save.label_style:
+        output["label_style"] = save.label_style
 
     if extras:
         output["extra"] = [{"file_name": e["file_name"], "collision": e["collision"], "split_by": e["split_by"],
-                            "export": _export_list(e["formats"])} for e in extras if e["formats"]]
+                            "export": _export_list(e["formats"]),
+                            **({"split_pattern": e["split_pattern"]} if e["split_pattern"] else {}),
+                            **({"label_style": e["label_style"]} if e["label_style"] else {})}
+                           for e in extras if e["formats"]]
     run = {k: v for k, v in scheme.run.items() if k != "point_delay"}
     if settle_first:
         run["settle_first"] = settle_first

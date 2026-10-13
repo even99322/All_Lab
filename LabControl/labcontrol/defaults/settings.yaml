@@ -17,7 +17,8 @@ app:
 data:
   root: ~/Desktop/數據集散地      # 資料根目錄（~ = 使用者資料夾，量測電腦是 C:\Users\user\Desktop\數據集散地）
   folder_pattern: "{project}/{yyyy}/{mm}/Data_{mmdd}"   # {project} = 專案資料夾；另可用 {yyyy} {mm} {dd} {mmdd} {yyyymmdd}
-  split_pattern: "{stem}_{index:03d}_{label}" # 分檔檔名：stem=檔名、index=外圈序號、label=外圈值（如 52mA）
+  split_pattern: "{stem}_{label}"  # 分檔檔名：stem=檔名、label=外圈值（100350mA）或重複次數（p1、p2）、{index:03d}=序號
+  label_style: nodot               # 檔名數值：nodot（100.35 mA → 100350mA）| plain（100.35mA）| p（100p35mA）
   collision: underscore        # 同名檔案：underscore（_2）| paren（(2)）| overwrite
   raw_backup: false            # 0.0.28 起不另存 _raw/（true = 量測時逐點另存原生 HDF5 到 _raw/，當機時救資料用）
   raw_folder: _raw

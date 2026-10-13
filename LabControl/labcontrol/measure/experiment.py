@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import copy
 import dataclasses
+import os
 import datetime as _dt
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -40,11 +41,21 @@ class OutputPlan:
     raw_path: Optional[Path] = None
     exporters: List[Dict[str, Any]] = field(default_factory=list)
     date_warning: Optional[Tuple[str, str, str]] = None   # (檔名日期, 今天, 建議檔名)；由前端決定是否採用
-    split_pattern: str = "{stem}_{index:03d}_{label}"     # 分檔檔名；label 例如 52mA
+    split_pattern: str = "{stem}_{label}"                 # 分檔檔名；label 例如 100350mA、p2（1.0.2 起）
+    label_style: str = "nodot"                            # 檔名數值：nodot（100350）| plain（100.35）| p（100p35）
     exported: Dict[tuple, List[Path]] = field(default_factory=dict)   # 已匯出的段落 → 檔案
     dirty: set = field(default_factory=set)                           # 回溯後需重新匯出的段落
     split_by: List[str] = field(default_factory=list)                 # 這個輸出的分檔軸（最外面幾層）
     extras: List["OutputPlan"] = field(default_factory=list)          # 其他 Data 方塊（output.extra）
+    main_files: List[Path] = field(default_factory=list)              # 不分檔時存好的檔（去背用）
+
+
+def split_name(pattern: str, stem: str, index: int, label: str) -> str:
+    """分檔檔名：{stem} / {name}（檔名主體）、{label}（100350mA、p2）、{index:03d}、{n}（第幾個，1 起）。"""
+    try:
+        return (pattern or "{stem}_{label}").format(stem=stem, name=stem, label=label, index=index + 1, n=index + 1)
+    except (KeyError, IndexError, ValueError):
+        return f"{stem}_{label}"
 
 
 def raw_backup() -> bool:
@@ -93,15 +104,18 @@ class Experiment:
         if o.get("raw", raw_backup()):
             raw = folder / setting("data.raw_folder", "_raw") / f"{Path(fname).stem}_{now:%H%M%S}.lm.h5"
         exporters = [dict(e) for e in o.get("export", [])]
-        pattern = o.get("split_pattern") or setting("data.split_pattern", "{stem}_{index:03d}_{label}")
+        pattern = o.get("split_pattern") or setting("data.split_pattern", "{stem}_{label}")
+        style = o.get("label_style") or setting("data.label_style", "nodot")
         plan = OutputPlan(folder=folder, file_name=fname,
                           collision=o.get("collision") or setting("data.collision", "underscore"),
                           raw_path=raw, exporters=exporters, date_warning=stale_date_in_filename(fname, now),
-                          split_pattern=pattern, split_by=list(self.split_by))
+                          split_pattern=pattern, label_style=style, split_by=list(self.split_by))
         for e in self.extra_cfg:
             plan.extras.append(OutputPlan(folder=folder, file_name=e.get("file_name") or f"{Path(fname).stem}_2.hdf5",
                                           collision=e.get("collision") or plan.collision,
-                                          exporters=[dict(x) for x in e.get("export", [])], split_pattern=pattern,
+                                          exporters=[dict(x) for x in e.get("export", [])],
+                                          split_pattern=e.get("split_pattern") or pattern,
+                                          label_style=e.get("label_style") or style,
                                           split_by=list(e.get("split_by") or [])))
         if plan.date_warning:
             old, today, suggest = plan.date_warning
@@ -156,7 +170,80 @@ class Experiment:
         paths: List[Path] = []
         for plan in [output, *output.extras]:
             paths.extend(self._export_plan(dataset, plan))
+        paths.extend(self.run_post_stages(dataset, output))
         return paths
+
+    # ---- 1.0.2：背景量測、去背 ------------------------------------------------------
+    def run_post_stages(self, dataset: Dataset, output: OutputPlan) -> List[Path]:
+        """主量測存好檔之後：依序量背景（config.post），再把主數據除以背景存成 *_debg（config.debg）。
+        主量測沒有量完（中途停止）就不做。"""
+        post = list(self.config.get("post") or [])
+        debg = self.config.get("debg")
+        if not post and not debg:
+            return []
+        if len(dataset) < dataset.planned_points:
+            self.station.bus.log("ℹ 主量測沒有量完：不量背景、不去背", "info")
+            return []
+        paths: List[Path] = []
+        background: Optional[Dataset] = None
+        for k, cfg in enumerate(post):
+            self.station.bus.log(f"▶ 背景量測{'' if len(post) == 1 else f' {k + 1}'}：{cfg.get('name', '')}")
+            exp = Experiment(self.station, cfg)
+            out = exp.plan_output(root=str(output.folder))
+            out.folder = output.folder                     # 背景存在主數據旁邊
+            runner = exp.create_runner(out)
+            ds = runner.run()
+            if ds is None or not len(ds):
+                self.station.bus.log("⚠ 背景量測沒有數據：不去背", "warning")
+                return paths
+            if len(ds) < ds.planned_points:
+                self.station.bus.log("ℹ 背景量測被停止：不去背", "info")
+                return paths
+            paths.extend(exp.export(ds, out))
+            background = background or ds
+        if debg and background is not None:
+            try:
+                paths.extend(self.export_debackground(dataset, background, output, debg))
+            except Exception as e:  # noqa: BLE001
+                self.station.bus.log(f"❌ 去背失敗：{e}", "error")
+        return paths
+
+    def export_debackground(self, dataset: Dataset, background: Dataset, output: OutputPlan,
+                            cfg: Dict[str, Any]) -> List[Path]:
+        """主數據的每個檔 → 同名加 _debg（複數除以背景 trace，跟讀檔程式的去背一樣）。"""
+        from ..analysis.debackground import debackground_dataset
+
+        result = debackground_dataset(dataset, background)
+        dest = Path(os.path.expandvars(os.path.expanduser(str(cfg.get("dest") or "")))) if cfg.get("dest") \
+            else output.folder
+        dest.mkdir(parents=True, exist_ok=True)
+        suffix = str(cfg.get("suffix") or "_debg")
+        paths: List[Path] = []
+        if output.split_by:
+            items = [(key, files, segment_dataset(result, output.split_by, key, self.plan))
+                     for key, files in output.exported.items()]
+        else:
+            items = [(None, [p for p in self._main_files(output)], result)]
+        for _key, files, ds in items:
+            for f in files:
+                f = Path(f)
+                cls = next((WRITERS.get(e["type"]) for e in output.exporters
+                            if WRITERS.get(e["type"]).extension == f.suffix), None)
+                if cls is None:
+                    continue
+                e = dict(next(e for e in output.exporters if WRITERS.get(e["type"]).extension == f.suffix))
+                e.pop("type")
+                target = dest / unique_filename(dest, f"{f.stem}{suffix}{f.suffix}", output.collision)
+                cls(**e).export(ds, target)
+                self.station.bus.log(f"✅ 已去背：{target.name}")
+                self.station.bus.publish("data.exported", path=str(target), writer=cls.registered_name,
+                                         tags=self.output_tags(), scheme=self.name,
+                                         project=self.output_project().get("id", ""))
+                paths.append(target)
+        return paths
+
+    def _main_files(self, output: OutputPlan) -> List[Path]:
+        return list(getattr(output, "main_files", []) or [])
 
     def _export_plan(self, dataset: Dataset, output: OutputPlan) -> List[Path]:
         if output.split_by:
@@ -164,12 +251,13 @@ class Experiment:
             if h is not None:
                 h.finish()                          # 等背景段落匯出做完
             paths: List[Path] = []
-            keys = list(dict.fromkeys(segment_key(output.split_by, r) for r in dataset.records))
+            keys = list(dict.fromkeys(segment_key(output.split_by, r, self.plan) for r in dataset.records))
             for key in keys:
                 if key in output.exported and key not in output.dirty:
                     paths.extend(output.exported[key])
                     continue
-                paths.extend(self.export_segment(segment_dataset(dataset, output.split_by, key), output, key))
+                paths.extend(self.export_segment(segment_dataset(dataset, output.split_by, key, self.plan),
+                                                 output, key))
             return paths
         paths = []
         for e in output.exporters:
@@ -180,6 +268,7 @@ class Experiment:
             name = output.file_name if ext == writer.extension else stem + writer.extension
             name = unique_filename(output.folder, name, output.collision)
             path = writer.export(dataset, output.folder / name)
+            output.main_files.append(Path(path))
             self.station.bus.log(f"✅ 已存檔：{path}")
             self.station.bus.publish("data.exported", path=str(path), writer=cls.registered_name,
                                      tags=self.output_tags(), scheme=self.name,
@@ -190,9 +279,9 @@ class Experiment:
     def export_segment(self, seg: Dataset, output: OutputPlan, key: tuple) -> List[Path]:
         """匯出一個段落（外圈某個值）。已匯出過的段落覆寫同一個檔名。"""
         output.folder.mkdir(parents=True, exist_ok=True)
-        index, label = segment_label([a.spec() for a in self.plan.axes], output.split_by or self.split_by, key)
-        stem = Path(output.file_name).stem
-        base = output.split_pattern.format(stem=stem, index=index + 1, label=label)
+        index, label = segment_label([a.spec() for a in self.plan.axes], output.split_by or self.split_by, key,
+                                     by_index=True, style=output.label_style)
+        base = split_name(output.split_pattern, Path(output.file_name).stem, index, label)
         old = {p.suffix: p for p in output.exported.get(key, [])}
         paths: List[Path] = []
         for e in output.exporters:

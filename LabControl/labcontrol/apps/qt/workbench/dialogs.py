@@ -58,6 +58,9 @@ def edit_block(parent: QtWidgets.QWidget, doc: WorkbenchDoc, b: Block) -> Option
         dlg = MeasureDialog(parent, doc, b)
     elif b.kind == "wait":
         dlg = WaitDialog(parent, b)
+    elif b.kind == "debg":
+        doc.select(b.id)                     # 1.0.2：去背在右側「Data 方塊」分頁設定
+        return None
     else:
         saves = getattr(doc.result, "saves", []) or []
         main = not saves or saves[0].id == b.id

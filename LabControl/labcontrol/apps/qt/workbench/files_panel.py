@@ -46,10 +46,20 @@ class FilePanel(QtWidgets.QTabWidget):
         self.addTab(self._file_tab(), "檔案")
         self.addTab(self._run_tab(), "執行")
         self.addTab(self._check_tab(), "檢查與估時")
+        from .data_panel import DataPanel
+
+        self.data_panel = DataPanel(doc)              # 1.0.2：點 Data / 去背方塊 → 在這裡設定
+        self.addTab(self.data_panel, "Data 方塊")
+        doc.selection_changed.connect(self._show_data_tab)
         doc.changed.connect(self._on_changed)
         theme.on_change(self, lambda w: w._refresh_derived(), call_now=False)
         self.load()
         self.reload_projects()
+
+    def _show_data_tab(self, nid) -> None:
+        b = self.doc.node(nid) if nid else None
+        if b is not None and b.kind in ("save", "debg"):
+            self.setCurrentWidget(self.data_panel)
 
     # ---- 檔案 -----------------------------------------------------------
     def _file_tab(self) -> QtWidgets.QWidget:

@@ -486,8 +486,13 @@ class VNAPanel(QtWidgets.QWidget):
         self.b_readp.clicked.connect(self.read_params)
         hint = QtWidgets.QLabel("掃描速度：掃描時間 / 自動、點數、IF 頻寬")
         hint.setProperty("role", "muted")
+        self.b_center = QtWidgets.QPushButton("⌖ 最低點置中")
+        self.b_center.setObjectName("vnaCenterOnMin")
+        self.b_center.setToolTip("把目前曲線的最低點（|S| 最小）的頻率設成中心頻率，頻寬不變（1.0.2）")
+        self.b_center.clicked.connect(self.center_on_minimum)
         row.addWidget(self.b_apply)
         row.addWidget(self.b_readp)
+        row.addWidget(self.b_center)
         row.addWidget(hint, 1)
         tl.addLayout(row)
         tl.addStretch(1)
@@ -1019,6 +1024,46 @@ class VNAPanel(QtWidgets.QWidget):
             if not self.cont.isChecked():
                 self.read_trace()
         run_bg(work, ok, lambda m: self.message.emit(f"❌ 套用失敗：{m}"))
+
+    def minimum_frequency(self) -> Optional[float]:
+        """目前曲線 |S| 最小處的頻率（Hz）；沒有曲線 → None。"""
+        if not self.last:
+            return None
+        _tr, x, z = self.last[0], np.asarray(self.last[1], dtype=float), np.asarray(self.last[2])
+        mag = np.abs(z).astype(float)
+        ok = np.isfinite(mag) & np.isfinite(x)
+        if x.size != mag.size or not ok.any():
+            return None
+        k = int(np.argmin(np.where(ok, mag, np.inf)))
+        return float(x[k])
+
+    def center_on_minimum(self) -> None:
+        """1.0.2：最低點的頻率 → 中心頻率（頻寬不變），寫入 VNA 後重新量一次。"""
+        be = self.backend
+        f0 = self.minimum_frequency()
+        if be is None or f0 is None or self.busy:
+            self.message.emit("先量一條曲線，才能把最低點置中")
+            return
+        x = np.asarray(self.last[1], dtype=float)
+        span = float(abs(x[-1] - x[0])) if x.size > 1 else 0.0
+        refs = {k: p["ref"] for k, p in self.params.items()}
+        if "center_freq" in refs:
+            todo = [(refs["center_freq"], f0)] + ([(refs["span"], span)] if "span" in refs and span else [])
+        elif "start_freq" in refs and "stop_freq" in refs and span:
+            lo, hi = f0 - span / 2, f0 + span / 2
+            up = lo > float(x[0])
+            todo = [(refs["stop_freq"], hi), (refs["start_freq"], lo)] if up else \
+                [(refs["start_freq"], lo), (refs["stop_freq"], hi)]
+        else:
+            self.message.emit("這台 VNA 沒有可以設定的中心頻率 / 起訖頻率")
+            return
+
+        def ok(_res):
+            self.message.emit(f"✔ 中心頻率 → {f0 / 1e9:.6f} GHz（最低點）")
+            self.read_params()
+            if not self.cont.isChecked():
+                self.read_trace()
+        run_bg(lambda: [be.set(r, v) for r, v in todo], ok, lambda m: self.message.emit(f"❌ 置中失敗：{m}"))
 
     def set_rf(self, on: bool) -> None:
         rf = self.rf_param

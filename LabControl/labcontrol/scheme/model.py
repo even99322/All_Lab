@@ -18,8 +18,9 @@
 方塊種類：
     set      設定一個參數（磁鐵電流、VNA 功率…）；mode = fixed（設定一次）或 sweep（迴圈）
     measure  量測（VNA / SHFQC），含儀器設定
-    save     Data：存檔位置、檔名、格式
+    save     Data：存檔位置、檔名、格式、分檔命名規則
     wait     等待
+    debg     去背（1.0.2）：迴圈之後「固定設定 → 量測 → Data」量一個背景，再把主數據除以背景存成 *_debg
 """
 from __future__ import annotations
 
@@ -29,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-KINDS = ("set", "measure", "save", "wait")
+KINDS = ("set", "measure", "save", "wait", "debg")
 
 
 def new_id() -> str:
@@ -67,6 +68,11 @@ class Block:
     file_name: str = ""
     formats: List[str] = field(default_factory=lambda: ["netcdf"])   # netcdf（xarray .nc）| hdf5（原生）
     collision: str = "underscore"
+    name_pattern: str = ""                   # 1.0.2：分檔檔名規則（空白 = settings data.split_pattern：{stem}_{label}）
+    label_style: str = ""                    # 1.0.2：檔名數值 nodot | plain | p（空白 = settings data.label_style）
+    # ---- debg（去背）----
+    dest: str = ""                           # 去背檔存到哪個資料夾（空白 = 與數據相同）
+    suffix: str = "_debg"                    # 去背檔檔名後綴
     # ---- wait ----
     seconds: float = 0.0
 
@@ -90,8 +96,9 @@ class Block:
         "set": ("target", "mode", "value", "start", "stop", "step", "points", "unit", "settle", "axis_name",
                 "range_mode", "interp", "alternate", "after", "after_value", "interleave"),
         "measure": ("instrument", "traces", "settings"),
-        "save": ("file_name", "formats", "collision"),
+        "save": ("file_name", "formats", "collision", "name_pattern", "label_style"),
         "wait": ("seconds",),
+        "debg": ("dest", "suffix"),
     }
 
     def to_dict(self) -> Dict[str, Any]:
@@ -129,7 +136,7 @@ class Block:
 
 
 _FIELD_DEFAULTS = {"range_mode": "startstop", "interp": "linear", "alternate": False, "after": "start",
-                   "interleave": False}
+                   "interleave": False, "suffix": "_debg"}
 
 DEFAULT_RUN: Dict[str, Any] = {}   # 執行預設值一律來自 settings.yaml run_defaults；方案只存使用者改過的
 
@@ -146,6 +153,7 @@ class Scheme:
     graph: Optional[Any] = None              # SchemeGraph（節點位置與連線）；None = 舊格式純方塊樹
     template: str = ""                       # 0.0.31：從哪個範本來（02_2d…）；專案範本用它同步
     quick: Dict[str, int] = field(default_factory=dict)   # 0.0.31：「方塊id.欄位」→ 改過幾次（快速調整面板）
+    template_rev: int = 0                    # 1.0.2：內建範本的版本（專案 / LAB 裡比較舊的版本會換成新的）
 
     def sync_from_graph(self) -> None:
         """由節點圖重建方塊樹（編輯器每次修改後呼叫）。"""
@@ -332,6 +340,8 @@ class Scheme:
             d["template"] = self.template
         if self.quick:
             d["quick"] = dict(self.quick)
+        if self.template_rev:
+            d["template_rev"] = int(self.template_rev)
         return d
 
     @classmethod
@@ -349,7 +359,8 @@ class Scheme:
                    hooks=list(d.get("hooks") or []), output=dict(d.get("output") or {}),
                    notes=d.get("notes", ""), graph=graph, template=str(d.get("template") or ""),
                    quick={str(k): int(v) for k, v in (d.get("quick") or {}).items()
-                          if isinstance(v, (int, float))})
+                          if isinstance(v, (int, float))},
+                   template_rev=int(d.get("template_rev") or 0) if str(d.get("template_rev") or 0).isdigit() else 0)
 
     def save(self, path: str | Path) -> None:
         import yaml

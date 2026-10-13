@@ -65,7 +65,37 @@ def ensure_lab_home(home: Optional[Path] = None) -> List[Path]:
             shutil.copy2(src, dst)
             created.append(dst)
     _migrate_files(home)
+    _upgrade_templates(home)
     return created
+
+
+def _template_rev(path: Path) -> int:
+    import re
+
+    try:
+        m = re.search(r"(?m)^template_rev:\s*(\d+)", path.read_text(encoding="utf-8"))
+    except OSError:
+        return 0
+    return int(m.group(1)) if m else 0
+
+
+def _upgrade_templates(home: Path) -> None:
+    """1.0.2：內建範本有新版（template_rev 比 LAB/templates 裡的大）→ 舊的搬到 舊範本_rev<n>/，換成新的。"""
+    src_dir, dst_dir = DEFAULTS_DIR / "templates", home / "templates"
+    if not src_dir.is_dir() or not dst_dir.is_dir():
+        return
+    for src in src_dir.glob("*.scheme.yaml"):
+        new = _template_rev(src)
+        dst = dst_dir / src.name
+        if not new or not dst.is_file() or _template_rev(dst) >= new:
+            continue
+        try:
+            old_dir = dst_dir / f"舊範本_rev{_template_rev(dst)}"
+            old_dir.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(dst), str(old_dir / src.name))
+            shutil.copy2(src, dst)
+        except OSError:
+            pass
 
 
 #: 0.0.30 以前內建的範本（0.0.31 起只留 單張 / 2D / 2D電流異步 / 雙層分檔 / 雙層單檔 / flux）

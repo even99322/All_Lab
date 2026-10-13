@@ -354,8 +354,14 @@ def describe(doc: WorkbenchDoc, nid: str, b: Optional[Block]) -> Tuple[str, str,
         sub = f"{m.short if m else b.instrument} · {'/'.join(b.traces) or '—'}"
         detail = measure_details(b.settings or {}, (m.kind if m else "") or "")
         return (m.head if m else "量測"), "\n".join([sub, *detail]), "量測", ((m.kind or "measure") if m else "measure")
+    if b.kind == "debg":
+        return "去背", f"主數據 ÷ 背景 → *{b.suffix or '_debg'}\n" + (f"存到 {b.dest}" if b.dest else "存在數據旁邊"), \
+            "處理", "save"
     if b.kind == "save":
         r = doc.result
+        if any(b.id in ids for ids in getattr(r, "post_blocks", []) or []):
+            name = b.file_name or "（主檔名_bg.nc）"
+            return "Data（背景）", f"主量測完成後量一次背景\n{name}", "存檔", "save"
         extra = next((e for e in getattr(r, "extras", []) or [] if e["block"] == b.id), None)
         if extra is not None:
             names = "、".join(lp.target.short for lp in r.loops[:extra["depth"]])
@@ -364,7 +370,7 @@ def describe(doc: WorkbenchDoc, nid: str, b: Optional[Block]) -> Tuple[str, str,
             return "Data（額外）", sub, "存檔", "save"
         if r.save is not None and r.save.id == b.id and r.split_depth:
             names = "、".join(lp.target.short for lp in r.loops[:r.split_depth])
-            sub = f"每個{names}值存一個檔\n共 {r.n_files} 個檔"
+            sub = f"每次{names}走一步存一個檔\n共 {getattr(r, 'n_files_main', 0) or r.n_files} 個檔（點一下設定命名）"
         else:
             sub = "整個量測存成一個檔\n檔名與格式見右邊「檔案設置」"
         return "Data", sub, "存檔", "save"
@@ -764,6 +770,7 @@ class FlowView(QtWidgets.QGraphicsView):
                 sub.addAction(f"{mm.head} · {mm.label}", lambda mm=mm: add({"kind": "measure", "instrument": mm.ref}))
         m.addAction(f"{title_prefix}：Data（分檔點）", lambda: add({"kind": "save"}))
         m.addAction(f"{title_prefix}：等待", lambda: add({"kind": "wait"}))
+        m.addAction(f"{title_prefix}：去背（主數據 ÷ 背景 → _debg）", lambda: add({"kind": "debg"}))
 
     def _create_menu(self, scene_pt: QPointF, global_pt: QtCore.QPoint, link=None) -> None:
         m = QtWidgets.QMenu(self)

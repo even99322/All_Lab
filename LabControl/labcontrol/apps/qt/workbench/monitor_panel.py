@@ -181,6 +181,7 @@ class MonitorPanel(QtWidgets.QWidget):
         lay.addWidget(self.log)
         self.b_line.toggled.connect(self.plot.setVisible)
         self.b_img.toggled.connect(self.heat_plot.setVisible)
+        self.b_img.toggled.connect(lambda on: on and self.refill_heat())   # 1.0.2：再打開時補回已量的內容
         self.b_log.toggled.connect(self.log.setVisible)
         self.disp.currentIndexChanged.connect(lambda _i: self._redraw_last())
         self._set_state("idle")
@@ -376,6 +377,39 @@ class MonitorPanel(QtWidgets.QWidget):
             self.heat[:] = np.nan
             self.outer_key = None
             self._draw(self.last_shot, getattr(self, "last_index", 0), {})
+            self.refill_heat()
+
+    def showEvent(self, e) -> None:  # noqa: N802
+        super().showEvent(e)
+        self.refill_heat()
+
+    def refill_heat(self) -> None:
+        """1.0.2：熱圖從量測數據重畫（目前這一段外圈的所有點）——關掉 / 隱藏後再打開、換顯示方式時不會只剩最新幾條。"""
+        runner, heat = self.runner, self.heat
+        ds = getattr(runner, "dataset", None) if runner is not None else None
+        if ds is None or heat is None or self.x is None or not len(ds) or self.show_ch is None:
+            return
+        try:
+            plan = runner.plan
+            fn = DISPLAY[self.disp.currentData() or "db"][1]
+            cur = self.outer_key
+            if cur is None:
+                cur = tuple(plan.multi_index(ds.records[-1].index)[:-1])
+            heat[:] = np.nan
+            for r in list(ds.records):
+                mi = plan.multi_index(r.index)
+                if tuple(mi[:-1]) != cur or self.show_ch not in r.data:
+                    continue
+                y = fn(np.asarray(r.data[self.show_ch]))
+                if mi[-1] < heat.shape[1] and len(y) == heat.shape[0]:
+                    heat[:, mi[-1]] = y
+            self.outer_key = cur
+            finite = heat[np.isfinite(heat)]
+            if finite.size:
+                self.img.setImage(np.nan_to_num(heat, nan=float(finite.min())), autoLevels=True)
+                self.heat_plot.getPlotItem().getViewBox().autoRange()
+        except Exception:  # noqa: BLE001 — 只是畫面
+            pass
 
     def _on_table_click(self, it: QtWidgets.QTreeWidgetItem, _col: int) -> None:
         name = it.data(0, Qt.ItemDataRole.UserRole)

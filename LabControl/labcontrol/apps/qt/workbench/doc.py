@@ -181,6 +181,8 @@ class WorkbenchDoc(QObject):
                          settings=dict(m.defaults) if m else {})
         if kind == "save":
             return Block("save")
+        if kind == "debg":
+            return Block("debg")
         return Block("wait", seconds=float((nb.get("wait") or {}).get("seconds", 1.0)))
 
     def add_node(self, spec: Dict[str, Any], pos: Optional[Tuple[float, float]] = None,

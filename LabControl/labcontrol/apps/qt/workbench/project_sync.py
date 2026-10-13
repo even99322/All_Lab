@@ -86,6 +86,9 @@ class ProjectTemplateSync(QtCore.QObject):
 
         def ok(d: Optional[Dict[str, Any]]) -> None:
             self.loading -= 1
+            if d and int(d.get("template_rev") or 0) < int(base.template_rev or 0):
+                d = None                              # 1.0.2：內建範本改版了（例如 2D 加背景＋去背）→ 用新版
+                self.w.statusBar().showMessage(f"📁 範本「{base.name}」有新版，這個專案改用新版（舊設定沒有沿用）", 8000)
             s = Scheme.from_dict(d) if d else base
             s.template = key
             s.output["lab_project"] = p
