@@ -138,8 +138,10 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         self.local_channels = self.channels = ChannelPanel(self.doc, station)
         self.local_monitor = self.monitor = MonitorPanel(station)
         from ....scheme.remap import role_lists
+        from ....settings import setting
 
-        self.doc.roles = role_lists(station.config.get("instruments") or {})   # 0.0.31：依量測電腦換儀器
+        self.doc.roles = role_lists(station.config.get("instruments") or {},   # 0.0.31：依量測電腦換儀器
+                                    setting("lab_nodes", []))                # 0.0.32：量測電腦對應
         self.doc.remapped.connect(self._remapped)
         self.doc.remap()
         self.files = FilePanel(self.doc)
@@ -240,6 +242,8 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         tb.addAction("開啟…", self.open_scheme).setShortcut("Ctrl+O")
         tb.addAction("儲存", self.save_scheme).setShortcut("Ctrl+S")
         tb.addAction("另存…", lambda: self.save_scheme(ask=True))
+        a = tb.addAction("🔁 量測電腦對應", self.edit_node_map)
+        a.setToolTip("設定每台量測電腦的電磁鐵組 / VNA（方案換到另一台執行時依序對應），以及儀器接在哪台（instruments.yaml node:）")
         a = tb.addAction("📦 專題歸檔", self.open_archive)
         a.setToolTip("選數據檔或整個資料夾，複製到 NAS 數據集散地／專案（保留日期資料夾）")
         tb.addSeparator()
@@ -378,6 +382,30 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         from ..archive_dialog import ArchiveDialog
 
         ArchiveDialog(self, project=self.files.current_project() or None, sources=sources).exec()
+
+    def edit_node_map(self) -> None:
+        """0.0.32：量測電腦對應（settings.yaml lab_nodes、instruments.yaml node:）。"""
+        from ....scheme.remap import role_lists
+        from ....settings import setting
+        from ..node_map_dialog import edit_node_map
+
+        path = self.station.config_path or lab_path(setting("app.instruments_file", "instruments.yaml"))
+        res = edit_node_map(self, path)
+        if res is None:
+            return
+        conf = dict(self.station.config.get("instruments") or {})
+        try:
+            import yaml
+
+            conf = dict((yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}).get("instruments") or conf)
+        except Exception:  # noqa: BLE001
+            pass
+        self.doc.roles = role_lists(conf, res["lab_nodes"])
+        self.doc.remap()
+        msg = "✔ 量測電腦對應已儲存"
+        if res.get("changed"):
+            msg += f"；instruments.yaml 已更新（{'、'.join(res['changed'])}），重新開啟 Lab Control 後儀器清單生效"
+        self.statusBar().showMessage(msg, 12000)
 
     def rename_magnet_group(self, ref: str) -> None:
         """0.0.31：改電磁鐵組的顯示名稱（instruments.yaml 的 label；流程圖、資料軸名稱都用它）。"""

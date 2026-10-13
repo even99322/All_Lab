@@ -115,3 +115,9 @@ instruments:
       ramp_rate: 1.0e-2
       max_jump: 5.0e-5
       resolution: 1.0e-6
+
+  # ---- LAB-2 的電磁鐵組（0.0.32）----------------------------------------------------------
+  # 在 LAB-2 開「儀器伺服器 → ＋ 電磁鐵組…」選兩個電源建立，或填好 LAB-2 電源（DC5…）後取消註解。
+  # 名稱 / 順序對應在 settings.yaml 的 lab_nodes（流程圖工具列「🔁 量測電腦對應」可以改）。
+  # magnet_C: {driver: virtual.interleaved_pair, group: magnet, label: 磁鐵 C, sources: [DC5, DC6], display_unit: mA}
+  # magnet_D: {driver: virtual.interleaved_pair, group: magnet, label: 磁鐵 D, sources: [DC7, DC8], display_unit: mA}

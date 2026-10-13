@@ -126,6 +126,9 @@
   （VPN `\\100.114.33.20\...`；Mac `/Volumes/ccuqel/數據集散地`；`LABCONTROL_ARCHIVE_ROOT` 可指定），保留日期資料夾。
 - **儀器依量測電腦對應**：`instruments.yaml` 每台儀器寫 `node: LAB-1` / `LAB-2`；方案裡目前儀器清單沒有的電磁鐵組 / VNA，
   依「同一台的第幾個」換成執行那台的（LAB-1 magA、magB、VNA1 ↔ LAB-2 magC、magD、VNA2）。
+- **量測電腦對應（0.0.32）**：流程圖 / 儀器伺服器工具列「🔁 量測電腦對應」。每台的電磁鐵組 / VNA 順序存在
+  `settings.yaml` 的 `lab_nodes`（預設 LAB-1：magnet_A、magnet_B、VNA1；LAB-2：magnet_C、magnet_D、VNA2），
+  儀器接在哪台寫在 `instruments.yaml` 的 `node:`；舊檔依位址自動補上一次。
 - **遠端量測的存檔位置**：節點的狀態帶 `data`（root、資料夾規則、專案資料夾清單）；遠端執行時一律存到量測電腦自己的位置。
 - **讀檔程式連動**：讀檔程式（2.1.6）開著時聽本機連線 `qel-lablogviewer-<使用者>`，並把啟動方式記在
   `~/.qel/lablogviewer/app.json`。Lab Control 量完送 `{"cmd": "open", "path": …}`（沒開就啟動它）；雙層分檔不送。

@@ -75,15 +75,15 @@ def _opt_float(v: Any) -> Optional[float]:
     return None if v is None else float(v)
 
 
-def set_instrument_label(text: str, name: str, label: str) -> str:
-    """instruments.yaml 的文字裡，把儀器 name 的 label 改成 label（保留註解與排版；沒有 label 就加一行）。"""
-    import json as _json
+def set_instrument_key(text: str, name: str, key: str, value: str) -> str:
+    """instruments.yaml 的文字裡，把儀器 name 的 ``key:`` 設成 value（已經是 YAML 文字，例如 ``"LAB-1"``、
+    ``[LAB-1, LAB-2]``）；value 為空字串 = 刪掉這一行。保留註解與排版；沒有這個 key 就加在儀器名稱下一行。"""
     import re
 
     lines = text.splitlines(keepends=True)
-    key = re.compile(rf"^(\s*){re.escape(name)}:\s*(#.*)?$")
+    head = re.compile(rf"^(\s*){re.escape(name)}:\s*(#.*)?$")
     for i, line in enumerate(lines):
-        m = key.match(line.rstrip("\r\n"))
+        m = head.match(line.rstrip("\r\n"))
         if not m:
             continue
         ind = len(m.group(1))
@@ -96,15 +96,74 @@ def set_instrument_label(text: str, name: str, label: str) -> str:
                 if cur <= ind:
                     break
                 child = cur if child is None else child
-                if cur == child and re.match(r"\s*label:", s):
+                if cur == child and re.match(rf"\s*{re.escape(key)}:", s):
+                    if value == "":
+                        del lines[j]
+                        return "".join(lines)
                     nl = lines[j][len(s):] or "\n"
                     comment = re.search(r"\s+#.*$", s)
-                    lines[j] = " " * cur + "label: " + _json.dumps(label, ensure_ascii=False) + \
-                        (comment.group(0) if comment else "") + nl
+                    lines[j] = " " * cur + f"{key}: {value}" + (comment.group(0) if comment else "") + nl
                     return "".join(lines)
             j += 1
+        if value == "":
+            return "".join(lines)
         nl = "\r\n" if lines[i].endswith("\r\n") else "\n"
-        lines.insert(i + 1, " " * (child if child is not None else ind + 2) + "label: "
-                     + _json.dumps(label, ensure_ascii=False) + nl)
+        lines.insert(i + 1, " " * (child if child is not None else ind + 2) + f"{key}: {value}" + nl)
         return "".join(lines)
     raise ConfigError(f"instruments.yaml 裡找不到 {name}")
+
+
+def set_instrument_label(text: str, name: str, label: str) -> str:
+    """instruments.yaml 的文字裡，把儀器 name 的 label 改成 label（保留註解與排版；沒有 label 就加一行）。"""
+    import json as _json
+
+    return set_instrument_key(text, name, "label", _json.dumps(label, ensure_ascii=False))
+
+
+def node_yaml(nodes) -> str:
+    """node: 的值 → YAML 文字（空 = 不指定）。"""
+    names = [str(n).strip() for n in (nodes if isinstance(nodes, (list, tuple)) else [nodes]) if str(n or "").strip()]
+    if not names:
+        return ""
+    return names[0] if len(names) == 1 else "[" + ", ".join(names) + "]"
+
+
+def set_instrument_node(text: str, name: str, nodes) -> str:
+    """0.0.32：儀器接在哪台量測電腦（``node:``）；nodes 空 = 不指定。"""
+    return set_instrument_key(text, name, "node", node_yaml(nodes))
+
+
+#: 0.0.32：實驗室已知的儀器 → 量測電腦（依位址辨認；只用在還沒寫過任何 node: 的 instruments.yaml）
+KNOWN_NODES = (
+    ("90ZC38697", "LAB-1"), ("90ZC38696", "LAB-1"), ("9017D5818", "LAB-1"), ("9017D5816", "LAB-1"),
+    ("192.168.1.11", "LAB-1"), ("192.168.1.12", "LAB-2"),
+)
+
+
+def migrate_instrument_nodes(text: str) -> str:
+    """還沒寫過任何 ``node:`` 的 instruments.yaml：依位址補上 node（DC1–DC4、VNA1 → LAB-1；VNA2 → LAB-2；
+    SHFQC → [LAB-1, LAB-2]）。電磁鐵組不用寫（跟著電源）。已經有 node: 的檔案不動。"""
+    import re
+
+    import yaml
+
+    if re.search(r"(?m)^\s+node:", text):
+        return text
+    try:
+        conf = yaml.safe_load(text) or {}
+    except yaml.YAMLError:
+        return text
+    out = text
+    for name, opts in ((conf.get("instruments") or {}) if isinstance(conf, dict) else {}).items():
+        if not isinstance(opts, dict) or str(name).startswith("_"):
+            continue
+        address = str(opts.get("address") or "")
+        node = next((n for key, n in KNOWN_NODES if key in address), None)
+        if node is None and str(opts.get("driver") or "") == "zi.shfqc":
+            node = ["LAB-1", "LAB-2"]
+        if node:
+            try:
+                out = set_instrument_node(out, str(name), node)
+            except ConfigError:
+                continue
+    return out

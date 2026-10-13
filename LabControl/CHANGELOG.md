@@ -5,6 +5,12 @@
 
 ---
 
+## 0.0.32 — 2026-10-13
+
+「🔁 量測電腦對應」：在程式裡設定每台量測電腦的電磁鐵組 / VNA 順序（LAB-1：magnet_A、magnet_B、VNA1；LAB-2：magnet_C、magnet_D、VNA2），以及每台儀器接在哪台（instruments.yaml 的 node:）；舊的 instruments.yaml 依位址自動補上 node:。詳見 [docs/releases/v0.0.32.md](docs/releases/v0.0.32.md)。
+
+---
+
 ## 0.0.31 — 2026-10-13
 
 電流斜坡預設 10 mA/s（並修正實際比顯示慢）；Hub 論文庫服務帳號（專案一定讀得到）；量測範本只留 6 個，並依論文庫專案同步（Hub 共用、改了自動寫回）；流程圖左邊「常改的數值」；電磁鐵組 / VNA 依量測電腦自動對應、電磁鐵組改名；專題歸檔到 NAS；量完自動用讀檔程式開啟、從讀檔程式拖數據套用設定；遠端量測存到量測電腦；修正更新卡在命令視窗、安裝檔損毀。LabLogViewer 2.1.6：VPN / NAS 加速、大資料夾、快捷鍵、Phase delay。詳見 [docs/releases/v0.0.31.md](docs/releases/v0.0.31.md)。

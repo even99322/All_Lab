@@ -117,6 +117,7 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         tb.addAction("＋ 新增儀器…", self.add_instrument)
         a_mag = tb.addAction("＋ 電磁鐵組…", self.add_magnet)
+        tb.addAction("🔁 量測電腦對應…", self.edit_node_map)
         a_mag.setToolTip("把兩台電源（或 GS820 的兩個通道）配成一組電磁鐵：\n"
                          "配對的電源收在電磁鐵組底下（展開可單獨連線 / 控制），平時只看到電磁鐵組")
         self.a_remove = tb.addAction("移除", self.remove_instrument)
@@ -719,6 +720,17 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
                 self._log(f"＋ 已新增 {name}（{driver}），只在這次執行有效")
         except Exception as e:  # noqa: BLE001
             QtWidgets.QMessageBox.critical(self, "新增失敗", str(e))
+        self.refresh()
+
+    def edit_node_map(self) -> None:
+        """0.0.32：量測電腦對應（每台的電磁鐵組 / VNA 順序、儀器接在哪台）。"""
+        from ..node_map_dialog import edit_node_map
+
+        res = edit_node_map(self, self.config_path)
+        if res is None:
+            return
+        self._log("🔁 量測電腦對應已儲存" + (f"；instruments.yaml node: 改了 {'、'.join(res['changed'])}"
+                                            "（重新開啟 Lab Control 後這台載入的儀器才會改變）" if res.get("changed") else ""))
         self.refresh()
 
     def add_magnet(self, preset: Optional[List[str]] = None) -> None:

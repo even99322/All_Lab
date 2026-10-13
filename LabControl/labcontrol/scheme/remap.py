@@ -28,8 +28,28 @@ def _measure_kind(driver: str) -> str:
         return "vna" if str(driver).startswith("rs.zn") else ""
 
 
-def role_lists(instruments: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, List[str]]]:
-    """{量測電腦名稱（沒寫 node = ""）: {"magnet": [...], "vna": [...]}}，依 instruments.yaml 的順序。"""
+def role_lists(instruments: Dict[str, Dict[str, Any]],
+               lab_nodes: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Dict[str, List[str]]]:
+    """{量測電腦名稱（沒寫 node = ""）: {"magnet": [...], "vna": [...]}}，依 instruments.yaml 的順序。
+
+    0.0.32：``lab_nodes``（settings.yaml，量測電腦對應）先決定每台的順序：
+    [{node: LAB-1, magnet: [magnet_A, magnet_B], vna: [VNA1]}, {node: LAB-2, magnet: [magnet_C, magnet_D], vna: [VNA2]}]。
+    這台的 instruments.yaml 沒有別台的儀器也能對應。"""
+    out = _from_instruments(instruments)
+    for entry in lab_nodes or []:
+        if not isinstance(entry, dict) or not str(entry.get("node") or "").strip():
+            continue
+        node = str(entry["node"]).strip()
+        key = next((k for k in out if k.lower() == node.lower()), node)
+        cur = out.setdefault(key, {MAGNET: [], VNA: []})
+        for role in (MAGNET, VNA):
+            first = [str(x).strip() for x in (entry.get(role) or []) if str(x).strip()]
+            if first:
+                cur[role] = first + [n for n in cur.get(role, []) if n not in first]
+    return out
+
+
+def _from_instruments(instruments: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, List[str]]]:
     out: Dict[str, Dict[str, List[str]]] = {}
     for name, opts in (instruments or {}).items():
         opts = dict(opts or {})

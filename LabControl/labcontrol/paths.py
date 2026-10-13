@@ -112,6 +112,27 @@ def _migrate_files(home: Path) -> None:
         marker.write_text("ramp 0.5 mA/s -> 10 mA/s\n", encoding="utf-8")
     except OSError:
         pass
+    _migrate_nodes(home)
+
+
+def _migrate_nodes(home: Path) -> None:
+    """0.0.32：LAB/instruments.yaml 還沒寫過任何 node: → 依位址標上量測電腦（只做一次，留 .bak 備份）。"""
+    marker = home / ".migrated_nodes_0032"
+    if marker.exists():
+        return
+    try:
+        from .core.config import migrate_instrument_nodes
+
+        f = home / INSTRUMENTS_FILE
+        if f.is_file():
+            text = f.read_text(encoding="utf-8")
+            new = migrate_instrument_nodes(text)
+            if new != text:
+                shutil.copy2(f, f.with_name(f.name + ".bak-0.0.32"))
+                f.write_text(new, encoding="utf-8")
+        marker.write_text("node: by address\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def open_folder(path: Path) -> None:
