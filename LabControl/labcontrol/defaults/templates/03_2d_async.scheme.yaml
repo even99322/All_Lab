@@ -4,7 +4,8 @@
 #   DC3 +步進 → 量測 → DC4 +步進 → 量測 → DC3 +步進 …（每一點只有一台前進，平均電流每點走步進的一半）
 # step = 每台每次前進的電流（interleave: true）。
 scheme: 1
-name: 2D 電流異步（兩台交錯設定電流 → 量測 VNA）
+# 2D 電流異步（兩台交錯設定電流 → 量測 VNA）
+name: 2D電流異步
 blocks:
 - kind: set
   id: a3set001

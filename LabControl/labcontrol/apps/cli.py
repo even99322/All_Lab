@@ -3,7 +3,7 @@
     python -m labcontrol list
     python -m labcontrol check  [--sim]
     python -m labcontrol run LAB/experiments/dc_vna_sweep.yaml [--sim] [--auto-resume]
-    python -m labcontrol run LAB/templates/2d_file_per_outer.scheme.yaml --sim   （量測方案檔也可以）
+    python -m labcontrol run LAB/templates/04_two_layer_split.scheme.yaml --sim   （量測方案檔也可以）
     python -m labcontrol get DC3.level
     python -m labcontrol set DC3.level 0.1586        （超過 max_jump 會自動走斜坡）
     python -m labcontrol unlock VNA1                  （舊 unlock_vna.py）

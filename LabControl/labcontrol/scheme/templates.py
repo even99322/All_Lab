@@ -33,7 +33,9 @@ def load_template(key: str) -> Scheme:
     files = template_files()
     if key not in files:
         raise KeyError(f"找不到範本 '{key}'（{', '.join(files) or '無'}）")
-    return Scheme.load(files[key])
+    s = Scheme.load(files[key])
+    s.template = key                           # 0.0.31：記住範本，專案範本同步用
+    return s
 
 
 def default_template() -> Optional[Scheme]:
@@ -54,7 +56,7 @@ class _Templates(Mapping):
                 label = Scheme.load(path).name or key
             except Exception:  # noqa: BLE001 — 壞掉的範本不影響其他範本
                 continue
-            out[key] = (label, (lambda p=path: Scheme.load(p)))
+            out[key] = (label, (lambda k=key: load_template(k)))
         return out
 
     def __getitem__(self, key: str) -> Tuple[str, Callable[[], Scheme]]:

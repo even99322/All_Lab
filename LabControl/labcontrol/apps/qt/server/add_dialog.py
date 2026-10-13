@@ -85,7 +85,7 @@ class AddInstrumentDialog(QtWidgets.QDialog):
         lim = ns.get("limits") or [-0.2, 0.2]
         self.lo = QtWidgets.QLineEdit(f"{lim[0] * 1e3:g} mA")
         self.hi = QtWidgets.QLineEdit(f"{lim[1] * 1e3:g} mA")
-        self.rate = QtWidgets.QLineEdit(f"{float(ns.get('ramp_rate', 5e-4)) * 1e3:g} mA/s")
+        self.rate = QtWidgets.QLineEdit(f"{float(ns.get('ramp_rate', 1e-2)) * 1e3:g} mA/s")
         self.jump = QtWidgets.QLineEdit(f"{float(ns.get('max_jump', 5e-5)) * 1e3:g} mA")
         sf.addRow("下限", self.lo)
         sf.addRow("上限", self.hi)

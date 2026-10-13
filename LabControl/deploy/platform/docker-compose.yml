@@ -45,6 +45,9 @@ services:
       LABHUB_PAPERLIB_URL: "http://paperlib:8080"     # Hub 連論文庫：同一個專案，用容器名稱
       LABHUB_AGENT_URL: "http://labcontrol-hub-agent:8766"   # 網頁控制台用它更新 Hub 與論文庫（不寫也是這個）
       LABHUB_PAPERLIB_PUBLIC: "http://192.168.50.2:8080,http://100.114.33.20:8080"   # 給瀏覽器開論文（內網、VPN）
+      # 0.0.31：論文庫服務帳號（量測電腦沒登入時查專案）。也可以在網頁「控制台 → 論文庫服務帳號」設定
+      LABHUB_PAPERLIB_SERVICE_USER: ""      # 論文庫帳號
+      LABHUB_PAPERLIB_SERVICE_PASSWORD: ""  # 在 NAS 上填，不要提交到 git
       # 專案資料夾（data/projects）在各電腦上的位置；不寫 = 依上面的內網位址自動推（\\192.168.50.2\docker\…、/Volumes/docker/…）
       # LABHUB_PROJECTS_SHARE: '\\192.168.50.2\docker\LabControlHub\data\projects,/Volumes/docker/LabControlHub/data/projects'
       TZ: Asia/Taipei

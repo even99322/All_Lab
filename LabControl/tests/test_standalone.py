@@ -421,3 +421,33 @@ def test_windows_setup_update_runs_the_installer_after_exit(tmp_path, monkeypatc
     with pytest.raises(RuntimeError, match="檢查碼"):
         selfupdate.update_to(dict(info, sha256="0" * 64))
     assert selfupdate.is_setup("LabLogViewer_v2.1.3_windows-setup.exe") and not selfupdate.is_setup("LabControl_v0.0.27_windows.exe")
+
+
+def test_update_script_never_waits_forever_and_shows_no_console(tmp_path, monkeypatch):
+    """0.0.31：更新時跳出「find "34396"」主控台並一直卡住、裝完「找不到 LabControl.exe」：
+    cmd 改成沒有視窗、最多等約 45 秒（之後 taskkill）、裝失敗時改開有畫面的安裝程式；更新時程式一定會結束。"""
+    started = []
+    monkeypatch.setattr(selfupdate, "current_executable", lambda: tmp_path / "old" / "LabControl.exe")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData"))
+    monkeypatch.setattr(selfupdate.subprocess, "Popen", lambda args, **kw: started.append((args, kw)))
+    setup = tmp_path / "LabControl_v0.0.31_windows-setup.exe"
+    setup.write_bytes(b"MZ")
+    exe = selfupdate.run_setup_after_exit(setup, ["--node"])
+    args, kw = started[0]
+    flags = selfupdate.hidden_cmd_kwargs(windows=True)["creationflags"]
+    assert flags & selfupdate.CREATE_NO_WINDOW and not flags & 0x00000008          # 不是 DETACHED_PROCESS
+    text = Path(args[2]).read_text(encoding="utf-8")
+    assert "taskkill /F /T /PID %PID%" in text and f"GEQ {selfupdate.WAIT_ROUNDS}" in text
+    assert '/FO CSV' in text and 'find /I """%PID%"""' in text
+    assert f'if not exist "{exe}" (start "" "{setup}"' in text and "/LOG=" in text
+    assert text.index(":done") < text.index("/SILENT") < text.index(f'start "" "{exe}"')
+    raw = Path(args[2]).read_bytes()
+    assert b"\r\n" in raw and b"\r\r\n" not in raw and raw.count(b"\n") == raw.count(b"\r\n")
+    fired = []
+    monkeypatch.setattr(selfupdate, "EXITING", False)
+    monkeypatch.setattr(selfupdate.os, "_exit", lambda code: fired.append(code))   # 只在這個測試裡
+    quit_called = []
+    selfupdate.exit_for_update(lambda: quit_called.append(1))
+    assert selfupdate.EXITING and quit_called == [1] and fired == []
+    selfupdate.hard_exit_after(0.05).join(2)
+    assert fired == [0]

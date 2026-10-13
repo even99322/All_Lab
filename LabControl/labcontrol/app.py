@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Optional, Sequence
@@ -141,11 +142,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if created:
         w.statusBar().showMessage(f"已建立設定資料夾 {lab_home()}（{len(created)} 個預設檔）", 15000)
     rc = app.exec()
+    from . import selfupdate
+
+    if selfupdate.EXITING:                 # 0.0.31：要換新版：清理卡住也一定在 15 秒內結束
+        selfupdate.hard_exit_after(15.0)
     if hasattr(w, "_shutdown_remote"):
         w._shutdown_remote()       # 節點離線（更新重啟時也會走這裡）
     from .measure.runner import Runner
     Runner.stop_all()
     st.close()
+    if selfupdate.EXITING:                 # 0.0.31：要換新版：不等背景執行緒（安裝程式在等這個程式結束）
+        sys.stdout.flush()
+        sys.stderr.flush()
+        logging.shutdown()
+        os._exit(rc or 0)
     return rc
 
 

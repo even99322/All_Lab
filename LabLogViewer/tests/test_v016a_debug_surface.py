@@ -262,19 +262,20 @@ def test_settings_has_general_and_debug_sections_and_bilingual_surface_controls(
 
     localizer = LocalizationManager(SettingsStore(tmp_path / "settings.json"))
     dialog = SettingsDialog(localizer)
-    assert dialog.sections.count() == 7
-    assert [dialog.sections.item(index).text() for index in range(7)] == [
-        "General", "Appearance", "Personal", "Pet", "3D", "Debug", "About",
+    assert dialog.sections.count() == 8
+    assert [dialog.sections.item(index).text() for index in range(8)] == [
+        "General", "Appearance", "Personal", "Pet", "3D", "Shortcuts", "Debug", "About",
     ]
-    dialog.sections.setCurrentRow(5)
-    assert dialog.pages.currentIndex() == 5
+    dialog.sections.setCurrentRow(6)
+    assert dialog.pages.currentIndex() == 6
     localizer.set_language("zh_TW")
     assert dialog.sections.item(0).text() == "一般"
     assert dialog.sections.item(1).text() == "外觀"
     assert dialog.sections.item(2).text() == "個人化"
     assert dialog.sections.item(3).text() == "寵物"
     assert dialog.sections.item(4).text() == "3D"
-    assert dialog.sections.item(5).text() == "偵錯"
+    assert dialog.sections.item(5).text() == "快捷鍵"
+    assert dialog.sections.item(6).text() == "偵錯"
     assert localizer.text("viewer.reset_view") == "重設視角"
     assert localizer.text("viewer.view_all") == "檢視全部"
     assert localizer.text("viewer.surface_3d") == "3D 曲面"          # v0.19D: translated

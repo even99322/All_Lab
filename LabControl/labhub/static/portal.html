@@ -433,7 +433,11 @@ async function viewConsole() {
     <div class="scroll" id="pubs" style="margin-top:10px"></div>
     <div class="bar" style="margin-top:8px"><button class="btn primary" id="goall">▶ 全部發佈</button><button class="btn small" id="clear">清除已完成</button><span class="small muted" id="publog"></span></div>
     <h2>系統狀態</h2><div class="cards" id="sys"><div class="muted">讀取中…</div></div>
-    <h2>量測電腦 <span class="n">量測電腦在 App 的「設定 → 這台是量測電腦」開啟</span></h2><div class="scroll" id="nodes"></div>`;
+    <h2>量測電腦 <span class="n">量測電腦在 App 的「設定 → 這台是量測電腦」開啟</span></h2><div class="scroll" id="nodes"></div>
+    <h2>論文庫服務帳號 <span class="n">量測電腦沒有登入時，Hub 用這個帳號查論文庫的專案（帳密只存在 NAS）</span></h2>
+    <div class="bar" id="svc"><input id="svcuser" placeholder="論文庫帳號" style="width:180px">
+      <input id="svcpw" type="password" placeholder="密碼" style="width:180px"><button class="btn small" id="svcsave">儲存並測試</button>
+      <span class="small muted" id="svcstate"></span></div>`;
   const drop = $("#drop"), pick = $("#pick");
   drop.onclick = () => pick.click();
   pick.onchange = () => upload([...pick.files]);
@@ -445,6 +449,13 @@ async function viewConsole() {
   $("#pubs").onclick = async e => { const b = e.target.closest("[data-del]"); if (!b) return;
     await api("/api/platform/console/items/" + b.dataset.del, {method: "DELETE"}); loadItems(); };
   loadItems(); loadStatus();
+  const svcShow = r => { $("#svcuser").value = r.user || ""; $("#svcstate").textContent = r.configured ? `✔ 已設定（${r.user}）` + (r.from_env ? "，來自 docker-compose" : "") : "尚未設定"; };
+  api("/api/platform/console/paperlib-service").then(svcShow).catch(() => {});
+  $("#svcsave").onclick = async () => {
+    try { svcShow(await api("/api/platform/console/paperlib-service", {method: "PUT", json: {user: $("#svcuser").value, password: $("#svcpw").value}}));
+      $("#svcpw").value = ""; toast("已儲存，登入論文庫成功"); }
+    catch (e) { toast(`無法使用這個帳號：${e.message}`); }
+  };
 }
 function conLog(m) { const el = $("#publog"); if (el) el.textContent = m; }
 async function upload(files) {
@@ -453,7 +464,7 @@ async function upload(files) {
     let ver = "";
     for (;;) {
       try {
-        await api("/api/platform/console/stage?filename=" + encodeURIComponent(f.name) + (ver ? "&version=" + encodeURIComponent(ver) : ""),
+        await api("/api/platform/console/stage?filename=" + encodeURIComponent(f.name) + "&size=" + f.size + (ver ? "&version=" + encodeURIComponent(ver) : ""),
                   {method: "POST", body: f});
       } catch (e) {
         if (String(e.message).startsWith("需要版本號")) {           // 安裝檔檔名沒有版本（例如 LabLogViewer-Windows-setup.exe）
@@ -476,7 +487,7 @@ function renderItems() {
   if (!CON.items.length) { el.innerHTML = `<div class="small muted">還沒有上傳的檔案。</div>`; $("#goall").disabled = true; return; }
   el.innerHTML = `<table class="pub"><tr><th>檔案</th><th>判斷為</th><th>新版本</th><th>線上</th><th class="st">狀態</th><th></th></tr>${CON.items.map(x => {
     const st = x.done || x.status !== "待發佈" ? x.status : x.online ? "線上已是這一版（會略過）" : x.older ? "⚠ 比線上舊（會退回舊版）" : "待發佈";
-    return `<tr><td>${esc(x.file)}<div class="small muted">${size(x.size)}</div></td><td>${esc(x.name)}</td><td>${esc(x.version)}</td>
+    return `<tr><td>${esc(x.file)}<div class="small muted">${size(x.size)}${x.sha256 ? ` · sha256 <code title="${esc(x.sha256)}">${esc(x.sha256.slice(0, 16))}…</code>` : ""}</div></td><td>${esc(x.name)}</td><td>${esc(x.version)}</td>
       <td>${esc(x.current || "—")}</td><td class="st ${x.failed ? "err" : x.done ? "ok" : x.older ? "warn" : ""}">${esc(st)}</td>
       <td>${CON.busy ? "" : `<button class="btn small" data-del="${x.id}">移除</button>`}</td></tr>`; }).join("")}</table>`;
   $("#goall").disabled = CON.busy || !CON.items.some(x => !x.done && !x.online);

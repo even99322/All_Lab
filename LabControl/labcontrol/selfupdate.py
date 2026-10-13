@@ -23,6 +23,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.parse
 import urllib.request
@@ -476,26 +477,71 @@ def installed_exe() -> Path:
     return base / "Programs" / "Lab Control" / "LabControl.exe"
 
 
+#: 0.0.31：為了更新而結束（呼叫 exit_for_update 之後為 True）：app.main 清理完直接 os._exit，不等其他執行緒
+EXITING = False
+#: Windows：cmd 沒有視窗（以前用 DETACHED_PROCESS，cmd 裡的 tasklist / find / ping 會各自跳出一個主控台視窗）
+CREATE_NO_WINDOW = 0x08000000
+WAIT_ROUNDS = 45                     # 等 Lab Control 結束：最多約 45 秒，之後強制結束它
+
+
+def exit_for_update(quit_fn: Optional[Callable[[], None]] = None) -> None:
+    """更新要換程式了：結束這個 Lab Control（app.main 看到 EXITING 會在清理後強制結束，見 hard_exit_after）。"""
+    global EXITING
+    EXITING = True
+    if quit_fn is not None:
+        quit_fn()
+
+
+def hard_exit_after(grace_s: float = 15.0) -> threading.Timer:
+    """grace_s 秒後強制結束這個程序：背景執行緒（儀器、節點、伺服器）卡住時也一定會結束
+    （以前會一直留著，更新的安裝程式就一直等）。"""
+    t = threading.Timer(grace_s, lambda: os._exit(0))
+    t.daemon = True
+    t.start()
+    return t
+
+
+def wait_script(pid: int, rounds: int = WAIT_ROUNDS) -> str:
+    """cmd 片段：等 pid 結束（每秒看一次），超過 rounds 秒就 taskkill /F。"""
+    return (f"set PID={pid}\r\n"
+            "set /a N=0\r\n"
+            ":wait\r\n"
+            'tasklist /FI "PID eq %PID%" /NH /FO CSV 2>nul | find /I """%PID%""" >nul || goto done\r\n'
+            "set /a N+=1\r\n"
+            f"if %N% GEQ {rounds} (taskkill /F /T /PID %PID% >nul 2>&1 & ping -n 3 127.0.0.1 >nul & goto done)\r\n"
+            "ping -n 2 127.0.0.1 >nul\r\n"
+            "goto wait\r\n"
+            ":done\r\n")
+
+
+def hidden_cmd_kwargs(windows: Optional[bool] = None) -> Dict[str, Any]:
+    kw: Dict[str, Any] = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
+                          "close_fds": True}
+    if (os.name == "nt") if windows is None else windows:
+        kw["creationflags"] = CREATE_NO_WINDOW | 0x00000200   # 沒有視窗 | CREATE_NEW_PROCESS_GROUP
+    else:
+        kw["start_new_session"] = True
+    return kw
+
+
 def run_setup_after_exit(setup: Path, args: Optional[List[str]] = None) -> Path:
-    """Lab Control 結束後安靜執行安裝程式（同一個安裝位置），裝好再開新版。回傳新版執行檔。"""
+    """Lab Control 結束後安靜執行安裝程式（同一個安裝位置），裝好再開新版。回傳新版執行檔。
+    0.0.31：不再跳出 find / ping 的主控台視窗；最多等約 45 秒，Lab Control 還沒結束就強制結束它；
+    裝完找不到新版執行檔（安裝失敗）→ 改開一般（有畫面的）安裝程式，讓使用者看到原因，不再出現「找不到 LabControl.exe」。"""
     exe = installed_exe()
     args = list(sys.argv[1:] if args is None else args)
     script = setup.with_name("install_labcontrol_update.cmd")
+    log = setup.with_name("install_labcontrol_update.log")
     line_args = subprocess.list2cmdline(args)
     script.write_text(
         "@echo off\r\n"
-        f"set PID={os.getpid()}\r\n"
-        ":wait\r\n"                                         # 等 Lab Control 關掉（最多約 60 秒）
-        'tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)\r\n'
-        f'"{setup}" /SILENT /SUPPRESSMSGBOXES /NORESTART /NOCANCEL /CLOSEAPPLICATIONS\r\n'
+        + wait_script(os.getpid())
+        + f'"{setup}" /SILENT /SUPPRESSMSGBOXES /NORESTART /NOCANCEL /CLOSEAPPLICATIONS /LOG="{log}"\r\n'
         "set PYINSTALLER_RESET_ENVIRONMENT=1\r\n"
+        f'if not exist "{exe}" (start "" "{setup}" & exit /b 1)\r\n'
         f'start "" "{exe}" {line_args}\r\n'
         f'del "{setup}"\r\n', encoding="utf-8", newline="")     # CRLF as written (no \r\r\n on Windows)
-    kw: Dict[str, Any] = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
-                          "close_fds": True}
-    if os.name == "nt":
-        kw["creationflags"] = 0x00000008 | 0x00000200          # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-    subprocess.Popen(["cmd.exe", "/c", str(script)], **kw)
+    subprocess.Popen(["cmd.exe", "/c", str(script)], **hidden_cmd_kwargs())
     return exe
 
 

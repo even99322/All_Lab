@@ -92,16 +92,26 @@ class ProjectCache:
         self.error = ""
 
     def get(self, force: bool = False) -> List[Dict[str, Any]]:
-        s = current_session()
-        if s is None:
+        if not (force or time.time() - self.at > 20):
             return self.items
-        if force or time.time() - self.at > 20:
-            try:
+        s = current_session()
+        try:
+            if s is not None:
                 self.items = s.projects(refresh=force)
-                self.at = time.time()
-                self.error = ""
-            except Exception as e:  # noqa: BLE001
-                self.error = str(e)
+            else:
+                # 0.0.31：沒有登入平台 → 問 Hub（裝置 token）；Hub 用論文庫的服務帳號查
+                self.items = hub_projects(force)
+            self.at = time.time()
+            self.error = ""
+        except Exception as e:  # noqa: BLE001
+            self.error = str(e)
+            if s is not None:                      # 個人登入失效：改問 Hub
+                try:
+                    self.items = hub_projects(force)
+                    self.at = time.time()
+                    self.error = ""
+                except Exception:  # noqa: BLE001
+                    pass
         return self.items
 
     def find(self, pid: str) -> Optional[Dict[str, Any]]:
@@ -109,6 +119,25 @@ class ProjectCache:
 
 
 PROJECTS = ProjectCache()
+
+_hub_cache: Dict[str, Any] = {"hub": None, "at": 0.0}
+
+
+def cached_hub():
+    """連得到的 Lab Control Hub（5 分鐘內重用）；連不到 → HubError。"""
+    from ..remote.hub import find_hub
+
+    if _hub_cache["hub"] is None or time.time() - _hub_cache["at"] > 300:
+        _hub_cache["hub"] = find_hub()
+        _hub_cache["at"] = time.time()
+    return _hub_cache["hub"]
+
+
+def hub_projects(force: bool = False) -> List[Dict[str, Any]]:
+    """Hub 的專案清單（裝置 token；Hub 沒有使用者登入時用論文庫服務帳號查）。"""
+    r = cached_hub().get("/api/platform/projects", **({"refresh": "1"} if force else {}))
+    items = r.get("projects") if isinstance(r, dict) else r
+    return [dict(p, id=str(p.get("id"))) for p in (items or []) if isinstance(p, dict) and p.get("id") is not None]
 
 _suspend = {"n": 0}
 _suspend_lock = threading.Lock()

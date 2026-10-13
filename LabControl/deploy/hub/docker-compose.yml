@@ -22,6 +22,9 @@ services:
       # 也可以不寫在這裡，改在 data/platform.json 寫 {"paperlib_url": "...", "paperlib_public": "..."}
       LABHUB_PAPERLIB_URL: "http://192.168.50.2:8080"
       LABHUB_PAPERLIB_PUBLIC: "http://192.168.50.2:8080,http://100.114.33.20:8080"   # 內網、VPN（依使用者連進來的位址挑）
+      # 0.0.31：論文庫服務帳號（量測電腦沒登入時查專案）。也可以在網頁「控制台 → 論文庫服務帳號」設定
+      LABHUB_PAPERLIB_SERVICE_USER: ""      # 論文庫帳號
+      LABHUB_PAPERLIB_SERVICE_PASSWORD: ""  # 在 NAS 上填，不要提交到 git
       TZ: Asia/Taipei
     volumes:
       - ./labhub:/app/labhub:ro

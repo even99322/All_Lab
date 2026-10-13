@@ -22,7 +22,7 @@ ICON_PX = 96          # icon pictures in Settings (the buttons are 12 px larger)
 
 
 class SettingsDialog(QDialog):
-    PAGES = ("general", "appearance", "personal", "pet", "three_d", "debug", "about")
+    PAGES = ("general", "appearance", "personal", "pet", "three_d", "shortcuts", "debug", "about")
 
     def __init__(self, localizer: LocalizationManager | None = None, parent=None,
                  theme_manager: ThemeManager | None = None):
@@ -54,6 +54,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(self._build_data_folder_group())
         layout.addWidget(self._build_tag_root_group())
         layout.addLayout(self._build_auto_refresh_row())
+        layout.addLayout(self._build_net_cache_row())
         layout.addStretch(1)
         self.pages.addWidget(general)
 
@@ -67,6 +68,10 @@ class SettingsDialog(QDialog):
         self.pet_page = PetPage(self.localizer, self)
         self.pages.addWidget(self.pet_page)
         self.pages.addWidget(self._build_three_d_page())
+        from app.settings.shortcuts_page import ShortcutsPage
+
+        self.shortcuts_page = ShortcutsPage(self.localizer, self)          # v2.1.6
+        self.pages.addWidget(self._scrolling(self.shortcuts_page))
 
         self.debug_page = DebugPage(self.localizer, self)
         self.pages.addWidget(self.debug_page)
@@ -99,6 +104,7 @@ class SettingsDialog(QDialog):
         self.sections.addItem(QListWidgetItem(self.localizer.text("settings.personal")))
         self.sections.addItem(QListWidgetItem(self.localizer.text("settings.pet")))
         self.sections.addItem(QListWidgetItem(self.localizer.text("settings.three_d")))
+        self.sections.addItem(QListWidgetItem(self.localizer.text("settings.shortcuts")))
         self.sections.addItem(QListWidgetItem(self.localizer.text("settings.debug")))
         self.sections.addItem(QListWidgetItem(self.localizer.text("settings.about")))
         self.sections.currentRowChanged.connect(self.pages.setCurrentIndex)
@@ -240,6 +246,33 @@ class SettingsDialog(QDialog):
         from app.gui.hub_updates import check_now
 
         check_now(self, self.localizer, __version__)
+
+    def _build_net_cache_row(self):
+        """v2.1.6: local copies of NAS data (VPN): how much space they take, and Clear."""
+        row = QHBoxLayout()
+        self.net_cache_label = QLabel()
+        self.net_cache_label.setObjectName("netCacheLabel")
+        self.net_cache_clear = QPushButton(self.localizer.text("settings.net_cache_clear"))
+        self.net_cache_clear.setObjectName("netCacheClear")
+        self.net_cache_clear.clicked.connect(self._clear_net_cache)
+        row.addWidget(self.net_cache_label, 1)
+        row.addWidget(self.net_cache_clear)
+        self._show_net_cache()
+        return row
+
+    def _show_net_cache(self) -> None:
+        from app.core import net_cache
+
+        files, size = net_cache.usage()
+        self.net_cache_label.setText(self.localizer.text("settings.net_cache").format(
+            n=files, mb=f"{size / (1 << 20):.0f}"))
+        self.net_cache_label.setToolTip(self.localizer.text("settings.net_cache_tip"))
+
+    def _clear_net_cache(self) -> None:
+        from app.core import net_cache
+
+        net_cache.clear()
+        self._show_net_cache()
 
     def _build_auto_refresh_row(self):
         """How often the Browser checks the opened database for new / changed files."""
@@ -762,6 +795,7 @@ class SettingsDialog(QDialog):
         for row, page in enumerate(self.PAGES):
             self.sections.item(row).setText(self.localizer.text(f"settings.{page}"))
         self.three_d_title.setText(self.localizer.text("settings.three_d"))
+        self.shortcuts_page.retranslate()
         self.english.setText(self.localizer.text("language.english"))
         self.traditional_chinese.setText(self.localizer.text("language.traditional_chinese"))
         self.appearance_label.setText(self.localizer.text("settings.appearance"))
@@ -782,6 +816,8 @@ class SettingsDialog(QDialog):
         self.glass_group.setTitle(self.localizer.text("settings.glass"))
         self.app_icon_group.setTitle(self.localizer.text("settings.app_icon"))
         self.auto_refresh_label.setText(self.localizer.text("settings.auto_refresh"))
+        self.net_cache_clear.setText(self.localizer.text("settings.net_cache_clear"))
+        self._show_net_cache()
         self.whats_new_button.setText(self.localizer.text("whatsnew.open"))
         self.check_update_button.setText(self.localizer.text("update.check"))
         self.auto_refresh_combo.setToolTip(self.localizer.text("settings.auto_refresh_tip"))

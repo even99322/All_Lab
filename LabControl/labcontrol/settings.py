@@ -51,7 +51,7 @@ def migrate(data: Dict[str, Any], defaults: Dict[str, Any]) -> Dict[str, Any]:
     for key, olds in OLD_DEFAULTS.items():
         sect, name = key.split(".", 1)
         node = data.get(sect)
-        if isinstance(node, dict) and node.get(name) in olds:
+        if isinstance(node, dict) and str(node.get(name)).strip() in olds:
             node[name] = copy.deepcopy((defaults.get(sect) or {}).get(name, node[name]))
     return data
 

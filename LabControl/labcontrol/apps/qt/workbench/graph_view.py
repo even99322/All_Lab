@@ -393,6 +393,8 @@ class FlowScene(QtWidgets.QGraphicsScene):
 
 
 class FlowView(QtWidgets.QGraphicsView):
+    rename_group = QtCore.pyqtSignal(str)          # 0.0.31：改電磁鐵組名稱（視窗處理）
+
     def __init__(self, doc: WorkbenchDoc, parent: Optional[QtWidgets.QWidget] = None) -> None:
         self._scene = None
         super().__init__(parent)
@@ -785,6 +787,9 @@ class FlowView(QtWidgets.QGraphicsView):
                 m.addAction("改成固定值", lambda: self.doc.mutate(lambda s: s.graph.set_mode(nid, "fixed")))
             else:
                 m.addAction("改成掃描（迴圈）", lambda: self.doc.mutate(lambda s: s.graph.set_mode(nid, "sweep")))
+            t = self.doc.catalog.target(b.target)
+            if t is not None and t.group == "magnet":
+                m.addAction(f"改電磁鐵組名稱（{t.short}）…", lambda ref=t.ref: self.rename_group.emit(ref))
         m.addAction("複製", lambda: self._duplicate(nid))
         if self.doc.graph.incoming(nid) is not None:
             m.addAction("中斷輸入連線", lambda: self.doc.mutate(
@@ -855,7 +860,17 @@ class FlowPanel(QtWidgets.QWidget):
         self.summary.setStyleSheet("color:palette(text);")
         bar.addWidget(self.summary)
         lay.addLayout(bar)
-        lay.addWidget(self.view, 1)
+        from .quick_panel import QuickPanel
+
+        self.quick = QuickPanel(doc)                   # 0.0.31：左邊「常改的數值」
+        self.split = QtWidgets.QSplitter(Qt.Orientation.Horizontal)
+        self.split.addWidget(self.quick)
+        self.split.addWidget(self.view)
+        self.split.setStretchFactor(0, 0)
+        self.split.setStretchFactor(1, 1)
+        self.split.setSizes([200, 1000])
+        self.split.setCollapsible(1, False)
+        lay.addWidget(self.split, 1)
         hint = QtWidgets.QLabel("拖動節點自由擺放 · 從節點的圓點拉線連接 · 從左下列表拖入參數 / 量測 · 雙擊編輯 · 右鍵更多")
         hint.setStyleSheet("color:palette(placeholder-text); padding:2px 8px; font-size:11px;")
         lay.addWidget(hint)

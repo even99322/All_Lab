@@ -57,20 +57,15 @@ def test_templates_compile_like_the_sketches(cat):
     assert a.config["setup"]["magnet_A.interleave_step"] == pytest.approx(1e-5)
     assert a.config["setup"]["magnet_A.interleave_origin"] == pytest.approx(0.150)
     assert r["02_2d"].config["setup"]["magnet_A.interleave_step"] == 0.0           # 一般 2D：兩台同步
-    # N 層：3 個軸、兩個 Data（每個 A 值一個檔 ＋ 完整一個檔）
-    n = r["04_n_layer"]
-    assert [s["target"] for s in n.config["sweep"]] == ["magnet_A.level", "magnet_B.level", "VNA1.power"]
-    assert n.config["output"]["split_by"] == ["磁鐵 A 電流"]
-    assert n.config["output"]["extra"][0]["file_name"] == "N_layer_all.hdf5"
-    assert n.config["output"]["extra"][0]["split_by"] == [] and n.n_files == 11 + 1
-    assert r["2d_one_file"].split_depth == 0 and r["2d_one_file"].n_files == 1
-    assert r["2d_file_per_outer"].split_depth == 1 and r["2d_file_per_outer"].n_files == 51
-    assert r["2d_file_per_outer"].config["output"]["split_by"] == ["磁鐵 A 電流"]
-    sw = r["current_power"].config["sweep"]
-    assert [s["target"] for s in sw] == ["magnet_A.level", "VNA1.power"]
-    assert "power" not in r["current_power"].config["setup"]["VNA1"]      # 功率由掃描控制
-    # 2D 內圈每次回起點的斜坡時間有算進估時
-    assert r["2d_one_file"].est_breakdown["內圈回到起點（斜坡）"] == pytest.approx(50 * 0.05 / 5e-4)
+    assert r["05_two_layer_one_file"].split_depth == 0 and r["05_two_layer_one_file"].n_files == 1
+    assert r["04_two_layer_split"].split_depth == 1 and r["04_two_layer_split"].n_files == 51
+    assert r["04_two_layer_split"].config["output"]["split_by"] == ["磁鐵 A 電流"]
+    # 0.0.31：只留 6 個範本，名稱固定
+    assert [lab for lab, _ in TEMPLATES.values()] == ["單張", "2D", "2D電流異步", "雙層分檔", "雙層單檔", "flux"]
+    assert r["06_flux"].loops[0].n == 201 and r["06_flux"].config["setup"]["VNA1"]["points"] == 2001
+    assert all(TEMPLATES[k][1]().template == k for k in TEMPLATES)
+    # 2D 內圈每次回起點的斜坡時間有算進估時（0.0.31 起斜坡預設 10 mA/s）
+    assert r["05_two_layer_one_file"].est_breakdown["內圈回到起點（斜坡）"] == pytest.approx(50 * 0.05 / 1e-2)
 
 
 def test_model_editing_ops():
@@ -127,7 +122,7 @@ def small(fn, **kw):
     return s
 
 
-@pytest.mark.parametrize("key,files", [("2d_file_per_outer", 3), ("current_power", 3), ("2d_one_file", 1)])
+@pytest.mark.parametrize("key,files", [("04_two_layer_split", 3), ("05_two_layer_one_file", 1)])
 def test_scheme_runs_end_to_end(mst, cat, tmp_path, key, files):
     res = compile_scheme(small(TEMPLATES[key][1]), cat)
     assert res.ok, errors(res)
@@ -137,7 +132,7 @@ def test_scheme_runs_end_to_end(mst, cat, tmp_path, key, files):
     assert len(ds) == ds.planned_points == 9
     paths = exp.export(ds, out)
     assert len(paths) == files and all(p.exists() for p in paths)
-    if key == "2d_one_file":                              # 多維 Labber 對應：外層為主排序、內層在前
+    if key == "05_two_layer_one_file":                            # 多維 Labber 對應：外層為主排序、內層在前
         spec = les.build_labber_spec(str(paths[0]))       # 0.0.28 起沒有 _raw/：用匯出的原生 HDF5
         assert [c["name"] for c in spec["step_channels"][:2]] == ["磁鐵 B 電流", "磁鐵 A 電流"]
         np.testing.assert_allclose(spec["entry_axes"][0][1], [50, 50, 50, 51, 51, 51, 52, 52, 52])
@@ -148,7 +143,7 @@ def test_scheme_runs_end_to_end(mst, cat, tmp_path, key, files):
 
 
 def test_snake_removes_reset_time(cat):
-    s = TEMPLATES["2d_one_file"][1]()
+    s = TEMPLATES["05_two_layer_one_file"][1]()
     assert compile_scheme(s, cat).est_breakdown["內圈回到起點（斜坡）"] > 0
     s.snake = True
     assert compile_scheme(s, cat).est_breakdown["內圈回到起點（斜坡）"] == 0
@@ -189,7 +184,7 @@ def test_async_interleave_runs_like_sweep_main(mst, cat, tmp_path):
 
 def test_multiple_data_blocks(mst, cat, tmp_path):
     """多個 Data：外圈每個值一個檔 ＋ 另外一個完整檔（各自檔名 / 格式）。"""
-    s = small(TEMPLATES["2d_file_per_outer"][1])
+    s = small(TEMPLATES["04_two_layer_split"][1])
     s.blocks.append(Block("save", file_name="all.hdf5", formats=["hdf5"]))
     s2 = Scheme.from_dict(s.to_dict())
     res = compile_scheme(s2, cat)

@@ -117,7 +117,7 @@ from app.core.comment_store import CommentStore
 from app.core.named_view_store import NamedViewStore
 from app.core.plot_config import (
     OP_FFT, OP_HIST, OP_HIST2D, PlotConfig, apply_grid_operations, apply_trace_operation,
-    calculate_fixed_rotation, calculate_rotation_per_x, fft_rows, histogram_columns,
+    calculate_fixed_rotation, calculate_phase_delay_ns, calculate_rotation_per_x, delay_phasor, fft_rows, histogram_columns,
     histogram_iq, operation_unit, principal_angle_deg, principal_angles_deg, rotate_complex, rotation_phasor,
 )
 from app.core.formula import FormulaError, apply_formulas, apply_formulas_grid, formula_terms, formula_to_display, parse_formula
@@ -345,6 +345,10 @@ class MainWindow(QMainWindow):
         self.localizer.bind(self)
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("No file loaded. File → Open to begin.")
+        # v2.1.6: Esc full view, M Point Mark, 1 / 2 Plot Mode, F Maximize Plot … (Settings > Shortcuts)
+        from app.gui.viewer_shortcuts import install as install_viewer_shortcuts
+
+        self.key_shortcuts = install_viewer_shortcuts(self)
 
         # v0.9A: Up/Down = sequential Trace navigation, regardless of
         # which child widget technically has keyboard focus (spec's
@@ -3519,7 +3523,7 @@ class MainWindow(QMainWindow):
         try:
             x_values, z_values = self._rotation_probe()
             if np.iscomplexobj(z_values):
-                z_values = rotate_complex(x_values, z_values, config)
+                z_values = rotate_complex(x_values, z_values, config, self._probe_x_unit())
         except Exception as error:
             self.statusBar().showMessage(f"Histogram-2D unavailable: {error}")
             return
@@ -3545,12 +3549,33 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Rotation needs complex (I/Q) data; this channel is real.")
             return
         panel = self.plot_config_2d if self.mode_combo.currentIndex() == 1 else self.plot_config_1d
+        if kind == "phase_delay":
+            tau = calculate_phase_delay_ns(x_values, z_values, self._probe_x_unit())
+            panel.phase_delay_spin.setValue(tau)
+            self.statusBar().showMessage(f"Phase delay τ = {tau:.4g} ns (fitted on the unwrapped phase)", 6000)
+            return
+        if config.phase_delay_ns:                       # Rotation/x and Fixed are fitted after the delay
+            z_values = z_values * delay_phasor(x_values, config.phase_delay_ns, self._probe_x_unit())
         if kind == "rotation_per_x":
             panel.rotation_per_x_spin.setValue(calculate_rotation_per_x(x_values, z_values))
         else:
             panel.fixed_rotation_spin.setValue(
                 calculate_fixed_rotation(x_values, z_values, config.rotation_per_x)
             )
+
+    def _probe_x_unit(self) -> str | None:
+        """Unit of the X axis that ``_rotation_probe`` returns (for the phase delay: Hz, MHz, GHz …)."""
+        try:
+            if self.mode_combo.currentIndex() == 1:
+                state = self._pane_states[self._active_pane_id]
+                return self._fetch_2d_grid(
+                    self.z_combo_2d.currentText(), self.x_combo_2d.currentText(),
+                    self.y_combo_2d.currentText(), "raw", state,
+                ).x_unit
+            x_cand = self.x_combo.currentData()
+            return getattr(x_cand, "unit", None)
+        except Exception:
+            return None
 
     def _rotation_probe(self):
         """(x, complex z) of the trace, or the average trace of the map, before any rotation."""
@@ -3640,6 +3665,8 @@ class MainWindow(QMainWindow):
                 raw_complex = raw
         if raw_complex is not None:
             rotated = raw_complex
+            if config.phase_delay_ns:
+                rotated = rotated * delay_phasor(grid.x_values, config.phase_delay_ns, grid.x_unit)[None, :]
             if config.rotation_per_x or config.fixed_rotation:
                 rotated = rotated * rotation_phasor(
                     grid.x_values, config.rotation_per_x, config.fixed_rotation)[None, :]
@@ -5256,7 +5283,7 @@ class MainWindow(QMainWindow):
                 self.cached.get_data(y_cand.base_channel, transform="raw"), entry
             )
             if config.rotates() and np.iscomplexobj(raw):
-                raw = rotate_complex(x_data, raw, config)
+                raw = rotate_complex(x_data, raw, config, x_cand.unit)
             y_data = spec.apply(raw)
             transform = spec.resolve_transform_key()
         else:
@@ -6291,6 +6318,10 @@ class MainWindow(QMainWindow):
         from app.pet.hooks import research
 
         research("measurement", path)                 # pet EXP: once per measurement file
+        from app.gui.net_fetch import fetch
+
+        if not fetch(self, path):                     # v2.1.6: copy from the network drive first (VPN)
+            return
         if not MainWindow._analysis_prewarmed:
             QTimer.singleShot(10000, self._prewarm_analysis_modules)
         previous_identity = self.experiment.data_identity if self.experiment is not None else None
@@ -7444,7 +7475,7 @@ class MainWindow(QMainWindow):
                 self.cached.get_data(y_cand.base_channel, transform="raw", entry_slice=entry_idx)
             ).reshape(-1)
             if config.rotates() and np.iscomplexobj(complex_data):
-                complex_data = rotate_complex(x_data, complex_data, config)
+                complex_data = rotate_complex(x_data, complex_data, config, x_cand.unit)
             y_data = spec.apply(complex_data)
             transform_label = spec.resolve_transform_key()
             y_label_suffix = spec.name + (" (unwrapped)" if spec.unwrap else "")

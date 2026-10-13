@@ -54,6 +54,7 @@ def ensure_lab_home(home: Optional[Path] = None) -> List[Path]:
     home.mkdir(parents=True, exist_ok=True)
     for d in SUBDIRS:
         (home / d).mkdir(exist_ok=True)
+    _migrate_templates(home)
     created: List[Path] = []
     for src in DEFAULTS_DIR.rglob("*"):
         if src.is_dir() or "__pycache__" in src.parts:
@@ -63,7 +64,54 @@ def ensure_lab_home(home: Optional[Path] = None) -> List[Path]:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
             created.append(dst)
+    _migrate_files(home)
     return created
+
+
+#: 0.0.30 以前內建的範本（0.0.31 起只留 單張 / 2D / 2D電流異步 / 雙層分檔 / 雙層單檔 / flux）
+OLD_TEMPLATES = ("01_single_shot", "02_2d", "03_2d_async", "04_n_layer", "2d_file_per_outer", "2d_one_file",
+                 "current_power")
+
+
+def _migrate_templates(home: Path) -> None:
+    """LAB/templates 裡舊的內建範本搬到 LAB/templates/舊範本_0.0.30/（不刪；自己做的範本不動），再補上新的。"""
+    marker = home / ".migrated_templates_0031"
+    if marker.exists():
+        return
+    try:
+        tdir = home / "templates"
+        old = [tdir / f"{k}.scheme.yaml" for k in OLD_TEMPLATES]
+        old = [f for f in old if f.is_file()]
+        if old:
+            dst = tdir / "舊範本_0.0.30"
+            dst.mkdir(parents=True, exist_ok=True)
+            for f in old:
+                shutil.move(str(f), str(dst / f.name))
+        marker.write_text("templates 0.0.31\n", encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _migrate_files(home: Path) -> None:
+    """0.0.31：LAB/instruments.yaml 舊預設的電流斜坡 0.5 mA/s 改成 10 mA/s（只改一次，留 .bak 備份）。"""
+    marker = home / ".migrated_ramp_0031"
+    if marker.exists():
+        return
+    try:
+        from .core.config import migrate_instruments_text
+
+        for name in (INSTRUMENTS_FILE,):
+            f = home / name
+            if not f.is_file():
+                continue
+            text = f.read_text(encoding="utf-8")
+            new = migrate_instruments_text(text)
+            if new != text:
+                shutil.copy2(f, f.with_name(f.name + ".bak-0.0.31"))
+                f.write_text(new, encoding="utf-8")
+        marker.write_text("ramp 0.5 mA/s -> 10 mA/s\n", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def open_folder(path: Path) -> None:

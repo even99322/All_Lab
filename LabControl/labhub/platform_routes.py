@@ -45,8 +45,11 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import time
 import urllib.parse
+from pathlib import Path
 
 from . import __version__
 from .server import STATIC, Handler, HubHTTPError, _cookie, parse_version, route
@@ -317,6 +320,46 @@ def _project_files(h: Handler, pid: str) -> None:
     h._json({"project": pid, "folder": plat.folder_name(name, pid), "files": plat.project_files(pid)})
 
 
+# ---- 專案的量測範本（0.0.31）：每個論文庫專案一組，所有量測電腦共用 ----------------------------------
+_PT_KEY = re.compile(r"[A-Za-z0-9_.-]{1,80}")
+
+
+def _pt_dir(h: Handler, pid: str) -> Path:
+    if not _PT_KEY.fullmatch(pid):
+        raise HubHTTPError(400, "專案代號不對")
+    return _plat(h).data_dir / "project_templates" / pid
+
+
+@route("GET", P + r"/project-templates/([^/]+)", auth=True)
+def _project_templates(h: Handler, pid: str) -> None:
+    d = _pt_dir(h, pid)
+    out = {}
+    for f in sorted(d.glob("*.json")) if d.is_dir() else []:
+        try:
+            out[f.stem] = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+    h._json({"project": pid, "templates": out})
+
+
+@route("PUT", P + r"/project-templates/([^/]+)/([^/]+)", auth=True)
+def _put_project_template(h: Handler, pid: str, key: str) -> None:
+    key = urllib.parse.unquote(key)
+    if not _PT_KEY.fullmatch(key):
+        raise HubHTTPError(400, "範本名稱只能用英數字、底線、點、連字號")
+    b = h._json_body() or {}
+    sch = b.get("scheme")
+    if not isinstance(sch, dict) or not (sch.get("graph") or sch.get("blocks") is not None):
+        raise HubHTTPError(400, "缺少方案內容（scheme）")
+    d = _pt_dir(h, pid)
+    d.mkdir(parents=True, exist_ok=True)
+    rec = {"scheme": sch, "time": time.time(), "by": str(b.get("by") or _bus_user(h))[:80]}
+    tmp = d / f".{key}.tmp"
+    tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, d / f"{key}.json")
+    h._json({"ok": True, "project": pid, "template": key, "time": rec["time"]})
+
+
 # ---- 模塊之間的訊息 -----------------------------------------------------------------------
 def _bus_user(h: Handler) -> str:
     u = h.user().get("username")
@@ -356,6 +399,9 @@ def _console_items(h: Handler) -> None:
 def _console_stage(h: Handler) -> None:
     data = h._body_bytes(h.hub.cfg.max_upload)
     q = h._query()
+    want = q.get("size", "")
+    if want.isdigit() and int(want) != len(data):      # 0.0.31：瀏覽器那邊的檔案大小 ≠ 收到的
+        raise HubHTTPError(400, f"上傳不完整（收到 {len(data):,} / {int(want):,} bytes），請重新上傳")
     h._json(dict(h.hub.console.stage(q.get("filename", ""), data, _by(h), q.get("version", "")), ok=True))
 
 
@@ -382,6 +428,19 @@ def _console_discard(h: Handler, sid: str) -> None:
 def _console_clear(h: Handler) -> None:
     h.hub.console.clear_done()
     h._json({"ok": True})
+
+
+@route("GET", C + r"/paperlib-service", auth="owner")
+def _console_service_get(h: Handler) -> None:
+    h._json(_plat(h).service_info())
+
+
+@route("PUT", C + r"/paperlib-service", auth="owner")
+def _console_service_put(h: Handler) -> None:
+    """0.0.31：論文庫服務帳號（量測電腦沒登入時 Hub 用它查專案）。"""
+    b = h._json_body() or {}
+    h._json(dict(_plat(h).set_service_account(_by(h), str(b.get("user") or ""), str(b.get("password") or "")),
+                 ok=True))
 
 
 @route("GET", C + r"/status", auth="owner")

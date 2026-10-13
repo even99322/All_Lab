@@ -278,3 +278,30 @@ def test_live_vna_axis_math(win):
     vna.x_expr.setText("")
     vna._math_changed()
     assert np.allclose(cv.data["db"][1], 20 * np.log10(0.5)) and cv.plot.getAxis("left").labelText == "振幅 (dB)"
+
+
+def test_group_ramp_keeps_the_set_rate_despite_slow_writes():
+    """0.0.31：10 mA/s 以前實際比較慢（每步固定 rate×dt，再加上每次寫入儀器的時間）；現在依經過時間前進。"""
+    from labcontrol import Station
+    from labcontrol.core.grouping import GroupRamp
+
+    src = {"limits": [-0.2, 0.2], "ramp_rate": 0.05, "max_jump": 1e-3, "resolution": 1e-6}
+    st = Station({"simulate": True, "instruments": {
+        n: {"driver": "yokogawa.gs200", "address": "X", "source": dict(src), "sim": {"initial_level": 0.0}}
+        for n in ("DC3", "DC4")}})
+    st.sim_time_scale = 1.0
+    refs = ["DC3.level", "DC4.level"]
+    st.ensure_connected(refs)
+    for r in refs:                                       # 每次寫入儀器 20 ms（像 VISA）
+        p = st.parameter(r)
+        orig = p.set
+        p.set = lambda v, _o=orig, **k: (time.sleep(0.02), _o(v, **k))[1]
+    t = time.monotonic()
+    j = GroupRamp(st, refs, 0.004, 0.010).start()        # 4 mA，10 mA/s → 0.4 s
+    while not j.done:
+        time.sleep(0.005)
+    took = time.monotonic() - t
+    assert not j.error and 0.38 < took < 0.55, took
+    assert j.actual_rate == pytest.approx(0.010, rel=0.15)
+    assert all(abs(st.parameter(r).get() - 0.004) < 1e-12 for r in refs)
+    st.close()

@@ -22,7 +22,7 @@ def lab(tmp_path, monkeypatch):
 
 
 def test_version_and_name():
-    assert APP_NAME == "Lab Control" and __version__ == "0.0.30"
+    assert APP_NAME == "Lab Control" and __version__ == "0.0.31"
 
 
 def test_hub_version_matches_app():
@@ -34,7 +34,7 @@ def test_hub_version_matches_app():
 
 def test_lab_home_created_with_defaults(lab):
     assert lab_home() == lab
-    for f in ("settings.yaml", "instruments.yaml", "templates/2d_file_per_outer.scheme.yaml",
+    for f in ("settings.yaml", "instruments.yaml", "templates/04_two_layer_split.scheme.yaml",
               "experiments/dc_vna_sweep.yaml", "plugins/_driver_template.py"):
         assert (lab / f).exists(), f
     for d in ("schemes", "logs"):

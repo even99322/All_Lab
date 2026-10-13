@@ -351,3 +351,28 @@ def test_llv_pets_zip_is_optional_in_the_plan(hub):
     assert "llvpets" not in [a["id"] for a in info["apps"]]
     code, script = _call(url + "/get/mac")
     assert b"&pets=1" in script and b"QEL_PETS" in script and b"install_pets" in script
+
+
+def test_paperlib_service_account_lists_projects_for_devices(hub):
+    """0.0.31：量測電腦沒有登入時，Hub 用論文庫服務帳號查專案（帳密只存在 Hub 資料夾，不在程式裡）。"""
+    url, state, owner, alice, ac = hub
+    C = url + "/api/platform/console/paperlib-service"
+    p = state.platform
+    p._proj_cache = (0.0, [])
+    code, r = _call(url + "/api/platform/projects", token=TOKEN)          # 裝置 token、還沒設定：空的
+    assert code == 200 and r["projects"] == []
+    assert _call(C, token=alice.token)[0] == 403                          # 只有站長
+    code, r = _call(C, "PUT", {"user": "alice", "password": "wrong"}, token=owner.token)
+    assert code == 400 and not p.service_info()["configured"]
+    code, r = _call(C, "PUT", {"user": "alice", "password": "alicepw"}, token=owner.token)
+    assert code == 200 and r["configured"] and r["user"] == "alice" and "password" not in json.dumps(r)
+    code, r = _call(url + "/api/platform/projects", token=TOKEN)
+    assert code == 200 and "YIG mirror coupling" in [x["name"] for x in r["projects"]]
+    f = p.data_dir / "paperlib_service.json"
+    assert json.loads(f.read_text())["user"] == "alice"
+    p._service_session = "expired"                                        # session 過期 → 自己重登
+    p._proj_cache = (0.0, [])
+    code, r = _call(url + "/api/platform/projects?refresh=1", token=TOKEN)
+    assert code == 200 and r["projects"] and p._service_session != "expired"
+    code, r = _call(C, "PUT", {"user": ""}, token=owner.token)            # 清除
+    assert not r["configured"] and not f.exists()

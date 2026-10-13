@@ -63,6 +63,21 @@ class DatabaseIndexStore:
             except OSError:
                 return
 
+    def merge_root(self, root: str, entries: dict[str, dict[str, Any]]) -> None:
+        """Add / update entries of a root without dropping the others (a long scan saves as it goes, v2.1.6)."""
+        if self._read_only or not entries:
+            return
+        with self._lock:
+            current = self._by_root.setdefault(root, {})
+            current.update({key: dict(value) for key, value in entries.items()})
+            try:
+                atomic_write_json(self.storage_path, {
+                    "schema_version": DATABASE_INDEX_SCHEMA_VERSION,
+                    "by_root": self._by_root,
+                })
+            except OSError:
+                return
+
     def move_data_identity(self, old_identity: str, new_identity: str, *,
                            database_id: str | None = None,
                            old_relative_path: str | None = None,

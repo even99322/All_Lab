@@ -160,7 +160,11 @@ class HDF5Reader:
         if not self.path.exists():
             raise HDF5ReadError(f"File not found: {self.path}")
         self._lock = threading.RLock()
-        self._file: h5py.File | None = self._open_read_only(self.path)
+        # v2.1.6: a file on a network drive is read from its local copy while that copy is still identical
+        from app.core.net_cache import read_path
+
+        self.read_path = read_path(self.path)
+        self._file: h5py.File | None = self._open_read_only(self.read_path)
         # v2.1.0: Lab Control xarray/NetCDF (.nc) files are HDF5 too; they are presented as a
         # Labber-shaped virtual tree so the parser / Experiment read them unchanged.
         self._virtual = None

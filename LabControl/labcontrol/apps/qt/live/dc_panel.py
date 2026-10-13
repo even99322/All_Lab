@@ -335,7 +335,14 @@ class GroupCard(QtWidgets.QFrame):
             self.job = None
             self.state.setText("")
         else:
-            self.state.setText(f"斜坡中 → {fmt_level(job.get('target'), self.unit)}")
+            act = job.get("actual_rate")
+            extra = ""
+            if act and self.unit == "A":
+                extra = f"　實際 {float(act) * 1e3:.2f} mA/s"
+                want = job.get("rate")
+                if want and float(act) < 0.8 * float(want):
+                    extra += "（受 max_jump / 儀器寫入速度限制）"
+            self.state.setText(f"斜坡中 → {fmt_level(job.get('target'), self.unit)}{extra}")
 
     def dial_idle(self) -> bool:
         return (not self._dial_timer.isActive() and self.index not in self.panel.jobs and self.job is None

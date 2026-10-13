@@ -134,83 +134,165 @@ class DatabaseScanner:
         """Recursive scan for *.hdf5 / *.h5, tolerant of permission
         errors on individual subdirectories (skips them rather than
         raising) and of the root not existing at all (returns [])."""
+        return [path for path, _stat in DatabaseScanner.find_hdf5_files_with_stats(root_path, should_cancel)]
+
+    @staticmethod
+    def find_hdf5_files_with_stats(root_path: str | Path, should_cancel: Callable[[], bool] | None = None
+                                   ) -> list[tuple[Path, os.stat_result | None]]:
+        """Like ``find_hdf5_files`` with each file's size / time from the directory listing (v2.1.6).
+
+        On Windows the listing already carries them, so a NAS folder of thousands of files needs no extra
+        network request per file (one request per folder instead)."""
         root = Path(root_path)
         if not root.exists() or not root.is_dir():
             return []
-
-        found: list[Path] = []
-
-        def _on_error(exc: OSError) -> None:
-            # a subdirectory couldn't be listed (permission denied,
-            # race with deletion, etc.) - skip it, keep walking the rest
-            pass
-
-        for dirpath, dirnames, filenames in os.walk(root, onerror=_on_error):
+        found: list[tuple[Path, os.stat_result | None]] = []
+        pending = [str(root)]
+        while pending:
             if should_cancel is not None and should_cancel():
                 raise ScanCancelled()
-            for name in filenames:
-                if name.lower().endswith(HDF5_EXTENSIONS):
-                    found.append(Path(dirpath) / name)
+            folder = pending.pop()
+            try:
+                with os.scandir(folder) as listing:
+                    items = list(listing)
+            except OSError:
+                continue                    # a subdirectory couldn't be listed: skip it, keep walking
+            for item in items:
+                try:
+                    if item.is_dir(follow_symlinks=False) or (item.is_symlink() and item.is_dir()):
+                        pending.append(item.path)
+                        continue
+                except OSError:
+                    continue
+                if not item.name.lower().endswith(HDF5_EXTENSIONS):
+                    continue
+                try:
+                    stat = item.stat()
+                except OSError:
+                    stat = None
+                found.append((Path(item.path), stat))
+        return sorted(found, key=lambda pair: str(pair[0]).lower())
 
-        return sorted(found, key=lambda p: str(p).lower())
+    @staticmethod
+    def _index_record(entry: LogEntry) -> dict:
+        return {
+            "absolute_path": entry.absolute_path, "relative_path": entry.relative_path,
+            "file_name": entry.file_name, "log_name": entry.log_name, "status": entry.status,
+            "error_message": entry.error_message, "size_bytes": entry.size_bytes, "mtime": entry.mtime,
+            "creation_time": entry.creation_time, "sweep_dimension": entry.sweep_dimension,
+            "metadata_complete": True, "file_tags": entry.file_tags, "file_star": entry.file_star,
+        }
 
     @staticmethod
     def scan(root_path: str | Path, progress_callback: ProgressCallback | None = None,
              index_store: DatabaseIndexStore | None = None, *, fast_listing: bool = False,
-             should_cancel: Callable[[], bool] | None = None) -> DatabaseScanResult:
+             should_cancel: Callable[[], bool] | None = None,
+             priority: Callable[[], tuple[str, ...] | None] | None = None,
+             batch_callback: Callable[[list[LogEntry]], None] | None = None) -> DatabaseScanResult:
         """Full scan: find every HDF5 file under root_path, then parse
         just enough of each to get its log name. `progress_callback`,
         if given, is called as (files_done, files_total) after each
         file - files_total is known up front since find_hdf5_files()
-        completes before any parsing starts."""
+        completes before any parsing starts.
+
+        v2.1.6 (large folders, NAS over VPN):
+        * fast_listing only lists (no file is opened on a network drive);
+        * ``priority()`` → the folder the user is looking at: its files are parsed first (asked again as
+          parsing goes on, so switching folders re-prioritises);
+        * ``batch_callback(entries)``: newly parsed entries in small batches, so the Browser fills its rows
+          as they come instead of waiting for the whole folder tree;
+        * parsing waits while a preview / Viewer is reading from the network (net_cache.busy)."""
+        from app.core import net_cache
+
         root = Path(root_path)
         database_id = DatabaseScanner.compute_database_id(root)
-        files = DatabaseScanner.find_hdf5_files(root, should_cancel)
+        listed = DatabaseScanner.find_hdf5_files_with_stats(root, should_cancel)
+        network = net_cache.is_network_path(root)
 
-        entries: list[LogEntry] = []
+        slots: list[LogEntry | None] = [None] * len(listed)
+        todo: list[tuple[int, Path, os.stat_result | None, str]] = []
         indexed_entries: dict[str, dict] = {}
-        total = len(files)
-        for i, file_path in enumerate(files):
+        total = len(listed)
+        done = 0
+        for i, (file_path, stat) in enumerate(listed):
             if should_cancel is not None and should_cancel():
                 raise ScanCancelled()
             try:
-                stat = file_path.stat()
                 rel = file_path.relative_to(root).as_posix()
-            except (OSError, ValueError):
-                stat, rel = None, file_path.name
+            except ValueError:
+                rel = file_path.name
             cached = (index_store.get(database_id, rel, stat.st_size, stat.st_mtime)
                       if index_store is not None and stat is not None else None)
             if cached is not None and ("file_tags" not in cached or "file_star" not in cached):
                 cached = None                       # indexed before tags were read: scan this file again
             if cached is not None:
-                entry = LogEntry(**cached)
-            elif fast_listing and stat is not None and (probe := DatabaseScanner._probe_hdf5(file_path)) is not False:
-                if isinstance(probe, OSError):
-                    entry = LogEntry(
+                cached["absolute_path"] = str(file_path)
+                slots[i] = LogEntry(**cached)
+            elif fast_listing and stat is not None:
+                probe = True if network else DatabaseScanner._probe_hdf5(file_path)
+                if probe is False:
+                    slots[i] = DatabaseScanner._scan_one(root, file_path, stat=stat)
+                elif isinstance(probe, OSError):
+                    slots[i] = LogEntry(
                         absolute_path=str(file_path), relative_path=rel, file_name=file_path.name,
                         log_name=file_path.stem, status="error",
                         error_message=f"Cannot access file: {probe}",
                         size_bytes=stat.st_size, mtime=stat.st_mtime,
                     )
                 else:
-                    entry = LogEntry(
+                    slots[i] = LogEntry(
                         absolute_path=str(file_path), relative_path=rel, file_name=file_path.name,
                         log_name=file_path.stem, status="ok", error_message=None,
                         size_bytes=stat.st_size, mtime=stat.st_mtime, metadata_complete=False,
                     )
             else:
-                entry = DatabaseScanner._scan_one(root, file_path, stat=stat)
-            entries.append(entry)
-            if entry.metadata_complete:
-                indexed_entries[entry.relative_path] = {
-                "absolute_path": entry.absolute_path, "relative_path": entry.relative_path,
-                "file_name": entry.file_name, "log_name": entry.log_name, "status": entry.status,
-                "error_message": entry.error_message, "size_bytes": entry.size_bytes, "mtime": entry.mtime,
-                "creation_time": entry.creation_time, "sweep_dimension": entry.sweep_dimension,
-                "metadata_complete": True, "file_tags": entry.file_tags, "file_star": entry.file_star,
-                }
+                todo.append((i, file_path, stat, rel))
+                continue
+            done += 1
             if progress_callback is not None:
-                progress_callback(i + 1, total)
+                progress_callback(done, total)
+
+        batch: list[LogEntry] = []
+        last_flush = time.monotonic()
+        last_store = time.monotonic()
+        from collections import OrderedDict, deque
+
+        groups: "OrderedDict[tuple[str, ...], deque]" = OrderedDict()
+        for item in todo:
+            parent = Path(item[3]).parent
+            groups.setdefault(() if str(parent) in ("", ".") else parent.parts, deque()).append(item)
+        while groups:
+            if should_cancel is not None and should_cancel():
+                raise ScanCancelled()
+            wanted = priority() if priority is not None else None
+            folder = tuple(wanted) if wanted is not None and tuple(wanted) in groups else next(iter(groups))
+            queue = groups[folder]
+            i, file_path, stat, _rel = queue.popleft()
+            if not queue:
+                del groups[folder]
+            if network:
+                net_cache.wait_idle(should_cancel)
+            entry = DatabaseScanner._scan_one(root, file_path, stat=stat)
+            slots[i] = entry
+            batch.append(entry)
+            done += 1
+            if progress_callback is not None:
+                progress_callback(done, total)
+            now = time.monotonic()
+            if batch_callback is not None and (len(batch) >= 40 or now - last_flush > 0.7):
+                batch_callback(batch)
+                batch, last_flush = [], now
+            if index_store is not None and now - last_store > 15 and hasattr(index_store, "merge_root"):
+                index_store.merge_root(database_id, {e.relative_path: DatabaseScanner._index_record(e)
+                                                     for e in slots if e is not None and e.metadata_complete})
+                last_store = now
+        if batch_callback is not None and batch:
+            batch_callback(batch)
+
+        entries = [e for e in slots if e is not None]
+        for entry in entries:
+            if entry.metadata_complete:
+                indexed_entries[entry.relative_path] = DatabaseScanner._index_record(entry)
         if index_store is not None and not fast_listing:
             index_store.replace_root(database_id, indexed_entries)
         return DatabaseScanResult(root_path=str(root), database_id=database_id, entries=entries)

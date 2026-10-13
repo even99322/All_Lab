@@ -110,7 +110,10 @@ class Console:
         d = self.dir / sid
         d.mkdir(parents=True)
         (d / name).write_bytes(data)
-        item = dict(info, id=sid, file=name, size=len(data), by=by, time=time.time(), status="待發佈", done=False)
+        import hashlib
+
+        item = dict(info, id=sid, file=name, size=len(data), sha256=hashlib.sha256(data).hexdigest(), by=by,
+                    time=time.time(), status="待發佈", done=False)
         self._meta(sid).write_text(json.dumps(item, ensure_ascii=False), encoding="utf-8")
         return self.decorate([item])[0]
 

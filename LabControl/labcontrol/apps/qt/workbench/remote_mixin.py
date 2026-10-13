@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import threading
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from PyQt6 import QtCore, QtWidgets
@@ -117,6 +118,9 @@ class RemoteMixin:
         st = next((n for n in nodes if n.get("name") == self.remote_target), None)
         if st is None:
             return
+        cur = getattr(self.files, "remote", None)
+        if st.get("data") and (cur is None or cur[1] != st.get("data")):     # 那台的專案資料夾變了
+            self.files.set_remote(self.remote_target, st.get("data"))
         run = st.get("run") or {}
         txt = (f"🛰 <b>{self.remote_target}</b>　{st.get('user')}@{st.get('host')}　v{st.get('version')}　"
                f"{STATE_ZH.get(st.get('state'), st.get('state')) if st['online'] else '離線'}"
@@ -157,7 +161,10 @@ class RemoteMixin:
             pass
         self.doc.dirty = False
         self._closing_for_update = True
-        QtCore.QTimer.singleShot(500, QtWidgets.QApplication.quit)
+        from .... import selfupdate
+
+        QtCore.QTimer.singleShot(500, lambda: selfupdate.exit_for_update(
+            lambda: (self.close(), QtWidgets.QApplication.quit())))
 
     # ---- 執行位置 ----------------------------------------------------------
     def _on_target_changed(self, _i: int) -> None:
@@ -174,6 +181,7 @@ class RemoteMixin:
             self.monitor = self.local_monitor
             self.chan_stack.setCurrentWidget(self.local_channels)
             self.mon_stack.setCurrentWidget(self.local_monitor)
+            self.files.set_remote(None)
             from ....remote.backend import LocalBackend
             from ....remote.hub import hostname
 
@@ -194,6 +202,7 @@ class RemoteMixin:
             self._update_banner(self.remote.nodes)
             self.statusBar().showMessage(f"執行於節點 {name}：流程圖與儀器參數已換成該電腦的儀器", 8000)
             st = node.status() or {}
+            self.files.set_remote(name, st.get("data"))          # 0.0.31：存檔位置 = 那台量測電腦的
             if st.get("online") and is_newer(__version__, st.get("version", "0")) and \
                     setting("remote.auto_update_nodes", True):
                 self.remote.auto_update([name])
@@ -274,8 +283,14 @@ class RemoteMixin:
         def work():
             return [str(hub.download(f["url"], root / f["rel"])) for f in files if f.get("url")]
 
+        split = bool(getattr(self.doc.result, "split_depth", 0))
+
         def ok(paths):
             self.statusBar().showMessage(f"📥 已從 Hub 下載 {len(paths)} 個量測檔到 {root}", 20000)
+            from .monitor_panel import open_in_lablogviewer
+
+            run_bg(lambda: open_in_lablogviewer(self.station, [Path(p) for p in paths], split), lambda _r: None,
+                   lambda _m: None)
             if hasattr(self.monitor, "_log"):
                 self.monitor._log(f"📥 已下載：{'、'.join(paths)}")
 
@@ -299,6 +314,9 @@ class RemoteMixin:
                                      "已請節點更新，更新完成（約一分鐘）後再開始量測。")
             return
         scheme = self.doc.scheme.to_dict()
+        # 0.0.31：存到量測電腦自己的資料根目錄（這台電腦的 root 是這台的路徑，在那台沒有意義）
+        scheme["output"] = {k: v for k, v in (scheme.get("output") or {}).items() if k != "root"}
+        self.files.set_remote(node.name, st.get("data"))
         self.monitor.b_start.setEnabled(False)
         self.statusBar().showMessage(f"送出方案到節點 {node.name}…")
 

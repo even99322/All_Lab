@@ -1690,3 +1690,44 @@ Date: 2026-10-12
     a failure; the cloud install tests use it).
   - tests/test_v215_lab_data_smooth_pets.py.
 
+
+v2.1.6 - NAS / VPN SPEED, BIG FOLDERS, SHORTCUTS, PHASE DELAY, LAB CONTROL LINK
+Date: 2026-10-13
+
+  - app/core/net_cache.py: a file on a network drive (Windows UNC / DRIVE_REMOTE, macOS smbfs/afpfs/nfs mounts,
+    Linux cifs/nfs) is copied once (8 MB sequential reads) to %LOCALAPPDATA%\LabLogViewer\netcache,
+    ~/Library/Caches/LabLogViewer/netcache or ~/.cache/lablogviewer/netcache. HDF5Reader opens read_path(): the
+    copy while its size and st_mtime_ns equal the original's (sidecar .json), else the original; reader.path stays
+    the original (identity, Star / Tags / Comment writes). Not cached: files changing during the copy, files over
+    768 MB for previews / 16 GB for Viewers. LRU limit LABLOGVIEWER_NET_CACHE_GB (8). LABLOGVIEWER_NET_CACHE=0
+    off, =force every folder counts as network (tests). busy() / wait_idle(): metadata enrichment pauses while a
+    preview or Viewer reads. Settings > General: space used, Clear.
+  - QuickPreviewWorker copies then previews; a new selection cancels the copies still running.
+    app/gui/net_fetch.py: Browser "open in Viewer" and MainWindow.open_file copy first (progress dialog after
+    0.3 s, MB/s, Cancel = do not open).
+  - DatabaseScanner: find_hdf5_files_with_stats (os.scandir: sizes / times from the listing, no request per
+    file on Windows); fast listing does not open files on a network drive; enrichment parses the folder on
+    screen first (priority()), emits batches (DatabaseScanWorker.batch) that update LogEntry objects and their
+    rows in place, saves the index every 15 s (DatabaseIndexStore.merge_root); the final result updates in place
+    when the file list did not change.
+  - Browser list: 100 rows at a time (LIST_PAGE), more when scrolled near the end; _find_row adds rows up to a
+    selection / restored entry.
+  - Experiment.get_data: from the second single-trace read of a vector channel (or when the whole channel is in
+    memory) the channel is read once (<= 300 MB) and traces are sliced in memory.
+  - Shortcuts: app/core/shortcuts.py (QSettings shortcuts/<action>, notifier.changed), app/gui/viewer_shortcuts.py
+    (QShortcut, WindowShortcut context; Esc full view = autoRange of every visible ViewBox + zoom history cleared,
+    M Point Mark placement on/off, 1 / 2 Plot Mode, F Maximize Plot, P data points, A auto color, H controls,
+    D phase delay on/off (keeps the value), T Traces), app/settings/shortcuts_page.py (Settings > Shortcuts,
+    QKeySequenceEdit, × off, conflicts, Restore defaults).
+  - Phase delay: PlotConfig.phase_delay_ns, delay_phasor (exp(+i 2 pi f tau), f = X x Hz-per-unit),
+    calculate_phase_delay_ns (unwrapped phase slope, outer 15 % at each end with >= 20 points); applied before
+    Rotation/x / Fixed / Auto-rotate in 1D, 2D, Histogram-2D and exports; "Phase delay" row + Calculate.
+  - app/core/local_link.py: QLocalServer qel-lablogviewer-<user>, ~/.qel/lablogviewer/app.json; Lab Control
+    sends {"cmd": "open", "path"} after a measurement; "LabLogViewer <file>" hands the file to the open program.
+    app/gui/file_drop.py: files / folders dropped from other programs open (drags inside LabLogViewer ignored).
+  - Browser: database dialog / first start open lab_share.default_folder() (Desktop\數據集散地 on a measurement
+    computer, else the NAS); project folder combo above Folder; folder tree indentation 12 px.
+  - Update: a notice the GitHub feed added first gets the hub's installer (notifications.merge_details);
+    "Update now" also without installer details (hub_update.installer_for asks the hub). Windows install script:
+    hidden console, bounded wait for the old process, /LOG, interactive setup when the exe is missing.
+  - tests/test_v216_link_and_update.py, test_v216_shortcuts_phase_delay.py, test_v216_network_and_big_folders.py.

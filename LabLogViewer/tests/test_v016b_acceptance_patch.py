@@ -542,9 +542,9 @@ def test_settings_easter_eggs_about_and_debug_developer_identity(qapp, tmp_path)
 
     localizer = LocalizationManager(SettingsStore(tmp_path / "settings.json"))
     dialog = SettingsDialog(localizer)
-    assert dialog.sections.count() == 7
+    assert dialog.sections.count() == 8
     assert [dialog.sections.item(index).text() for index in range(dialog.sections.count())] == [
-        "General", "Appearance", "Personal", "Pet", "3D", "Debug", "About",
+        "General", "Appearance", "Personal", "Pet", "3D", "Shortcuts", "Debug", "About",
     ]
     assert dialog.traditional_chinese.text() == "中文（繁體）「不好好練一下英文」"
     assert f"Version v{__version__}" in dialog.about_content.text()

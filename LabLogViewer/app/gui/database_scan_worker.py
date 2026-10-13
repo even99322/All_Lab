@@ -23,13 +23,15 @@ class DatabaseScanWorker(QThread):
     finished_scan = Signal(object)        # DatabaseScanResult
     failed = Signal(str)                   # unexpected top-level failure
     cancelled = Signal()                   # the user stopped the scan; no result is produced
+    batch = Signal(object)                 # v2.1.6: list[LogEntry] parsed so far (metadata enrichment)
 
     def __init__(self, root_path: str, index_store: DatabaseIndexStore | None = None,
-                 *, fast_listing: bool = False, parent=None):
+                 *, fast_listing: bool = False, priority=None, parent=None):
         super().__init__(parent)
         self.root_path = root_path
         self.index_store = index_store
         self.fast_listing = fast_listing
+        self.priority = priority           # () -> folder parts parsed first (the folder on screen)
 
     def cancel(self) -> None:
         self.requestInterruption()
@@ -42,6 +44,8 @@ class DatabaseScanWorker(QThread):
                 index_store=self.index_store,
                 fast_listing=self.fast_listing,
                 should_cancel=self.isInterruptionRequested,
+                priority=self.priority,
+                batch_callback=None if self.fast_listing else (lambda entries: self.batch.emit(list(entries))),
             )
             self.finished_scan.emit(result)
         except ScanCancelled:

@@ -2,7 +2,8 @@
 # 可直接修改或另存新檔；run: 沒寫的欄位使用 settings.yaml run_defaults。
 # 2D：設定電流（兩台一起）→ 量測 VNA，掃完存一個檔。
 scheme: 1
-name: 2D（設定電流 → 量測 VNA）
+# 2D（設定電流 → 量測 VNA）
+name: 2D
 blocks:
 - kind: set
   id: a2set001

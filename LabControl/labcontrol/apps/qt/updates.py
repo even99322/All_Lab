@@ -295,7 +295,9 @@ class UpdateController(QtCore.QObject):
             self.w.doc.dirty = False
             self.w._closing_for_update = True
             self.stop()
-            QtCore.QTimer.singleShot(300, QtWidgets.QApplication.quit)
+            # 0.0.31：關主視窗（停掉節點、伺服器、即時數據…）再結束；卡住時 15 秒後強制結束，
+            # 安裝程式才不會一直等（以前 QApplication.quit 不經過 closeEvent，背景執行緒讓程式留著）
+            QtCore.QTimer.singleShot(300, lambda: selfupdate.exit_for_update(self._close_and_quit))
 
         def fail(m):
             self.busy = False
@@ -303,6 +305,12 @@ class UpdateController(QtCore.QObject):
             self.button.setText(f"⬆ 更新到 {t['version']}")
             QtWidgets.QMessageBox.warning(self.w, "更新失敗", f"{m}\n\n目前的版本照常使用。")
         run_bg(lambda: selfupdate.apply(c, lambda d, n: self._progress.emit(d, n)), ok, fail)
+
+    def _close_and_quit(self) -> None:
+        try:
+            self.w.close()
+        finally:
+            QtWidgets.QApplication.quit()
 
     def _show_progress(self, done: int, total: int) -> None:
         pct = f"{done * 100 // total}%" if total else _mb(done)

@@ -90,7 +90,8 @@ def install_now(parent, localizer, details: dict) -> bool:
 
     def work():
         try:
-            hub_update.install(install, lambda d, t: state.update(done=d, total=t))
+            chosen = hub_update.installer_for(details) if not install.get("url") else install
+            hub_update.install(chosen, lambda d, t: state.update(done=d, total=t))
         except Exception as error:
             state["error"] = error
         state["finished"] = True
@@ -107,6 +108,7 @@ def install_now(parent, localizer, details: dict) -> bool:
         QMessageBox.warning(parent, text("update.now"), text("update.failed").format(error=state["error"]))
         return False
     QMessageBox.information(parent, text("update.now"), text("update.restarting").format(version=version))
+    hub_update.exit_soon()
     QApplication.quit()
     return True
 
@@ -127,6 +129,8 @@ def check_now(parent, localizer, current_version: str) -> None:
     record = hub_update.notify(info, download, current_version)
     if record is None:                         # already announced (or that version was skipped): show it again
         record = next((r for r in notifications.items() if r.get("key") == f"update:{info.version}"), None)
+    if record is not None and download is not None and not (record.get("details") or {}).get("install"):
+        record = dict(record, details=dict(record.get("details") or {}, install=download))
     if record is None:
         details = info.details()
         if download is not None:

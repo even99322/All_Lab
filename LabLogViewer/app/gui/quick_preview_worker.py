@@ -35,8 +35,24 @@ class QuickPreviewWorker(QThread):
         self.path = path
         self.display_state = dict(display_state) if isinstance(display_state, dict) else None
 
+    def cancel(self) -> None:
+        """Another Data was selected: stop copying this one from the network drive."""
+        self.requestInterruption()
+
     def run(self) -> None:
+        from app.core import net_cache
+
         try:
-            self.preview_ready.emit(self, decimate_preview(build_quick_preview(self.path, self.display_state)))
+            with net_cache.busy():
+                # v2.1.6: a file on the NAS (VPN) is copied once and previewed from the copy; the Viewer then
+                # opens that copy at once
+                net_cache.ensure_local(self.path, cancel=self.isInterruptionRequested,
+                                       max_bytes=net_cache.PREVIEW_MAX_BYTES)
+                if self.isInterruptionRequested():
+                    return
+                preview = decimate_preview(build_quick_preview(self.path, self.display_state))
+            self.preview_ready.emit(self, preview)
+        except net_cache.Cancelled:
+            return
         except Exception as exc:
             self.preview_failed.emit(self, str(exc))

@@ -612,8 +612,17 @@ class BrowserWindow(QMainWindow):
         folder_group = QGroupBox("Folders")
         folder_layout = QVBoxLayout(folder_group)
         folder_layout.setContentsMargins(4, 4, 4, 4)
+        # v2.1.6: switch between the project folders of the lab's 數據集散地
+        from PySide6.QtWidgets import QComboBox as _Combo
+
+        self.project_combo = _Combo()
+        self.project_combo.setObjectName("browserProjectFolder")
+        self.project_combo.activated.connect(self._project_chosen)
+        folder_layout.addWidget(self.project_combo)
+        QTimer.singleShot(0, self._refresh_project_combo)
         self.folder_tree = QTreeWidget()
         self.folder_tree.setHeaderHidden(True)
+        self.folder_tree.setIndentation(12)                 # v2.1.6: deep folders no longer run off the side
         self.folder_tree.itemSelectionChanged.connect(self._on_folder_selection_changed)
         self.folder_tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.folder_tree.customContextMenuRequested.connect(self._on_folder_context_menu)
@@ -647,6 +656,7 @@ class BrowserWindow(QMainWindow):
         self.query_status_label.hide()
         data_layout.addWidget(self.query_status_label)
         self.data_list = MeasurementList()
+        self.data_list.verticalScrollBar().valueChanged.connect(self._on_list_scrolled)   # v2.1.6: more rows
         self.data_list.setColumnCount(5)
         self.data_list.setHeaderLabels(["Star", "Log name", "Date created", "Sweep dimension", "Tags"])
         self.data_list.setRootIsDecorated(False)
@@ -921,8 +931,94 @@ class BrowserWindow(QMainWindow):
         self._apply_comment_panel_size()
 
     def open_database_dialog(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Open Database Folder")
+        # v2.1.6: start in the lab's 數據集散地 (this computer's on a measurement computer, else the NAS)
+        start = self._default_data_folder()
+        path = QFileDialog.getExistingDirectory(self, "Open Database Folder", start or "")
         if path:
+            self.open_database(path)
+
+    def _default_data_folder(self) -> str | None:
+        from app.core import lab_share
+
+        if self.scanner_root and lab_share.lab_root_of(self.scanner_root) is not None:
+            return str(lab_share.lab_root_of(self.scanner_root))
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            result: dict = {}
+            worker = threading.Thread(target=lambda: result.__setitem__("p", lab_share.default_folder(3.0)),
+                                      daemon=True)
+            worker.start()
+            while worker.is_alive():
+                QApplication.processEvents()
+                worker.join(0.05)
+            return result.get("p")
+        finally:
+            QApplication.restoreOverrideCursor()
+
+    def _open_default_folder_later(self) -> None:
+        import os
+
+        if os.environ.get("LABLOGVIEWER_NO_DEFAULT_FOLDER") == "1" or "PYTEST_CURRENT_TEST" in os.environ:
+            return
+        from app.core import lab_share
+
+        result: dict = {}
+        worker = threading.Thread(target=lambda: result.__setitem__("p", lab_share.default_folder(4.0)), daemon=True)
+        worker.start()
+        timer = QTimer(self)
+        tries = {"n": 0}
+
+        def check():
+            tries["n"] += 1
+            if worker.is_alive() and tries["n"] < 60:
+                return
+            timer.stop()
+            if result.get("p") and not self.scanner_root:
+                self.open_database(result["p"])
+        timer.timeout.connect(check)
+        timer.start(100)
+
+    # -- project folder switch above the Folders tree (v2.1.6) --------------------------------------------
+    def _project_root(self) -> Path | None:
+        from app.core import lab_share
+
+        if self.scanner_root:
+            root = lab_share.lab_root_of(self.scanner_root)
+            if root is not None:
+                return root
+        local = lab_share.local_lab_data()
+        return local
+
+    def _refresh_project_combo(self) -> None:
+        from app.core import lab_share
+
+        combo = getattr(self, "project_combo", None)
+        if combo is None:
+            return
+        root = self._project_root()
+        combo.blockSignals(True)
+        combo.clear()
+        if root is None:
+            combo.addItem(self.localizer.text("project.none") if hasattr(self, "localizer") else "—", None)
+            combo.setEnabled(False)
+        else:
+            combo.setEnabled(True)
+            combo.addItem(f"{lab_share.FOLDER}（{self.localizer.text('project.all')}）", str(root))
+            for name in lab_share.project_folders(root):
+                combo.addItem(name, str(root / name))
+            cur = Path(self.scanner_root).resolve() if self.scanner_root else None
+            for i in range(combo.count()):
+                if cur is not None and combo.itemData(i) and Path(combo.itemData(i)).resolve() == cur:
+                    combo.setCurrentIndex(i)
+                    break
+            else:
+                combo.setCurrentIndex(-1)
+                combo.setPlaceholderText(self.localizer.text("project.choose"))
+        combo.blockSignals(False)
+
+    def _project_chosen(self, index: int) -> None:
+        path = self.project_combo.itemData(index) if index >= 0 else None
+        if path and (not self.scanner_root or Path(path).resolve() != Path(self.scanner_root).resolve()):
             self.open_database(path)
 
     def open_lab_data(self, *, ask: bool = True) -> bool:
@@ -967,6 +1063,7 @@ class BrowserWindow(QMainWindow):
 
     def open_database(self, root_path: str) -> None:
         self.scanner_root = str(Path(root_path).expanduser().resolve())
+        self._refresh_project_combo()
         self._record_operation("Database opening started")
         self._start_scan(self.scanner_root)
         self._schedule_session_save()
@@ -1076,8 +1173,11 @@ class BrowserWindow(QMainWindow):
         """Parse only uncached entries after the Browser is already usable."""
         if self._enrichment_worker is not None and self._enrichment_worker.isRunning():
             return
-        worker = DatabaseScanWorker(root_path, self.database_index_store, parent=self)
+        worker = DatabaseScanWorker(root_path, self.database_index_store, priority=self._metadata_priority,
+                                    parent=self)
         self._enrichment_worker = worker
+        worker.batch.connect(lambda entries, e=self._scan_epoch:
+                             self._apply_metadata_batch(entries) if e == self._scan_epoch else None)
         epoch = self._scan_epoch
         worker.finished_scan.connect(
             lambda result, e=epoch: self._on_metadata_enriched(result) if e == self._scan_epoch else None)
@@ -1181,13 +1281,10 @@ class BrowserWindow(QMainWindow):
             self._populate_data_list(folder_parts)
             reselected = None
             if selected_path:
-                for row in range(self.data_list.topLevelItemCount()):
-                    item = self.data_list.topLevelItem(row)
-                    entry = item.data(0, Qt.UserRole)
-                    if entry is not None and entry.relative_path == selected_path:
-                        self.data_list.setCurrentItem(item)
-                        reselected = entry
-                        break
+                item = self._find_row(selected_path)
+                if item is not None:
+                    self.data_list.setCurrentItem(item)
+                    reselected = item.data(0, Qt.UserRole)
         finally:
             self.data_list.blockSignals(blocked)
         self.data_list.verticalScrollBar().setValue(scroll)
@@ -1205,6 +1302,15 @@ class BrowserWindow(QMainWindow):
         selected_relative_path = selected.relative_path if selected is not None else None
         current_folder = self.folder_tree.currentItem()
         folder_parts = current_folder.data(0, Qt.UserRole) if current_folder is not None else ()
+        old = self.scan_result
+        if (old is not None and self._active_query is None
+                and [e.relative_path for e in old.entries] == [e.relative_path for e in result.entries]):
+            # v2.1.6: same files — update the rows in place (no rebuild: the list keeps its scroll / selection)
+            self._apply_metadata_batch(result.entries)
+            old.entries[:] = [self._entry_by_path.get(e.relative_path, e) for e in result.entries]
+            self.tag_store.initialize_entries(old.database_id, old.entries)
+            self.statusBar().showMessage(f"Database metadata ready — {result.n_ok} logs")
+            return
         self.scan_result = result
         self._populate_folder_tree(result)
         folder_item = self._folder_items.get(tuple(folder_parts or ()))
@@ -1212,12 +1318,9 @@ class BrowserWindow(QMainWindow):
             self.folder_tree.setCurrentItem(folder_item)
         self._populate_data_list(tuple(folder_parts or ()))
         if selected_relative_path:
-            for row in range(self.data_list.topLevelItemCount()):
-                item = self.data_list.topLevelItem(row)
-                entry = item.data(0, Qt.UserRole)
-                if entry is not None and entry.relative_path == selected_relative_path:
-                    self.data_list.setCurrentItem(item)
-                    break
+            item = self._find_row(selected_relative_path)
+            if item is not None:
+                self.data_list.setCurrentItem(item)
         self.statusBar().showMessage(f"Database metadata ready — {result.n_ok} logs")
 
     def _on_scan_progress(self, done: int, total: int) -> None:
@@ -1328,6 +1431,7 @@ class BrowserWindow(QMainWindow):
             self._schedule_session_save()
 
     def _populate_data_list(self, folder_parts: tuple[str, ...]) -> None:
+        self._shown_folder = tuple(folder_parts)          # parsed first by the metadata enrichment
         if self.scan_result is None:
             self._display_entries([], query_mode=False)
             return
@@ -1350,13 +1454,13 @@ class BrowserWindow(QMainWindow):
         finally:
             self.folder_tree.blockSignals(previous)
         self._populate_data_list(entry.folder_parts)
-        for row in range(self.data_list.topLevelItemCount()):
-            item = self.data_list.topLevelItem(row)
-            candidate = item.data(0, Qt.UserRole)
-            if candidate is not None and candidate.relative_path == relative_path:
-                self.data_list.setCurrentItem(item)
-                return True
+        item = self._find_row(relative_path)
+        if item is not None:
+            self.data_list.setCurrentItem(item)
+            return True
         return False
+
+    LIST_PAGE = 100                       # v2.1.6: rows added at a time (more appear while scrolling)
 
     def _display_entries(self, entries: list[LogEntry], *, query_mode: bool) -> None:
         self.data_list.clear()
@@ -1369,35 +1473,13 @@ class BrowserWindow(QMainWindow):
             headers = ["Star", "Log name", "Source folder", "Date created", "Tags", "Sweep dimension"]
         self.data_list.setColumnCount(len(headers))
         self.data_list.setHeaderLabels(headers)
+        self._list_entries: list[LogEntry] = list(entries) if self.scan_result is not None else []
+        self._list_query_mode = query_mode
+        self._list_shown = 0
+        self._list_rows: dict[str, QTreeWidgetItem] = {}
         if self.scan_result is None:
             return
-        for entry in entries:
-            starred = self.star_store.is_starred(self._entry_database(entry), entry.relative_path)
-            created = entry.creation_time if entry.creation_time is not None else entry.mtime
-            date_text = datetime.fromtimestamp(created).strftime("%Y-%m-%d %H:%M") if created else ""
-            if query_mode:
-                values = [
-                    "", entry.log_name,
-                    getattr(entry, "source_folder", "") or Path(entry.relative_path).parent.as_posix(), date_text,
-                    self._tag_text(entry), entry.sweep_dimension,
-                ]
-            else:
-                values = [
-                    "", entry.log_name, date_text,
-                    entry.sweep_dimension, self._tag_text(entry),
-                ]
-            item = QTreeWidgetItem(values)
-            item.setToolTip(4, self._tag_text(entry) or "No Tags")
-            if query_mode:
-                item.setToolTip(2, entry.relative_path)
-            item.setData(0, Qt.UserRole, entry)
-            self._set_star_cell(item, starred)
-            item.setTextAlignment(0, Qt.AlignCenter)
-            if entry.status == "error":
-                for column in range(len(headers)):
-                    item.setForeground(column, QColor(STATUS["unavailable_row"]))
-                item.setToolTip(1, entry.error_message or "Could not parse this file")
-            self.data_list.addTopLevelItem(item)
+        self._append_rows(self.LIST_PAGE)
         for column in range(len(headers)):
             self.data_list.resizeColumnToContents(column)
         self._sync_star_button()
@@ -1541,6 +1623,9 @@ class BrowserWindow(QMainWindow):
         if prewarm is not None and key is not None and getattr(prewarm, "cache_key", None) == key and prewarm in self._preview_workers:
             self._preview_worker = prewarm          # already being read: wait for it instead of reading twice
             return
+        for old in tuple(self._preview_workers):        # v2.1.6: stop reading what is no longer wanted
+            if old is not prewarm and old.isRunning():
+                old.cancel()
         worker = QuickPreviewWorker(entry.absolute_path, state, parent=self)
         worker.cache_key = key
         self._preview_worker = worker
@@ -1661,6 +1746,30 @@ class BrowserWindow(QMainWindow):
         else:
             self.reload_database()
 
+    def open_path(self, path: str) -> None:
+        """v2.1.6: open a data file (in a Viewer) or a folder (as the Database) — drag-drop, Lab Control."""
+        target = Path(path).expanduser()
+        if self.isMinimized():
+            self.showNormal()
+        if target.is_dir():
+            self.show(); self.raise_(); self.activateWindow()
+            self.open_database(str(target))
+            return
+        if not target.is_file():
+            QMessageBox.warning(self, "Open", f"Not found:\n\n{target}")
+            return
+        entry = None
+        if self.scan_result is not None:
+            resolved = target.resolve()
+            entry = next((e for e in self.scan_result.entries
+                          if e.status == "ok" and Path(e.absolute_path).resolve() == resolved), None)
+        if entry is None:
+            entry = DatabaseScanner._scan_one(target.parent, target)
+        viewer = self._open_viewer_for(entry)
+        if viewer is not None:
+            viewer.raise_()
+            viewer.activateWindow()
+
     def open_generated_output(self, output_path: str) -> None:
         output = Path(output_path).expanduser().resolve()
         if not output.is_file():
@@ -1763,6 +1872,10 @@ class BrowserWindow(QMainWindow):
     def _open_viewer_for(self, entry: LogEntry, session_state: dict | None = None) -> MainWindow | None:
         if entry.status == "error":
             QMessageBox.warning(self, "Cannot open log", f"This file could not be parsed:\n\n{entry.error_message}")
+            return None
+        from app.gui.net_fetch import fetch
+
+        if not fetch(self, entry.absolute_path):      # v2.1.6: copy from the NAS first, the Viewer opens filled
             return None
         started = perf_counter()
         viewer = self._take_viewer(self._comment_context_for_entry(entry))
@@ -1951,6 +2064,121 @@ class BrowserWindow(QMainWindow):
     def _set_star_button_state(self, starred: bool) -> None:
         text = self.localizer.text("browser.unstar" if starred else "browser.star")
         make_icon_only(self.star_button, "star_filled" if starred else "star", text, TOOLBAR_ICON_SIZE)
+
+    def _row_values(self, entry: LogEntry, query_mode: bool) -> list[str]:
+        created = entry.creation_time if entry.creation_time is not None else entry.mtime
+        date_text = datetime.fromtimestamp(created).strftime("%Y-%m-%d %H:%M") if created else ""
+        if query_mode:
+            return ["", entry.log_name,
+                    getattr(entry, "source_folder", "") or Path(entry.relative_path).parent.as_posix(), date_text,
+                    self._tag_text(entry), entry.sweep_dimension]
+        return ["", entry.log_name, date_text, entry.sweep_dimension, self._tag_text(entry)]
+
+    def _make_row(self, entry: LogEntry, query_mode: bool) -> QTreeWidgetItem:
+        starred = self.star_store.is_starred(self._entry_database(entry), entry.relative_path)
+        item = QTreeWidgetItem(self._row_values(entry, query_mode))
+        item.setToolTip(4, self._tag_text(entry) or "No Tags")
+        if query_mode:
+            item.setToolTip(2, entry.relative_path)
+        item.setData(0, Qt.UserRole, entry)
+        self._set_star_cell(item, starred)
+        item.setTextAlignment(0, Qt.AlignCenter)
+        self._style_row_status(item, entry)
+        return item
+
+    def _style_row_status(self, item: QTreeWidgetItem, entry: LogEntry) -> None:
+        if entry.status == "error":
+            for column in range(self.data_list.columnCount()):
+                item.setForeground(column, QColor(STATUS["unavailable_row"]))
+            item.setToolTip(1, entry.error_message or "Could not parse this file")
+
+    def _append_rows(self, count: int) -> int:
+        """Add the next ``count`` rows of the list being shown (v2.1.6: big folders fill as you scroll)."""
+        entries = getattr(self, "_list_entries", [])
+        start = getattr(self, "_list_shown", 0)
+        chunk = entries[start:start + max(0, count)]
+        if not chunk:
+            return 0
+        items = [self._make_row(entry, self._list_query_mode) for entry in chunk]
+        self.data_list.addTopLevelItems(items)
+        for entry, item in zip(chunk, items):
+            self._list_rows[entry.absolute_path] = item
+        self._list_shown = start + len(chunk)
+        self._show_list_count()
+        return len(chunk)
+
+    def _show_list_count(self) -> None:
+        total = len(getattr(self, "_list_entries", []))
+        shown = getattr(self, "_list_shown", 0)
+        if total > shown:
+            self.statusBar().showMessage(self.localizer.text("browser.rows_partial").format(shown=shown, total=total))
+
+    def _on_list_scrolled(self, value: int) -> None:
+        bar = self.data_list.verticalScrollBar()
+        if getattr(self, "_list_shown", 0) < len(getattr(self, "_list_entries", [])) \
+                and value >= bar.maximum() - max(bar.pageStep() // 2, 3):
+            self._append_rows(self.LIST_PAGE)
+
+    def _find_row(self, relative_path: str) -> QTreeWidgetItem | None:
+        """The row of ``relative_path`` in the list being shown; rows not added yet are added up to it."""
+        entries = getattr(self, "_list_entries", [])
+        index = next((k for k, e in enumerate(entries) if e.relative_path == relative_path), None)
+        if index is None:
+            return None
+        if index >= self._list_shown:
+            self._append_rows(index + 1 - self._list_shown + self.LIST_PAGE // 2)
+        return self._list_rows.get(entries[index].absolute_path)
+
+    def _apply_metadata_batch(self, entries: list[LogEntry]) -> None:
+        """Metadata of some files arrived (enrichment): update them and their rows in place."""
+        if self.scan_result is None:
+            return
+        by_path = self._entry_by_path
+        changed_selected = False
+        _item, selected = self._selected_data()
+        for new in entries:
+            entry = by_path.get(new.relative_path)
+            if entry is None:
+                continue
+            for name in ("log_name", "status", "error_message", "creation_time", "sweep_dimension",
+                         "metadata_complete", "file_tags", "file_star", "size_bytes", "mtime"):
+                setattr(entry, name, getattr(new, name))
+            row = getattr(self, "_list_rows", {}).get(entry.absolute_path)
+            if row is not None:
+                for column, text in enumerate(self._row_values(entry, self._list_query_mode)):
+                    if column:
+                        row.setText(column, text)
+                self._style_row_status(row, entry)
+            if selected is entry:
+                changed_selected = True
+        done = [by_path[e.relative_path] for e in entries if e.relative_path in by_path]
+        if done:
+            self._adopt_native_tags(DatabaseScanResult(self.scan_result.root_path, self.scan_result.database_id, done))
+            for entry in done:
+                row = getattr(self, "_list_rows", {}).get(entry.absolute_path)
+                if row is not None:
+                    self._set_star_cell(row, self.star_store.is_starred(self._entry_database(entry),
+                                                                        entry.relative_path))
+                    for column, text in enumerate(self._row_values(entry, self._list_query_mode)):
+                        if column:
+                            row.setText(column, text)
+                    row.setToolTip(4, self._tag_text(entry) or "No Tags")
+        if changed_selected:
+            self._sync_selected_tags()
+
+    @property
+    def _entry_by_path(self) -> dict[str, LogEntry]:
+        result = self.scan_result
+        if result is None:
+            return {}
+        cache = getattr(self, "_entry_index", None)
+        if cache is None or cache[0] is not result or cache[1] != len(result.entries):
+            cache = (result, len(result.entries), {e.relative_path: e for e in result.entries})
+            self._entry_index = cache
+        return cache[2]
+
+    def _metadata_priority(self) -> tuple[str, ...] | None:
+        return getattr(self, "_shown_folder", None)
 
     def _set_star_cell(self, item: QTreeWidgetItem, starred: bool) -> None:
         item.setData(0, STAR_STATE_ROLE, bool(starred))
@@ -2305,6 +2533,7 @@ class BrowserWindow(QMainWindow):
             if isinstance(path, str) and path:
                 self.statusBar().showMessage("Previous database is unavailable. Open a folder to continue.")
             self._show_recovery_report()
+            self._open_default_folder_later()              # v2.1.6: the lab's 數據集散地 when nothing to restore
             return False
         if self._safe_recovery and self.session_store.requires_safe_recovery:
             state = {"database_path": path, "browser": {}}
@@ -2344,12 +2573,9 @@ class BrowserWindow(QMainWindow):
                     scope = query.get("scope") if query.get("scope") in ("database", "master") else "database"
                     self._run_tag_query(tags, mode, record=False, scope=scope)
             if selected is not None:
-                for row in range(self.data_list.topLevelItemCount()):
-                    item = self.data_list.topLevelItem(row)
-                    entry = item.data(0, Qt.UserRole)
-                    if entry is not None and entry.relative_path == selected.relative_path:
-                        self.data_list.setCurrentItem(item)
-                        break
+                item = self._find_row(selected.relative_path)
+                if item is not None:
+                    self.data_list.setCurrentItem(item)
             if not self._safe_recovery:
                 for viewer_state in state.get("viewers", []):
                     if not isinstance(viewer_state, dict):

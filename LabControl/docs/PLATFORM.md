@@ -112,6 +112,27 @@
 - `{project}` = 檔案設置的「專案資料夾」：空白 = 論文庫專案名稱（沒有就建立），也可以選已有的資料夾（每個專案記在 `LAB/project_folders.json`）。
 - NAS 上的對應位置 `\\192.168.50.2\ccuqel\數據集散地`（VPN `\\100.114.33.20\ccuqel\數據集散地`）：讀檔程式「檔案 → 開啟實驗室數據集散地」。
 
+### 0d. 0.0.31：論文庫服務帳號、專案範本、專題歸檔、儀器對應、讀檔連動
+
+- **論文庫服務帳號**：Hub 用一個服務帳號查論文庫的專案（量測電腦用裝置 token 時也看得到專案）。
+  - 設定：控制台「論文庫服務帳號」（存在 `data/paperlib_service.json`，只在 NAS 上），或 docker-compose 的
+    `LABHUB_PAPERLIB_SERVICE_USER` / `LABHUB_PAPERLIB_SERVICE_PASSWORD`（環境變數優先）。
+  - 帳號密碼不放在程式、安裝檔、Git 裡。
+- **專案範本**：每個論文庫專案 × 每個範本（單張、2D、2D電流異步、雙層分檔、雙層單檔、flux）一份方案，存在 Hub
+  `data/project_templates/<專案>/<範本>.json`，所有電腦共用。
+  - Lab Control 範本選單：有選專案 → 載入這個專案的版本；方案改了停手 1.5 秒自動寫回；換專案先存回舊的再載入新的。
+  - 本機快取 `LAB/project_templates/<專案>/<範本>.json`；Hub 連不到時標成待送，下次再送。
+- **專題歸檔**：Lab Control「📦 專題歸檔」把數據（單一檔或整個資料夾）複製到 `\\192.168.50.2\ccuqel\數據集散地\<專案>\`
+  （VPN `\\100.114.33.20\...`；Mac `/Volumes/ccuqel/數據集散地`；`LABCONTROL_ARCHIVE_ROOT` 可指定），保留日期資料夾。
+- **儀器依量測電腦對應**：`instruments.yaml` 每台儀器寫 `node: LAB-1` / `LAB-2`；方案裡目前儀器清單沒有的電磁鐵組 / VNA，
+  依「同一台的第幾個」換成執行那台的（LAB-1 magA、magB、VNA1 ↔ LAB-2 magC、magD、VNA2）。
+- **遠端量測的存檔位置**：節點的狀態帶 `data`（root、資料夾規則、專案資料夾清單）；遠端執行時一律存到量測電腦自己的位置。
+- **讀檔程式連動**：讀檔程式（2.1.6）開著時聽本機連線 `qel-lablogviewer-<使用者>`，並把啟動方式記在
+  `~/.qel/lablogviewer/app.json`。Lab Control 量完送 `{"cmd": "open", "path": …}`（沒開就啟動它）；雙層分檔不送。
+  讀檔程式拖出的數據帶檔案網址，拖到 Lab Control 套用該檔的量測設定。
+- **上傳完整性**：控制台上傳帶 `?size=`；Hub 收到的長度不對就回 400，控制台顯示 sha256。
+- **讀檔程式讀 NAS**：網路磁碟上的檔案先複製到本機快取（`%LOCALAPPDATA%\LabLogViewer\netcache`）再讀；副本與原檔相同時才使用。
+
 以下第 1–7 節是 0.0.13–0.0.25（有啟動器時）的說明，平台 API、數據目錄、標籤與論文仍然適用。
 
 ## 1. 組成
@@ -412,6 +433,8 @@ Lab Control 0.0.13 匯出的 Labber 檔，根目錄多了 `attrs["labcontrol"]`�
 | `GET` | `/api/platform/projects/<id>` | 加上論文（`papers`）與標籤資訊（`tag_info`） |
 | `PUT` | `/api/platform/projects/<id>/tags` | `{tags, replace?}` |
 | `GET` | `/api/platform/projects/<id>/files` | 專案的數據檔（`rel` = `<節點>/<路徑>`）與資料夾名稱 |
+| `GET` | `/api/platform/project-templates/<id>` | 這個專案的範本 `{templates: {<範本>: {scheme, time, by}}}`（0.0.31） |
+| `PUT` | `/api/platform/project-templates/<id>/<範本>` | `{scheme, by}` 寫入 / 取代（0.0.31） |
 
 **控制台（站長）、下載頁**
 
@@ -423,6 +446,7 @@ Lab Control 0.0.13 匯出的 Labber 檔，根目錄多了 `attrs["labcontrol"]`�
 | `GET` | `/api/platform/console/jobs/<id>` | 工作進度（轉問控制代理） |
 | `GET` | `/api/platform/console/status` | Hub、控制代理、論文庫、NAS 空間、量測電腦 |
 | `POST` | `/api/platform/console/measure-pc` | `{name}` → 裝置 token（設定量測電腦） |
+| `GET` / `PUT` | `/api/platform/console/paperlib-service` | 論文庫服務帳號：讀取（不回密碼）/ `{user, password}` 設定（驗證後才存，0.0.31） |
 | `GET` | `/get`、`/get/info`、`/get/<版本>/<檔名>` | 下載頁（不用登入；只開放 App 本身） |
 
 **訊息**

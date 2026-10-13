@@ -16,7 +16,7 @@ plugin_paths: []           # 額外的 plugin 資料夾（LAB/plugins 一定會�
 _yoko_defaults: &yoko
   source:
     limits: [-0.2, 0.2]      # A，軟體上下限
-    ramp_rate: 5.0e-4        # A/s，自動斜坡速率（0.5 mA/s）
+    ramp_rate: 1.0e-2        # A/s，自動斜坡速率（10 mA/s；0.0.31 起的預設）
     max_jump: 5.0e-5         # A，單次直接跳動上限；超過自動走斜坡
     resolution: 1.0e-6       # A，200 mA 檔最小步進（interleaved_pair 用）
   # on_connect:              # 連線時要確保的狀態（只有和目前不同才會寫入；不寫 = 不動儀器）
@@ -101,7 +101,7 @@ instruments:
     display_unit: mA
     source:
       limits: [-0.2, 0.2]
-      ramp_rate: 5.0e-4
+      ramp_rate: 1.0e-2
       max_jump: 5.0e-5
       resolution: 1.0e-6
   magnet_B:
@@ -112,6 +112,6 @@ instruments:
     display_unit: mA
     source:
       limits: [-0.2, 0.2]
-      ramp_rate: 5.0e-4
+      ramp_rate: 1.0e-2
       max_jump: 5.0e-5
       resolution: 1.0e-6

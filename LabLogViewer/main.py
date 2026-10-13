@@ -114,6 +114,11 @@ def main() -> int:
     app.aboutToQuit.connect(lifecycle.mark_clean)
 
     arg = sys.argv[1] if len(sys.argv) > 1 else None
+    # v2.1.6: another LabLogViewer is open → give it the file / folder (no second program)
+    from app.core import local_link
+
+    if arg and Path(arg).exists() and local_link.send({"cmd": "open", "path": str(Path(arg).resolve())}):
+        return 0
 
     if arg and Path(arg).is_file() and not startup_recovery.safe_recovery:
         # Backward-compatible single-file mode (v0.7 behavior).
@@ -143,6 +148,31 @@ def main() -> int:
             # Viewer window ownership.  Deferring one event turn lets native
             # window construction complete before a scan begins.
             QTimer.singleShot(0, window.restore_previous_session)
+
+    # v2.1.6: Lab Control (and a second LabLogViewer) reach this one: {"cmd": "open", "path": ...}
+    extra_viewers: list = []
+
+    def handle_local(message: dict) -> None:
+        path = message.get("path")
+        if message.get("cmd") != "open" or not path:
+            if message.get("cmd") == "show":
+                window.showNormal(); window.raise_(); window.activateWindow()
+            return
+        if hasattr(window, "open_path"):
+            window.open_path(str(path))
+        else:                                       # single-file mode: one more Viewer
+            viewer = MainWindow()
+            viewer.show()
+            viewer.open_file(str(path))
+            extra_viewers.append(viewer)
+
+    from app.gui.file_drop import install as install_file_drop
+
+    # v2.1.6: drag data files / folders from Explorer or Finder onto any window to open them
+    install_file_drop(app, lambda p: handle_local({"cmd": "open", "path": p}))
+    link = local_link.LocalLink(handle_local, app)
+    link.start()
+    app.aboutToQuit.connect(link.stop)
 
     from app.core.warmup import start_background_warmup
     from app.gui.whats_new import after_start

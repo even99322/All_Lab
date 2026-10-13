@@ -105,6 +105,23 @@ def add(kind: str, params: dict | None = None, *, details: dict | None = None, k
     return record
 
 
+def merge_details(key: str, extra: dict) -> dict | None:
+    """Add ``extra`` to the details of the notice with ``key`` (v2.1.6: the hub's installer for an update notice
+    the GitHub feed announced first, so "Update now" shows up). Returns the record, or None if there is none."""
+    state = load()
+    record = next((item for item in state["items"] if item.get("key") == key), None)
+    if record is None:
+        return None
+    details = dict(record.get("details") or {})
+    if all(details.get(k) == v for k, v in extra.items()):
+        return record
+    details.update(extra)
+    record["details"] = details
+    _save(state)
+    _tell("changed")
+    return record
+
+
 def items() -> list[dict]:
     """Newest first."""
     return list(reversed(load()["items"]))

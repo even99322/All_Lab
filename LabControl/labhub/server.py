@@ -751,7 +751,10 @@ class Handler(BaseHTTPRequestHandler):
         n = self._length()
         if n > limit:
             raise HubHTTPError(413, "資料太大")
-        return self.rfile.read(n) if n else b""
+        data = self.rfile.read(n) if n else b""
+        if len(data) != n:                     # 0.0.31：連線中斷 → 只收到一部分：不能存成「壞掉的安裝檔」
+            raise HubHTTPError(400, f"上傳不完整（收到 {len(data):,} / {n:,} bytes），請重新上傳")
+        return data
 
     def _json_body(self) -> Any:
         raw = self._body_bytes()

@@ -518,3 +518,24 @@ PATTERNS.extend([
     ("Cannot calculate rotation: {}", "無法計算旋轉：{0}"),
     ("Histogram-2D unavailable: {}", "無法使用 Histogram-2D：{0}"),
 ])
+# v2.1.6: Phase delay, Viewer shortcuts, drag-and-drop open
+UI.update({
+    "Phase delay": "Phase delay（相位延遲）",
+    "Electrical delay τ removed from complex data before Re/Im/Mag/Phase: z·exp(+i·2π·f·τ).\nf is the X axis "
+    "(its unit Hz / MHz / GHz is taken into account). Calculate fits τ to the phase slope at both ends of the sweep.":
+        "在取 Re/Im/Mag/Phase 之前，從複數資料去除電學延遲 τ：z·exp(+i·2π·f·τ)。\nf 為 X 軸（會依單位 Hz / MHz / GHz 換算）。"
+        "「計算」以掃描兩端的相位斜率擬合 τ。",
+    "Full view": "全域圖", "Phase delay off": "Phase delay 已關閉", "Point Mark off": "Point Mark 已關閉",
+    "Point Mark on: click the plot": "Point Mark 已開啟：點圖表放置", "Turn this shortcut off": "關閉這個快捷鍵",
+})
+PATTERNS.extend([
+    ("Phase delay τ = {} ns (fitted on the unwrapped phase)", "Phase delay τ = {0} ns（以解開的相位擬合）"),
+    ("Phase delay on: {} ns", "Phase delay 已開啟：{0} ns"),
+    ("Shortcut failed: {}", "快捷鍵失敗：{0}"),
+    ("Not found:\n\n{}", "找不到：\n\n{0}"),
+])
+UI.update({"Opening data": "開啟資料"})
+PATTERNS.extend([
+    ("Copying from the network drive…\n{}", "正在從網路磁碟複製⋯\n{0}"),
+    ("Copying from the network drive…\n{}\n{} / {} MB  ·  {} MB/s", "正在從網路磁碟複製⋯\n{0}\n{1} / {2} MB  ·  {3} MB/s"),
+])

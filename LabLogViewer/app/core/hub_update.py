@@ -122,15 +122,37 @@ def notify(info: UpdateInfo | None, download: dict | None, current_version: str)
     if info is None:
         return None
     details = info.details()
+    install = None
     if download is not None:
-        details["install"] = {k: download.get(k) for k in ("name", "url", "size", "sha256", "platform", "arch", "hub")}
-    return notifications.add("update", {"version": info.version, "n": len(info.items)}, details=details,
-                             key=f"update:{info.version}")
+        install = {k: download.get(k) for k in ("name", "url", "size", "sha256", "platform", "arch", "hub")}
+        details["install"] = install
+    key = f"update:{info.version}"
+    record = notifications.add("update", {"version": info.version, "n": len(info.items)}, details=details, key=key)
+    if record is None and install is not None:
+        # v2.1.6: the GitHub feed may have announced this version first (no installer) → add the hub's installer
+        # to that notice, otherwise "Update now" never shows up.
+        notifications.merge_details(key, {"install": install})
+    return record
 
 
 def can_install(details: dict | None) -> bool:
+    """"Update now" is offered: an installed LabLogViewer on Windows / macOS. The notice need not carry the
+    installer (v2.1.6: a notice from the GitHub feed has none) — ``installer_for`` asks the hub when clicked."""
     install = (details or {}).get("install") or {}
-    return FROZEN and bool(install.get("url")) and install.get("platform") == this_platform()
+    if install.get("url"):
+        return FROZEN and install.get("platform") == this_platform()
+    return FROZEN and this_platform() in ("windows", "macos")
+
+
+def installer_for(details: dict | None, timeout: float = 6.0) -> dict:
+    """The installer to use for this update notice: the one it carries, else the hub's current one."""
+    install = (details or {}).get("install") or {}
+    if install.get("url") and install.get("platform") == this_platform():
+        return install
+    _info, download = read_hub_feed(timeout=timeout)
+    if not download or not download.get("url"):
+        raise HubUpdateError("The hub has no installer for this computer yet.")
+    return download
 
 
 # ---- installing -------------------------------------------------------------------------------
@@ -159,6 +181,44 @@ def download(install: dict, progress: Callable[[int, int], None] | None = None) 
     return target
 
 
+CREATE_NO_WINDOW = 0x08000000
+WAIT_ROUNDS = 45
+
+
+def _hidden_cmd(windows: bool | None = None) -> dict:
+    """v2.1.5: cmd without a window. (DETACHED_PROCESS gave cmd no console, so every tasklist / find / ping in the
+    script opened its own console window, e.g. one titled 'find "34396"'.)"""
+    kw: dict = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
+                "close_fds": True}
+    if (os.name == "nt") if windows is None else windows:
+        kw["creationflags"] = CREATE_NO_WINDOW | 0x00000200          # no window | CREATE_NEW_PROCESS_GROUP
+    else:
+        kw["start_new_session"] = True
+    return kw
+
+
+def wait_script(pid: int, rounds: int = WAIT_ROUNDS) -> str:
+    """cmd lines: wait until pid exits (checked every second); after `rounds` seconds end it (taskkill /F)."""
+    return (f"set PID={pid}\r\n"
+            "set /a N=0\r\n"
+            ":wait\r\n"
+            'tasklist /FI "PID eq %PID%" /NH /FO CSV 2>nul | find /I """%PID%""" >nul || goto done\r\n'
+            "set /a N+=1\r\n"
+            f"if %N% GEQ {rounds} (taskkill /F /T /PID %PID% >nul 2>&1 & ping -n 3 127.0.0.1 >nul & goto done)\r\n"
+            "ping -n 2 127.0.0.1 >nul\r\n"
+            "goto wait\r\n"
+            ":done\r\n")
+
+
+def exit_soon(grace_s: float = 15.0) -> None:
+    """After "Update now": LabLogViewer must really end, even if a background thread hangs (the installer waits)."""
+    import threading
+
+    t = threading.Timer(grace_s, lambda: os._exit(0))
+    t.daemon = True
+    t.start()
+
+
 def _detached() -> dict:
     kw: dict = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL,
                 "close_fds": True}
@@ -180,15 +240,16 @@ def install_windows(setup: Path, app_exe: Path | None = None) -> Path:
     """Run the Inno Setup installer silently after this program quits, then start LabLogViewer again."""
     app_exe = app_exe or Path(sys.executable).resolve()
     script = setup.with_name("install_update.cmd")
-    # v2.1.3: wait for this LabLogViewer to exit ("timeout" cannot run without a console: ping waits instead)
+    log = setup.with_name("install_update.log")
+    # v2.1.5: no console windows; wait at most ~45 s for this LabLogViewer to exit (then end it); if the program
+    # is missing afterwards (the installer failed), open the installer with its windows so the reason shows
     script.write_text(
         "@echo off\r\n"
-        f"set PID={os.getpid()}\r\n"
-        ":wait\r\n"
-        'tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)\r\n'
-        f'"{setup}" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /NOCANCEL\r\n'
+        + wait_script(os.getpid())
+        + f'"{setup}" /SILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /NOCANCEL /LOG="{log}"\r\n'
+        f'if not exist "{app_exe}" (start "" "{setup}" & exit /b 1)\r\n'
         f'start "" "{app_exe}"\r\n', encoding="utf-8", newline="")   # CRLF as written (no \r\r\n on Windows)
-    subprocess.Popen(["cmd.exe", "/c", str(script)], **_detached())
+    subprocess.Popen(["cmd.exe", "/c", str(script)], **_hidden_cmd())
     return script
 
 

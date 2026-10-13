@@ -34,9 +34,9 @@ labber:
 
 # ---- 量測執行預設值（實驗 / 方案沒寫時使用） -----------------------------------
 run_defaults:
-  approach_rate: 0.5 mA/s      # 移動到起點的斜坡速率
+  approach_rate: 10 mA/s       # 移動到起點的斜坡速率（0.0.31 起預設 10 mA/s）
   park: start                  # 結束後：start（回起點）| none（停在原地）| 數值
-  park_rate: 1 mA/s
+  park_rate: 10 mA/s
   settle_first: 0 s
   retries: 1                   # 量測失敗自動重試次數
   on_error: pause              # 重試仍失敗：pause | stop
@@ -87,7 +87,7 @@ server:
   auto_connect: []             # 開啟 Lab Control 時自動（唯讀）連線的儀器名稱
   new_source:                  # 新增電源時預填的安全設定（SI）
     limits: [-0.2, 0.2]
-    ramp_rate: 5.0e-4
+    ramp_rate: 1.0e-2
     max_jump: 5.0e-5
   default_timeout_ms: 10000
 
@@ -97,7 +97,7 @@ server:
 remote:
   hub_urls: [192.168.50.2, 100.114.33.20]   # Lab Control Hub（NAS 上的網站）：實驗室內網、VPN，依序嘗試；可寫 http://主機:埠
   port: 8765                   # 網址沒寫埠時用這個
-  token: ""                     # Hub 的存取 token（與 NAS docker-compose.yml 的 LABHUB_TOKEN 相同）
+  token: ""                    # Hub 的存取 token（與 NAS docker-compose.yml 的 LABHUB_TOKEN 相同）
   timeout_s: 15                # 一般 Hub 請求的逾時（VPN 較慢）
   heartbeat_s: 2               # 回報狀態的間隔（節點與這台電腦）
   live_interval_s: 0.5         # 節點上傳即時資料（進度、曲線）的間隔
@@ -143,6 +143,10 @@ live:
   max_ramp_mA_s: 10            # 0.0.30：全域最大調整速率（所有即時數據的電流斜坡都不超過；面板上可以改）
   dial_range_mA: 200           # 0.0.30：目標旋鈕的範圍 ±200 mA（儀器上下限更小時用儀器的）
   dial_apply_ms: 700           # 0.0.30：旋鈕停手多久後開始斜坡
+
+# ---- 讀檔程式（LabLogViewer）---------------------------------------------------------
+lablogviewer:
+  open_after_measure: true     # 0.0.31：量完自動用讀檔程式開啟新數據（雙層分檔不開）
 
 # ---- Hooks 預設參數 -------------------------------------------------------------
 hooks:

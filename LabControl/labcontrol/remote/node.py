@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import queue
 import threading
 import time
@@ -192,6 +193,19 @@ class NodeService:
             return r
         return None
 
+    def data_info(self) -> Dict[str, Any]:
+        """0.0.31：這台量測電腦存檔的地方（給遠端的檔案設置顯示、選專案資料夾）；資料夾清單 30 秒更新一次。"""
+        from ..data.naming import data_root, folder_pattern, list_project_folders
+
+        now = time.time()
+        cache = getattr(self, "_data_info", None)
+        if cache is None or now - cache[0] > 30:
+            root = data_root()
+            cache = (now, {"root": str(root), "pattern": folder_pattern(), "sep": os.sep,
+                           "folders": list_project_folders(root)[:300]})
+            self._data_info = cache
+        return dict(cache[1])
+
     def status(self) -> Dict[str, Any]:
         r = self._active_runner()
         state = "updating" if self._restarting else (r.state.value if r is not None else "idle")
@@ -208,7 +222,7 @@ class NodeService:
                           "set": bool(setting("remote.node.allow_remote_set", True)),
                           "update": bool(setting("remote.node.allow_update", True))},
                 "instruments": instrument_report(self.station), "scan": dict(last_scan),
-                "upload_pending": pending, "error": self.last_error}
+                "upload_pending": pending, "error": self.last_error, "data": self.data_info()}
 
     def _post_status(self) -> None:
         r = self.hub.put_status(self.name, self.status())
@@ -406,6 +420,12 @@ class NodeService:
             raise CommandError("節點上已經有量測在進行")
         if self.update_pending or self._restarting:
             raise CommandError("節點即將更新，請稍候再開始")
+        scheme = dict(scheme)
+        output = dict(scheme.get("output") or {})
+        # 0.0.31：在量測電腦上執行 → 一律存到這台的資料根目錄（settings.yaml data.root）；
+        # 送來的 root 是遠端那台電腦自己的路徑（例如 C:\Users\even9\Desktop\…），不能用
+        if output.pop("root", None) is not None:
+            scheme["output"] = output
         sch = Scheme.from_dict(scheme)
         res = compile_scheme(sch, build_catalog(self.station))
         if not res.ok:

@@ -2,7 +2,8 @@
 # 可直接修改或另存新檔；run: 沒寫的欄位使用 settings.yaml run_defaults。
 # 單張：不動電流（沿用目前的值），直接量一次 VNA。
 scheme: 1
-name: 單張（直接量測 VNA，電流沿用）
+# 單張（直接量測 VNA，電流沿用）
+name: 單張
 blocks:
 - kind: measure
   id: a1meas01

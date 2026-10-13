@@ -137,10 +137,12 @@ class GroupRamp:
             if s.limits:
                 s.limits.check(self.target)
         rates = [r for r in ([rate] if rate else [s.ramp_policy.rate for s in srcs]) if r]
-        self.rate = float(min(rates)) if rates else 5e-4
+        self.rate = float(min(rates)) if rates else 1e-2
         jumps = [s.ramp_policy.max_jump for s in srcs if s.ramp_policy.max_jump]
         self.dt = dt
-        self.step = min([self.rate * dt] + jumps)
+        self.max_jump = min(jumps) if jumps else None       # 一次寫入最多動多少（每台）
+        self.step = min([self.rate * dt] + jumps)            # 名義步進（舊的欄位，view 用）
+        self.actual_rate: Optional[float] = None             # 實際速率（A/s，從開始到現在）
         self.stop_event = threading.Event()
         self.done = False
         self.error = ""
@@ -156,32 +158,54 @@ class GroupRamp:
         self.stop_event.set()
 
     def _run(self) -> None:
+        """0.0.31：依「實際經過的時間」前進（以前每步固定 rate×dt，再加上每次寫入儀器的時間，
+        10 mA/s 實際只有 5 mA/s 左右）。每一輪：可以走 rate×經過時間（不超過 max_jump），每台輪流前進。
+        儀器寫入太慢、max_jump 又小時，最快只能到 max_jump / 每輪時間（actual_rate 會顯示實際速率）。"""
         try:
             st = self.station
             scale = st.sim_time_scale if st.simulate else 1.0
             lv = read_levels(st, self.refs)
             self.levels = dict(lv)
+            start = dict(lv)
+            # 每輪間隔：max_jump 小時要走得更勤（例如 0.05 mA、10 mA/s → 每 5 ms 一輪），最短 2 ms
+            tick = self.dt if not self.max_jump else max(0.002, min(self.dt, self.max_jump / self.rate))
+            t0 = last = time.monotonic()
+            first = True
             while not self.stop_event.is_set():
+                now = time.monotonic()
+                if scale <= 0:
+                    budget = float("inf")
+                else:
+                    budget = self.rate * (tick if first else (now - last)) / scale
+                first = False
+                last = now
+                step = budget if self.max_jump is None else min(budget, self.max_jump)
                 moved = False
                 for r in self.refs:
                     d = self.target - lv[r]
                     if abs(d) < 1e-12:
                         continue
-                    v = lv[r] + max(-self.step, min(self.step, d))
+                    v = self.target if abs(d) <= step else lv[r] + (step if d > 0 else -step)
                     st.parameter(r).set(v)
                     lv[r] = v
                     self.levels[r] = v
                     moved = True
+                el = time.monotonic() - t0
+                if el > 0 and scale > 0:
+                    self.actual_rate = max(abs(lv[r] - start[r]) for r in self.refs) / el * scale
                 if not moved:
                     break
-                time.sleep(self.dt * scale)
+                wait = tick * max(scale, 0) - (time.monotonic() - now)
+                if wait > 0:
+                    time.sleep(wait)
         except Exception as e:  # noqa: BLE001
             self.error = str(e) or type(e).__name__
         finally:
             self.done = True
 
     def view(self) -> Dict[str, Any]:
-        return {"id": self.id, "refs": self.refs, "target": self.target, "rate": self.rate, "done": self.done,
+        return {"id": self.id, "refs": self.refs, "target": self.target, "rate": self.rate,
+                "actual_rate": self.actual_rate, "done": self.done,
                 "stopped": self.stop_event.is_set(), "error": self.error, "levels": dict(self.levels)}
 
     @classmethod

@@ -402,12 +402,29 @@ class MonitorPanel(QtWidgets.QWidget):
 
     def _export(self, exp: Experiment, ds, output) -> None:
         try:
-            exp.export(ds, output)
+            paths = exp.export(ds, output)
         except Exception as e:  # noqa: BLE001
             self.station.bus.log(f"❌ 匯出失敗：{e}", "error")
+            return
+        open_in_lablogviewer(self.station, paths, bool(output.split_by))
 
     def close_bridge(self) -> None:
         self.bridge.close()
+
+
+def open_in_lablogviewer(station, paths, split: bool) -> None:
+    """0.0.31：量完存好檔 → 用讀檔程式開啟（雙層分檔不開；settings lablogviewer.open_after_measure）。"""
+    from ....integrations import lablogviewer
+
+    try:
+        r = lablogviewer.after_measure(list(paths or []), split)
+    except Exception as e:  # noqa: BLE001
+        station.bus.log(f"⚠ 無法用讀檔程式開啟：{e}", "warning")
+        return
+    if r == "missing":
+        station.bus.log("ℹ 找不到讀檔程式（LabLogViewer）：從平台下載頁安裝後，量完會自動開啟數據", "info")
+    elif r:
+        station.bus.log("📖 已用讀檔程式開啟這次的數據")
 
 
 def _local_runner(run_id: Optional[str]):

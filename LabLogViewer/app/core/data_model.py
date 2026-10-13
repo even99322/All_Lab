@@ -647,7 +647,19 @@ class Experiment:
                 # raw dataset shape: (n_points, n_entries)
                 full_slice = (slice(None), entry_slice)
             whole = entry_slice is None
-            complex_arr = self.__dict__.get('_whole_trace_cache', {}).get(channel_name) if whole else None
+            whole_cache = self.__dict__.get('_whole_trace_cache', {})
+            if not whole and isinstance(entry_slice, (int, np.integer, slice)):
+                # v2.1.6: switching traces reads one column of a (points, 2, entries) dataset — slow, and very
+                # slow on a network drive. From the second trace on (or when the whole channel is already in
+                # memory) read the channel once and slice it in memory.
+                reads = self.__dict__.setdefault('_trace_reads', {})
+                reads[channel_name] = reads.get(channel_name, 0) + 1
+                nbytes = int(vt.n_points) * int(max(vt.n_entries, 1)) * 16
+                if channel_name in whole_cache or (reads[channel_name] >= 2 and nbytes <= 300 * 1024 * 1024):
+                    full = self.get_data(channel_name, transform="raw")
+                    sliced = np.asarray(full)[(slice(None), entry_slice)]
+                    return apply_transform(sliced, transform)
+            complex_arr = whole_cache.get(channel_name) if whole else None
             if complex_arr is None:
                 raw = self._reader.read(vt.trace_path, slice_=full_slice)
                 # raw shape: (n_points, 2, n_entries_or_sliced) if complex

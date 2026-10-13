@@ -1,0 +1,35 @@
+# 範本方案：編輯器「範本」選單列出 LAB/templates/ 內所有 *.scheme.yaml。
+# 可直接修改或另存新檔；run: 沒寫的欄位使用 settings.yaml run_defaults。
+# flux：大範圍掃電流（磁場）、VNA 寬頻，看整體的 flux map（模式隨磁場的變化），掃完存一個檔。
+scheme: 1
+name: flux
+blocks:
+- kind: set
+  id: a6set001
+  target: magnet_A
+  mode: sweep
+  start: 0
+  stop: 200
+  step: 1
+  unit: mA
+  settle: 0.1
+  axis_name: Average Current
+  children:
+  - kind: measure
+    id: a6meas01
+    instrument: VNA1
+    traces:
+    - S21
+    settings:
+      start_freq: 4 GHz
+      stop_freq: 6 GHz
+      points: 2001
+      power: -10 dBm
+      if_bw: 10 kHz
+      averages: 1
+- kind: save
+  id: a6save01
+  file_name: flux.hdf5
+  formats:
+  - netcdf
+  collision: underscore

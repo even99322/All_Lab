@@ -1,7 +1,7 @@
 """Viewer plot configuration and the numeric processing it drives.
 
 Pure numpy, no GUI.  The processing order for a trace or map is:
-complex rotation -> component (Re/Im/Mag/Phase) -> dB / unwrap ->
+phase delay / complex rotation -> component (Re/Im/Mag/Phase) -> dB / unwrap ->
 Operation along X -> Smooth along X -> (2D) Third-dimension Operation /
 Smooth along Y -> equations.
 """
@@ -19,6 +19,7 @@ OP_NONE, OP_SUB_MEAN, OP_NORMALIZE, OP_DDX, OP_FFT, OP_HIST, OP_HIST2D = OPERATI
 
 @dataclass
 class PlotConfig:
+    phase_delay_ns: float = 0.0      # v2.1.6: electrical delay τ removed as exp(+i·2π·f·τ), f from the X axis
     rotation_per_x: float = 0.0      # degrees per x unit
     fixed_rotation: float = 0.0      # degrees
     auto_rotate: bool = False
@@ -68,7 +69,50 @@ class PlotConfig:
         return config
 
     def rotates(self) -> bool:
-        return bool(self.rotation_per_x or self.fixed_rotation or self.auto_rotate)
+        return bool(self.phase_delay_ns or self.rotation_per_x or self.fixed_rotation or self.auto_rotate)
+
+
+# ---- phase delay (electrical delay) -----------------------------------------------------
+
+_HZ = {"hz": 1.0, "khz": 1e3, "mhz": 1e6, "ghz": 1e9, "thz": 1e12}
+
+
+def hz_per_x_unit(x_unit: str | None) -> float:
+    """Hz per X unit (X in GHz → 1e9). Unknown or missing unit: X is taken as Hz."""
+    return _HZ.get(str(x_unit or "").strip().casefold(), 1.0)
+
+
+def delay_phasor(x, phase_delay_ns: float, x_unit: str | None = None) -> np.ndarray:
+    """exp(+i·2π·f·τ): multiplying by it removes the linear phase −2π·f·τ of a cable / line delay τ."""
+    f = np.asarray(x, dtype=float) * hz_per_x_unit(x_unit)
+    return np.exp(2j * np.pi * f * float(phase_delay_ns) * 1e-9)
+
+
+def calculate_phase_delay_ns(x, z, x_unit: str | None = None) -> float:
+    """τ (ns) from the slope of the unwrapped phase versus frequency.
+
+    With 20 points or more only the outer 15 % at each end are fitted, so a resonance in the middle of the
+    sweep does not bend the line. Returns 0 when it cannot be fitted."""
+    x = np.asarray(x, dtype=float).reshape(-1)
+    z = np.asarray(z).reshape(-1)
+    if x.size != z.size or not np.iscomplexobj(z):
+        return 0.0
+    ok = np.isfinite(x) & np.isfinite(z) & (np.abs(z) > 0)
+    x, z = x[ok], z[ok]
+    if x.size < 2:
+        return 0.0
+    order = np.argsort(x)
+    x, z = x[order], z[order]
+    phase = np.unwrap(np.angle(z))
+    f = x * hz_per_x_unit(x_unit)
+    if f.size >= 20:
+        edge = max(3, int(round(f.size * 0.15)))
+        pick = np.r_[0:edge, f.size - edge:f.size]
+        f, phase = f[pick], phase[pick]
+    if np.ptp(f) == 0:
+        return 0.0
+    slope = np.polyfit(f, phase, 1)[0]                 # rad / Hz
+    return float(-slope / (2 * np.pi) * 1e9)
 
 
 # ---- complex rotation ---------------------------------------------------------
@@ -126,12 +170,14 @@ def calculate_fixed_rotation(x, z, rotation_per_x: float = 0.0) -> float:
     return float(np.rad2deg(np.angle(mean))) if mean != 0 else 0.0
 
 
-def rotate_complex(x, z, config: PlotConfig) -> np.ndarray:
-    """Apply Rotation/x, Fixed rotation and Auto-rotate to complex data."""
+def rotate_complex(x, z, config: PlotConfig, x_unit: str | None = None) -> np.ndarray:
+    """Apply Phase delay, Rotation/x, Fixed rotation and Auto-rotate to complex data."""
     z = np.asarray(z)
     if not np.iscomplexobj(z) or not config.rotates():
         return z
     out = z
+    if config.phase_delay_ns:
+        out = out * delay_phasor(x, config.phase_delay_ns, x_unit)
     if config.rotation_per_x or config.fixed_rotation:
         out = out * rotation_phasor(x, config.rotation_per_x, config.fixed_rotation)
     if config.auto_rotate:

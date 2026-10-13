@@ -15,7 +15,7 @@ class PlotConfigPanel(QWidget):
     """Edits one PlotConfig; emits ``changed`` (debounced) and ``calculate_requested``."""
 
     changed = Signal()
-    calculate_requested = Signal(str)      # "rotation_per_x" | "fixed_rotation"
+    calculate_requested = Signal(str)      # "phase_delay" | "rotation_per_x" | "fixed_rotation"
     db_toggled = Signal(bool)              # "Plot in dB" ticked / unticked
     third_channel_selected = Signal(str)   # the user picked another heatmap Y axis
 
@@ -35,6 +35,23 @@ class PlotConfigPanel(QWidget):
         self.fixed_group = QGroupBox("Fixed Rotation")
         form = QFormLayout(self.fixed_group)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        # v2.1.6: Phase delay — remove the electrical (cable) delay τ: z·exp(+i·2π·f·τ), f = the X axis
+        self.phase_delay_spin = QDoubleSpinBox()
+        self.phase_delay_spin.setRange(-1e5, 1e5)
+        self.phase_delay_spin.setDecimals(4)
+        self.phase_delay_spin.setSingleStep(0.1)
+        self.phase_delay_spin.setSuffix(" ns")
+        self.phase_delay_spin.setKeyboardTracking(False)
+        self.phase_delay_spin.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.phase_delay_spin.setObjectName("phaseDelaySpin")
+        self.phase_delay_spin.setToolTip(
+            "Electrical delay τ removed from complex data before Re/Im/Mag/Phase: z·exp(+i·2π·f·τ).\n"
+            "f is the X axis (its unit Hz / MHz / GHz is taken into account). "
+            "Calculate fits τ to the phase slope at both ends of the sweep."
+        )
+        self.phase_delay_calc = QPushButton("Calculate")
+        self.phase_delay_calc.setObjectName("phaseDelayCalculate")
+        form.addRow("Phase delay", self._with_button(self.phase_delay_spin, self.phase_delay_calc))
         self.rotation_per_x_spin = self._angle_spin(1e6)
         self.rotation_per_x_calc = QPushButton("Calculate")
         form.addRow("Rotation/x", self._with_button(self.rotation_per_x_spin, self.rotation_per_x_calc))
@@ -104,7 +121,7 @@ class PlotConfigPanel(QWidget):
         self.third_group.setVisible(two_d)
         self.unwrap_angle_check.setVisible(two_d)
 
-        for spin in (self.rotation_per_x_spin, self.fixed_rotation_spin):
+        for spin in (self.phase_delay_spin, self.rotation_per_x_spin, self.fixed_rotation_spin):
             spin.valueChanged.connect(self._edited)
         for spin in (self.bins_spin, self.smooth_spin, self.third_smooth_spin):
             spin.valueChanged.connect(self._edited)
@@ -113,6 +130,7 @@ class PlotConfigPanel(QWidget):
             check.toggled.connect(self._edited)
         for combo in (self.operation_combo, self.third_operation_combo):
             combo.currentIndexChanged.connect(self._edited)
+        self.phase_delay_calc.clicked.connect(lambda: self.calculate_requested.emit("phase_delay"))
         self.rotation_per_x_calc.clicked.connect(lambda: self.calculate_requested.emit("rotation_per_x"))
         self.fixed_rotation_calc.clicked.connect(lambda: self.calculate_requested.emit("fixed_rotation"))
         self.operation_combo.currentIndexChanged.connect(self._update_visibility)
@@ -170,12 +188,13 @@ class PlotConfigPanel(QWidget):
         self._loading = True
         try:
             widgets = (
-                self.rotation_per_x_spin, self.fixed_rotation_spin, self.auto_rotate_check,
+                self.phase_delay_spin, self.rotation_per_x_spin, self.fixed_rotation_spin, self.auto_rotate_check,
                 self.unwrap_angle_check, self.operation_combo, self.bins_spin, self.smooth_spin,
                 self.show_individual_check, self.third_operation_combo,
                 self.third_smooth_spin, self.show_trace_list_check, self.ignore_x_check,
             )
             blockers = [QSignalBlocker(widget) for widget in widgets]
+            self.phase_delay_spin.setValue(config.phase_delay_ns)
             self.rotation_per_x_spin.setValue(config.rotation_per_x)
             self.fixed_rotation_spin.setValue(config.fixed_rotation)
             self.auto_rotate_check.setChecked(config.auto_rotate)
@@ -195,6 +214,7 @@ class PlotConfigPanel(QWidget):
 
     def config(self) -> PlotConfig:
         return PlotConfig(
+            phase_delay_ns=self.phase_delay_spin.value(),
             rotation_per_x=self.rotation_per_x_spin.value(),
             fixed_rotation=self.fixed_rotation_spin.value(),
             auto_rotate=self.auto_rotate_check.isChecked(),

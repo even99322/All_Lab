@@ -16,9 +16,27 @@ from ....scheme.graph import BODY, NEXT, START, SchemeGraph
 from ....settings import setting
 
 
+#: 0.0.31：快速調整面板記錄的欄位（改過 QUICK_MIN 次以上就列出）
+QUICK_FIELDS = {"set": ("value", "start", "stop", "step", "points", "settle"), "wait": ("seconds",)}
+QUICK_MIN = 2
+
+
+def quick_values(scheme: Scheme) -> Dict[str, Any]:
+    """「方塊id.欄位」→ 值（量測方塊的設定是「方塊id.settings.鍵」）。"""
+    out: Dict[str, Any] = {}
+    for b in scheme.flat():
+        for f in QUICK_FIELDS.get(b.kind, ()):
+            out[f"{b.id}.{f}"] = getattr(b, f, None)
+        if b.kind == "measure":
+            for k, v in (b.settings or {}).items():
+                out[f"{b.id}.settings.{k}"] = v
+    return out
+
+
 class WorkbenchDoc(QObject):
     changed = pyqtSignal(object)
     selection_changed = pyqtSignal(object)
+    remapped = pyqtSignal(dict)                  # 0.0.31：方案的儀器自動換成這台的 {舊: 新}
 
     def __init__(self, scheme: Scheme, catalog: Catalog, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -31,6 +49,8 @@ class WorkbenchDoc(QObject):
         self.dirty = False
         self._undo: List[dict] = []
         self._redo: List[dict] = []
+        #: instruments.yaml 各量測電腦的電磁鐵組 / VNA（scheme.remap.role_lists）；有的話換儀器時自動對應
+        self.roles: Dict[str, Dict[str, List[str]]] = {}
         self.result: CompileResult = compile_scheme(self.scheme, catalog)
 
     # ---- 讀取 -------------------------------------------------------------
@@ -44,10 +64,17 @@ class WorkbenchDoc(QObject):
     # ---- 修改 -------------------------------------------------------------
     def mutate(self, fn: Callable[[Scheme], Any], origin: object = None, select: Any = "keep") -> Any:
         snap = self.scheme.to_dict()
+        before = quick_values(self.scheme)
         out = fn(self.scheme)
         self.scheme.sync_from_graph()
         if self.scheme.to_dict() == snap:
             return out
+        after = quick_values(self.scheme)
+        for k, v in after.items():                     # 0.0.31：記住常改的欄位（快速調整面板）
+            if k in before and before[k] != v and self.scheme.quick.get(k, 0) >= 0:
+                self.scheme.quick[k] = self.scheme.quick.get(k, 0) + 1
+        for k in [k for k in self.scheme.quick if k not in after]:
+            del self.scheme.quick[k]                   # 方塊刪掉了
         self._undo.append(snap)
         del self._undo[:-300]
         self._redo.clear()
@@ -63,9 +90,26 @@ class WorkbenchDoc(QObject):
             s.graph.pos.update(positions)
         self.mutate(fn, origin)
 
+    def remap(self) -> Dict[str, str]:
+        """方案裡這台沒有的電磁鐵組 / VNA → 換成這台的對應儀器（LAB-1 的 magnet_A ↔ LAB-2 的 magnet_C…）。"""
+        if not self.roles:
+            return {}
+        from ....scheme.remap import remap_scheme
+
+        m = remap_scheme(self.scheme, self.catalog, self.roles)
+        if m:
+            self.remapped.emit(m)
+        return m
+
     def replace_scheme(self, scheme: Scheme, path: Optional[str] = None) -> None:
         scheme.ensure_graph()
         scheme.sync_from_graph()
+        if self.roles:
+            from ....scheme.remap import remap_scheme
+
+            m = remap_scheme(scheme, self.catalog, self.roles)
+            if m:
+                self.remapped.emit(m)
         self._undo.clear()
         self._redo.clear()
         self.scheme = scheme
@@ -77,6 +121,7 @@ class WorkbenchDoc(QObject):
 
     def set_catalog(self, catalog: Catalog) -> None:
         self.catalog = catalog
+        self.remap()
         self._after_change(None)
 
     def undo(self) -> None:

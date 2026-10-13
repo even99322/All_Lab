@@ -144,6 +144,8 @@ class Scheme:
     output: Dict[str, Any] = field(default_factory=dict)   # 檔案設定：file_name、formats、root、project、tags…
     notes: str = ""
     graph: Optional[Any] = None              # SchemeGraph（節點位置與連線）；None = 舊格式純方塊樹
+    template: str = ""                       # 0.0.31：從哪個範本來（02_2d…）；專案範本用它同步
+    quick: Dict[str, int] = field(default_factory=dict)   # 0.0.31：「方塊id.欄位」→ 改過幾次（快速調整面板）
 
     def sync_from_graph(self) -> None:
         """由節點圖重建方塊樹（編輯器每次修改後呼叫）。"""
@@ -326,6 +328,10 @@ class Scheme:
             d["output"] = dict(self.output)
         if self.notes:
             d["notes"] = self.notes
+        if self.template:
+            d["template"] = self.template
+        if self.quick:
+            d["quick"] = dict(self.quick)
         return d
 
     @classmethod
@@ -341,7 +347,9 @@ class Scheme:
         return cls(name=d.get("name", "新量測方案"), blocks=blocks,
                    snake=bool(d.get("snake", False)), run={**DEFAULT_RUN, **(d.get("run") or {})},
                    hooks=list(d.get("hooks") or []), output=dict(d.get("output") or {}),
-                   notes=d.get("notes", ""), graph=graph)
+                   notes=d.get("notes", ""), graph=graph, template=str(d.get("template") or ""),
+                   quick={str(k): int(v) for k, v in (d.get("quick") or {}).items()
+                          if isinstance(v, (int, float))})
 
     def save(self, path: str | Path) -> None:
         import yaml

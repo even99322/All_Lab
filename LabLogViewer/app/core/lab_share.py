@@ -74,3 +74,43 @@ def mount_macos(host: str = HOSTS[1]) -> bool:
         return True
     except OSError:
         return False
+
+
+def local_lab_data() -> Path | None:
+    """v2.1.6: a measurement computer keeps its data in Desktop\\數據集散地 (Lab Control's default)."""
+    env = os.environ.get("LABLOGVIEWER_LOCAL_LAB_DATA")
+    if env:
+        p = Path(env).expanduser()
+        return p if p.is_dir() else None
+    for d in (Path.home() / "Desktop" / FOLDER, Path.home() / "OneDrive" / "Desktop" / FOLDER,
+              Path.home() / "OneDrive" / "桌面" / FOLDER):
+        if d.is_dir():
+            return d
+    return None
+
+
+def default_folder(timeout: float = 3.0) -> str | None:
+    """Where to open data by default: this computer's 數據集散地 (measurement computer), else the NAS one."""
+    local = local_lab_data()
+    if local is not None:
+        return str(local)
+    return find(timeout)
+
+
+def lab_root_of(path: str | Path) -> Path | None:
+    """The 數據集散地 folder that contains path (or is path), else None."""
+    p = Path(path)
+    for cand in [p, *p.parents]:
+        if cand.name == FOLDER:
+            return cand
+    return None
+
+
+def project_folders(root: str | Path) -> list[str]:
+    """Project folders inside a 數據集散地 (not starting with . or _), sorted."""
+    try:
+        return sorted((d.name for d in Path(root).iterdir() if d.is_dir() and not d.name.startswith((".", "_"))),
+                      key=str.casefold)
+    except OSError:
+        return []
+

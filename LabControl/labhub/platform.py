@@ -269,6 +269,18 @@ class Platform:
         self._views_lock = threading.Lock()
         self._views_timer: Optional[threading.Timer] = None
         self._proj_cache: Tuple[float, List[Dict[str, Any]]] = (0.0, [])
+        # 0.0.31：論文庫的服務帳號（量測電腦沒有登入時，Hub 用它查專案）；帳密只在 NAS 的 docker-compose 環境變數
+        # 也可以在網頁控制台設定：存在 Hub 資料夾 paperlib_service.json（只有 NAS 上有）
+        self.service_user = os.environ.get("LABHUB_PAPERLIB_SERVICE_USER", "").strip()
+        self._service_password = os.environ.get("LABHUB_PAPERLIB_SERVICE_PASSWORD", "")
+        self._service_session: Optional[str] = None
+        self._service_file = self.data_dir / "paperlib_service.json"
+        if not self.service_user and self._service_file.is_file():
+            try:
+                d = json.loads(self._service_file.read_text(encoding="utf-8"))
+                self.service_user, self._service_password = str(d.get("user") or ""), str(d.get("password") or "")
+            except (OSError, ValueError):
+                pass
 
     @property
     def paperlib_public(self) -> str:
@@ -737,13 +749,81 @@ class Platform:
         return item
 
     # ---- 專案（論文庫 paperlib 1.6+ 的「專案專區」）------------------------------------------
+    def service_info(self) -> Dict[str, Any]:
+        return {"user": self.service_user, "configured": bool(self.service_user and self._service_password),
+                "from_env": bool(os.environ.get("LABHUB_PAPERLIB_SERVICE_USER"))}
+
+    def set_service_account(self, by: str, user: str, password: str) -> Dict[str, Any]:
+        """站長在控制台設定論文庫服務帳號（帳密只存在 NAS 的 Hub 資料夾）；先試登入，成功才存。"""
+        user = (user or "").strip()
+        if not user:
+            self._service_file.unlink(missing_ok=True)
+            self.service_user, self._service_password, self._service_session = "", "", None
+            self.audit(by, "paperlib-service", "清除")
+            return self.service_info()
+        pl = self.need_paperlib()
+        try:
+            sess, _ = pl.login(user, password)
+        except PlatformError as e:                          # 401 會讓網頁以為自己被登出：改成 400
+            raise PlatformError(400 if e.code == 401 else e.code, f"論文庫登入失敗：{e}") from None
+        tmp = self._service_file.with_suffix(".tmp")
+        tmp.write_text(json.dumps({"user": user, "password": password}), encoding="utf-8")
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            pass
+        os.replace(tmp, self._service_file)
+        with self.lock:
+            self.service_user, self._service_password, self._service_session = user, password, sess
+            self._proj_cache = (0.0, self._proj_cache[1])
+        self.audit(by, "paperlib-service", user)
+        return self.service_info()
+
+    def service_session(self, renew: bool = False) -> Optional[Dict[str, Any]]:
+        """論文庫服務帳號的 session（{"pl_session": …}）；沒有設定 / 登入失敗 → None。"""
+        if self.paperlib is None or not self.service_user or not self._service_password:
+            return None
+        with self.lock:
+            if self._service_session is None or renew:
+                try:
+                    self._service_session, _ = self.paperlib.login(self.service_user, self._service_password)
+                except PlatformError as e:
+                    log.warning("論文庫服務帳號 %s 登入失敗：%s", self.service_user, e)
+                    self._service_session = None
+            return {"pl_session": self._service_session} if self._service_session else None
+
     def _paperlib_projects(self, sess: Optional[Dict[str, Any]], force: bool = False) -> List[Dict[str, Any]]:
         at, cached = self._proj_cache
+        if sess is None and self.paperlib is not None:
+            sess = self.service_session()                   # 0.0.31：沒有使用者登入 → 用服務帳號查
+            if sess is not None:
+                try:
+                    return self._fetch_projects(sess, force)
+                except PlatformError as e:
+                    if e.code == 501:
+                        raise
+                    retry = self.service_session(renew=True) if e.code == 401 else None   # session 過期：重登一次
+                    if retry is not None:
+                        try:
+                            return self._fetch_projects(retry, force)
+                        except PlatformError:
+                            pass
+                sess = None
         if sess is None or self.paperlib is None:
             if not cached:                                  # 裝置 token：用最近一次記住的專案
                 with self._con() as con:
                     cached = [json.loads(r["info"]) for r in con.execute("SELECT info FROM projects_cache")]
             return cached
+        try:
+            return self._fetch_projects(sess, force)
+        except PlatformError as e:
+            if e.code != 401:
+                raise
+            log.warning("讀取論文庫專案失敗：%s", e)
+            return cached
+
+    def _fetch_projects(self, sess: Dict[str, Any], force: bool = False) -> List[Dict[str, Any]]:
+        at, cached = self._proj_cache
         if not force and time.time() - at < 20 and cached:
             return cached
         try:
@@ -752,6 +832,8 @@ class Platform:
         except PlatformError as e:
             if e.code == 404:
                 raise PlatformError(501, "論文庫沒有「專案專區」（需要 paperlib 1.6 以上）") from None
+            if e.code == 401:
+                raise
             log.warning("讀取論文庫專案失敗：%s", e)
             return cached
         projects = [{"id": str(p.get("id")), "name": p.get("name") or "", "short_name": p.get("short_name") or "",

@@ -50,7 +50,7 @@ def test_graph_editing_rules():
 
 
 def test_scheme_v2_file_roundtrip(tmp_path):
-    s = TEMPLATES["2d_file_per_outer"][1]()
+    s = TEMPLATES["04_two_layer_split"][1]()
     s.ensure_graph()
     s.graph.pos[s.blocks[0].id] = (123.0, 45.0)
     p = tmp_path / "x.scheme.yaml"

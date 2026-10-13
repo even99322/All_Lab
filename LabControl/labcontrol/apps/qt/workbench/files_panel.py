@@ -10,13 +10,13 @@ from __future__ import annotations
 
 import datetime as _dt
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt
 
 from ....core.units import parse_quantity
-from ....data.naming import (data_root, day_folder, folder_pattern, list_project_folders,
+from ....data.naming import (DEFAULT_PATTERN, data_root, day_folder, folder_pattern, list_project_folders,
                              project_folder, project_folder_name, remember_folder, remembered_folder,
                              stale_date_in_filename)
 from ....scheme.compile import file_settings, format_duration
@@ -34,10 +34,15 @@ from ....measure.experiment import raw_backup  # noqa: E402
 
 
 class FilePanel(QtWidgets.QTabWidget):
+    #: 0.0.31：論文庫專案要換了（舊的專案 dict 或 None）／已經換好（新的）——專案範本同步用
+    project_changing = QtCore.pyqtSignal(object)
+    project_changed = QtCore.pyqtSignal(object)
     def __init__(self, doc: WorkbenchDoc, parent=None) -> None:
         super().__init__(parent)
         self.doc = doc
         self._loading = False
+        #: 0.0.31：在量測電腦（節點）上執行時：(節點名稱, 節點回報的存檔資訊 {root, pattern, sep, folders} 或 None)
+        self.remote: Optional[tuple] = None
         self.addTab(self._file_tab(), "檔案")
         self.addTab(self._run_tab(), "執行")
         self.addTab(self._check_tab(), "檢查與估時")
@@ -88,6 +93,7 @@ class FilePanel(QtWidgets.QTabWidget):
         self.root = QtWidgets.QLineEdit()
         browse = QtWidgets.QToolButton()
         browse.setText("…")
+        self._browse_btn = browse
         self.pattern = QtWidgets.QLineEdit()
         self.collision = QtWidgets.QComboBox()
         for k, v in COLLISIONS:
@@ -158,7 +164,8 @@ class FilePanel(QtWidgets.QTabWidget):
         self._fname_timer.timeout.connect(self._commit_fname)
         self.fname.textEdited.connect(lambda _t: self._fname_timer.start(400))
         self.date_hint.clicked.connect(self._fix_date)
-        self.root.editingFinished.connect(lambda: (self._out("root", self.root.text().strip()), self._fill_folders()))
+        self.root.editingFinished.connect(lambda: self.remote is None and (
+            self._out("root", self.root.text().strip()), self._fill_folders()))
         browse.clicked.connect(self._browse)
         self.pattern.editingFinished.connect(lambda: (self._out("folder_pattern", self.pattern.text().strip()),
                                                       self._fill_folders()))
@@ -236,6 +243,8 @@ class FilePanel(QtWidgets.QTabWidget):
         out = self.doc.scheme.output
         self._commit_fname()
         for key, widget in (("root", self.root), ("folder_pattern", self.pattern), ("project", self.project)):
+            if key == "root" and self.remote is not None:    # 在量測電腦上執行：根目錄是那台的，不動這台的設定
+                continue
             if widget.text().strip() != (out.get(key) or ""):
                 self._out(key, widget.text().strip())
         if self.proj_folder.currentText().strip() != (out.get("project_folder") or ""):
@@ -315,9 +324,7 @@ class FilePanel(QtWidgets.QTabWidget):
         from ....integrations import platform as plat
 
         self._fill_projects(plat.PROJECTS.items)
-        if plat.current_session() is None:
-            self.lab_project.setToolTip("登入量子工程平台後可以選論文庫的專案")
-            return
+        # 0.0.31：沒有登入也查得到（Hub 用論文庫的服務帳號查）
 
         def ok(items: list) -> None:
             self._fill_projects(items)
@@ -333,6 +340,10 @@ class FilePanel(QtWidgets.QTabWidget):
                 self._fill_projects(self._project_items())
                 return
             d = {"id": str(p["id"]), "name": p["name"]}
+        old = self.current_project() or None
+        if (old or {}).get("id") == ((d or {}).get("id") if isinstance(d, dict) else None):
+            return                                      # 選了同一個專案
+        self.project_changing.emit(old)
         folder = remembered_folder(d["id"]) if isinstance(d, dict) else ""
 
         def fn(s):
@@ -347,6 +358,38 @@ class FilePanel(QtWidgets.QTabWidget):
         self._mutate(fn)
         self._fill_projects(self._project_items())
         self._fill_folders()
+        self.project_changed.emit(d if isinstance(d, dict) else None)
+
+    # ---- 在量測電腦上執行（0.0.31）------------------------------------------------
+    def set_remote(self, name: Optional[str], info: Optional[dict] = None) -> None:
+        """執行位置換到量測電腦 name（None = 這台電腦）：存檔位置改成顯示那台電腦的資料根目錄與專案資料夾。"""
+        self.remote = (name, dict(info) if isinstance(info, dict) else None) if name else None
+        remote = self.remote is not None
+        self.root.setEnabled(not remote)
+        self._browse_btn.setEnabled(not remote)
+        if remote:
+            root = (self.remote[1] or {}).get("root")
+            self.root.setToolTip(f"在量測電腦 {name} 上執行：存到那台電腦自己的資料根目錄（它的 settings.yaml data.root）")
+            self.root.setPlaceholderText(f"量測電腦 {name}：" + (root or "它的 data.root（預設 桌面\\數據集散地）"))
+        else:
+            self.root.setToolTip("")
+            self.root.setPlaceholderText(str(data_root()))
+        self.root.setText("" if remote else self.doc.scheme.output.get("root", ""))
+        self._fill_folders()
+        self._refresh_derived()
+
+    def _remote_folder_text(self, now) -> str:
+        """量測電腦上的存檔資料夾（用那台的路徑格式顯示）。"""
+        name, info = self.remote
+        info = info or {}
+        o = self.doc.scheme.output
+        pattern = o.get("folder_pattern") or info.get("pattern") or DEFAULT_PATTERN
+        from ....data.naming import _fmt_tokens
+
+        sub = pattern.format(**_fmt_tokens(now), project=project_folder(o))
+        root = info.get("root") or "<data.root>"
+        sep = info.get("sep") or ("\\" if "\\" in root or ":" in root[:3] else "/")
+        return f"（量測電腦 {name}）" + root.rstrip("\\/") + sep + sub.replace("/", sep)
 
     # ---- 專案資料夾（0.0.30）-----------------------------------------------------
     def _root(self):
@@ -357,13 +400,16 @@ class FilePanel(QtWidgets.QTabWidget):
         cb = self.proj_folder
         cb.blockSignals(True)
         cb.clear()
-        for name in list_project_folders(self._root()):
+        remote_info = (self.remote[1] or {}) if self.remote else None
+        folders = list(remote_info.get("folders") or []) if remote_info is not None else \
+            list_project_folders(self._root())
+        for name in folders:
             cb.addItem(name)
         cb.setEditText(o.get("project_folder") or "")
         auto = project_folder({k: v for k, v in o.items() if k != "project_folder"})
-        exists = (self._root() / auto).is_dir()
+        exists = auto in folders if remote_info is not None else (self._root() / auto).is_dir()
         cb.lineEdit().setPlaceholderText(f"自動：{auto}" + ("（已有這個資料夾）" if exists else "（會建立）"))
-        uses = "{project}" in folder_pattern(o.get("folder_pattern"))
+        uses = "{project}" in (o.get("folder_pattern") or (remote_info or {}).get("pattern") or folder_pattern())
         cb.setEnabled(uses)
         if not uses:
             cb.lineEdit().setPlaceholderText("資料夾規則沒有 {project}：不分專案資料夾")
@@ -382,6 +428,10 @@ class FilePanel(QtWidgets.QTabWidget):
 
     def _open_folder(self) -> None:
         o = self.doc.scheme.output
+        if self.remote is not None:
+            QtWidgets.QMessageBox.information(self, "存檔資料夾", "量測在別台電腦上執行，存到：\n"
+                                              + self._remote_folder_text(_dt.datetime.now()))
+            return
         folder = day_folder(self._root(), folder_pattern(o.get("folder_pattern")), _dt.datetime.now(),
                             project_folder(o))
         while not folder.is_dir() and folder != folder.parent:       # 還沒建立：打開最近一層已經有的
@@ -458,8 +508,9 @@ class FilePanel(QtWidgets.QTabWidget):
             if not (self.fname.hasFocus() and self._fname_timer.isActive()):    # 正在打的字不要被蓋掉
                 self.fname.setText(o.get("file_name", ""))
             self.fname.setPlaceholderText(fs["file_name"])
-            self.root.setText(o.get("root", ""))
-            self.root.setPlaceholderText(str(data_root()))
+            if self.remote is None:
+                self.root.setText(o.get("root", ""))
+                self.root.setPlaceholderText(str(data_root()))
             self.pattern.setText(o.get("folder_pattern", ""))
             self.pattern.setPlaceholderText(folder_pattern())
             self._fill_folders()
@@ -497,8 +548,11 @@ class FilePanel(QtWidgets.QTabWidget):
         if w:
             self.date_hint.setText(f"⚠ 檔名日期 {w[0]} 不是今天 → 按這裡改成「{w[2]}」")
         try:
-            folder = day_folder(data_root(s.output.get("root") or None), folder_pattern(s.output.get("folder_pattern")),
-                                now, project_folder(s.output))
+            if self.remote is not None:
+                folder = self._remote_folder_text(now)
+            else:
+                folder = day_folder(data_root(s.output.get("root") or None),
+                                    folder_pattern(s.output.get("folder_pattern")), now, project_folder(s.output))
         except Exception as e:  # noqa: BLE001
             folder = Path(f"（資料夾規則錯誤：{e}）")
         if not fs["formats"]:

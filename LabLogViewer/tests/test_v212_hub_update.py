@@ -183,6 +183,8 @@ def test_can_install_only_when_packaged_and_for_this_computer(monkeypatch):
     monkeypatch.setattr(hub_update, "FROZEN", True)
     assert hub_update.can_install(details)
     assert not hub_update.can_install({"install": {"url": "http://h/x.dmg", "platform": "macos"}})
+    assert hub_update.can_install({})             # v2.1.6: no installer in the notice → asked from the hub on click
+    monkeypatch.setattr(hub_update, "this_platform", lambda: "linux")
     assert not hub_update.can_install({})
 
 
@@ -214,6 +216,13 @@ def test_windows_install_runs_the_installer_silently_then_reopens(tmp_path, monk
     assert text.index("tasklist") < text.index("/SILENT") < text.index('start ""')
     assert "LabLogViewer.exe" in text.splitlines()[-1]
     assert started == [["cmd.exe", "/c", str(script)]]
+    # v2.1.5: no console windows ('find "34396"'), never waits forever, failed install -> visible installer
+    assert "taskkill /F /T /PID %PID%" in text and "GEQ 45" in text and 'find /I """%PID%"""' in text
+    assert f'if not exist "C:\\Users\\lab\\AppData\\Local\\Programs\\LabLogViewer\\LabLogViewer.exe" (start "" "{setup}"' in text
+    flags = hub_update._hidden_cmd(windows=True)["creationflags"]
+    assert flags & hub_update.CREATE_NO_WINDOW and not flags & 0x00000008
+    raw = script.read_bytes()
+    assert raw.count(b"\n") == raw.count(b"\r\n")
 
 
 def test_install_refuses_when_running_from_python(monkeypatch):

@@ -141,9 +141,13 @@ def test_remote_run_live_feed_and_files(node, hub, tmp_path):
     seen = []
     bus.subscribe("*", lambda t, p: seen.append((t, p)))
     feed = LiveFeed(hub, "QEL-PC", bus)
+    from labcontrol.data.naming import data_root
+
     sch = _scheme()
-    sch.output["root"] = str(tmp_path / "data")
+    sch.output["root"] = str(tmp_path / "client-only")       # 控制端自己的路徑：節點不用（0.0.31）
+    node_root = data_root()                                   # 節點的 settings.yaml data.root
     res = rn.call("run_scheme", timeout=20, scheme=sch.to_dict())
+    assert res["folder"].startswith(str(node_root))
     assert res["run_id"] and res["file_name"] == "remote.hdf5"
     assert _wait(lambda: (feed.poll(wait=1) or True) and any(t == "remote.files" for t, _ in seen), 30)
     topics = [t for t, _ in seen]
@@ -152,19 +156,20 @@ def test_remote_run_live_feed_and_files(node, hub, tmp_path):
     assert started["dataset"].axes[0].name and len(started["dataset"].plan) == 5
     shot = next(p for t, p in seen if t == "point.shot")
     assert shot["shot"]["S21"].size == 101 and shot["shot"]["S21"].dtype.kind == "c"
-    assert list((tmp_path / "data").rglob("remote.h5"))          # 節點自己存檔
+    assert list(node_root.rglob("remote*.h5")) and not (tmp_path / "client-only").exists()   # 存在節點的資料根目錄
     files = next(p for t, p in seen if t == "remote.files")["files"]
     rels = [f["rel"] for f in files]
-    assert any(r.endswith("remote.h5") and "/" in r for r in rels)   # 保留資料夾結構（相對資料根目錄）
+    assert any(r.split("/")[-1].startswith("remote") and r.endswith(".h5") and "/" in r for r in rels)   # 保留資料夾結構（相對資料根目錄）
     assert not any("_raw/" in r for r in rels)                       # 0.0.28：預設不另存 _raw/
     listed = hub.files("QEL-PC")
     assert {f["rel"] for f in listed} >= set(rels)
     dst = hub.download(files[0]["url"], tmp_path / "dl" / "x.h5")    # 控制端下載
-    src = next((tmp_path / "data").rglob(files[0]["rel"].split("/")[-1]))
+    src = node_root / files[0]["rel"]
     assert dst.read_bytes() == src.read_bytes()
     assert _wait(lambda: ((rn.status() or {}).get("run") or {}).get("status") == "finished", 5)
     st = rn.status()
     assert "@" in st["run"]["by"]
+    assert st["data"]["root"] == str(node_root) and "{project}" in st["data"]["pattern"]   # 0.0.31：存檔位置
     assert any("已上傳" in (l.get("message") or "") for l in st["log"])     # 網頁顯示節點訊息
 
 
@@ -274,9 +279,13 @@ def test_gui_run_on_node(hubsrv, tmp_path, monkeypatch):
     B.target.setCurrentIndex(1)
     assert _wait(lambda: (pump(0.2) or True) and B.remote_target is not None, 10)
     assert B.doc.result.ok
+    # 0.0.31：檔案設置顯示的是量測電腦的存檔位置，資料根目錄欄位不能改
+    assert B.files.remote and B.files.remote[0] == B.remote_target
+    assert "量測電腦" in B.files.where.text() and str(tmp_path / "data") not in B.files.where.text()
+    assert not B.files.root.isEnabled()
     B.start_measurement()
     assert _wait(lambda: (pump(0.2) or True) and B.monitor.progress.value() == 7, 20)
-    assert _wait(lambda: (pump(0.2) or True) and list((tmp_path / "downloads").rglob("remote.h5")), 15)
+    assert _wait(lambda: (pump(0.2) or True) and list((tmp_path / "downloads").rglob("remote*.h5")), 15)
     devs = hub.state()["devices"]
     assert len([d for d in devs if d["online"]]) >= 1 and any(d.get("role") == "node" for d in devs)
     for w in (B, A):

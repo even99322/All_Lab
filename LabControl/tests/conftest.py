@@ -20,7 +20,8 @@ os.environ.pop("QEL_GATEWAY", None)
 os.environ.pop("QEL_TOKEN", None)
 os.environ.pop("QEL_OPEN", None)
 with open(os.path.join(_LAB, "settings.yaml"), "w", encoding="utf-8") as _f:
-    _f.write("labber: {python38: ''}\ndata: {root: '" + os.path.join(_LAB, "data").replace("\\", "/") + "'}\n")
+    _f.write("labber: {python38: ''}\ndata: {root: '" + os.path.join(_LAB, "data").replace("\\", "/") + "'}\n"
+             "lablogviewer: {open_after_measure: false}\n")
 
 from labcontrol import Station  # noqa: E402
 

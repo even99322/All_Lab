@@ -93,6 +93,39 @@ class ToolWindow(QtWidgets.QMainWindow):
         self.activateWindow()
 
 
+class _DataDropFilter(QtCore.QObject):
+    """拖進來的數據檔（.nc / .hdf5 / .h5，或平台的數據）→ 套用設定；程式內部的拖曳（參數、節點）不攔。"""
+
+    def __init__(self, win) -> None:
+        super().__init__(win)
+        self.w = win
+
+    def _mine(self, obj) -> bool:
+        if not isinstance(obj, QtWidgets.QWidget):
+            return False
+        top = obj.window()
+        return top is self.w or top in (getattr(self.w, "live_window", None), getattr(self.w, "measure_window", None))
+
+    def eventFilter(self, obj, ev) -> bool:  # noqa: N802
+        t = ev.type()
+        if t not in (QtCore.QEvent.Type.DragEnter, QtCore.QEvent.Type.DragMove, QtCore.QEvent.Type.Drop):
+            return False
+        if ev.source() is not None or not self._mine(obj):
+            return False
+        md = ev.mimeData()
+        if not (md.hasUrls() or md.hasFormat("application/x-qel-data")) or not self.w.platform.accepts(md):
+            return False
+        ev.acceptProposedAction()
+        if t == QtCore.QEvent.Type.Drop:
+            self.w.raise_()
+            self.w.activateWindow()
+            if self.w.monitor.busy:
+                QtWidgets.QMessageBox.information(self.w, "套用設定", "量測進行中：量完再套用設定。")
+            else:
+                self.w.platform.drop(md)
+        return True
+
+
 class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
     def __init__(self, station: Station, scheme: Optional[Scheme] = None, root: Optional[str] = None) -> None:
         super().__init__()
@@ -104,8 +137,17 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         self.flow = FlowPanel(self.doc)
         self.local_channels = self.channels = ChannelPanel(self.doc, station)
         self.local_monitor = self.monitor = MonitorPanel(station)
+        from ....scheme.remap import role_lists
+
+        self.doc.roles = role_lists(station.config.get("instruments") or {})   # 0.0.31：依量測電腦換儀器
+        self.doc.remapped.connect(self._remapped)
+        self.doc.remap()
         self.files = FilePanel(self.doc)
+        from .project_sync import ProjectTemplateSync
+
+        self.project_sync = ProjectTemplateSync(self)        # 0.0.31：專案範本（Hub 共用、自動寫回）
         self.channels.edit_requested.connect(self.flow.view.edit_node)
+        self.flow.view.rename_group.connect(self.rename_magnet_group)
         self.monitor.start_requested.connect(self.start_measurement)
         self.monitor.finished.connect(lambda _s: self._refresh(preview=False))   # 保留結果畫面
         self.chan_stack = QtWidgets.QStackedWidget()      # 本機 / 遠端節點的儀器參數列表
@@ -166,6 +208,12 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         install_resize_hook(self, self.updates)
         self.files.addTab(self.platform.recent, "已存的數據")
         self.setAcceptDrops(True)
+        # 0.0.31：從讀檔程式（或檔案總管）拖數據到 Lab Control 的任何視窗（主視窗、即時數據、量測監控、
+        # 流程圖、欄位上）都套用它的量測設定
+        self._drop_filter = _DataDropFilter(self)
+        QtWidgets.QApplication.instance().installEventFilter(self._drop_filter)
+        for w in (self.live_window, self.measure_window):
+            w.setAcceptDrops(True)
         self._refresh()
 
     # ---- 工具列 -------------------------------------------------------------
@@ -192,6 +240,8 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         tb.addAction("開啟…", self.open_scheme).setShortcut("Ctrl+O")
         tb.addAction("儲存", self.save_scheme).setShortcut("Ctrl+S")
         tb.addAction("另存…", lambda: self.save_scheme(ask=True))
+        a = tb.addAction("📦 專題歸檔", self.open_archive)
+        a.setToolTip("選數據檔或整個資料夾，複製到 NAS 數據集散地／專案（保留日期資料夾）")
         tb.addSeparator()
         tb.addAction("復原", self.doc.undo).setShortcut("Ctrl+Z")
         tb.addAction("重做", self.doc.redo).setShortcut("Ctrl+Y")
@@ -285,8 +335,13 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
     def _fill_templates(self, menu: QtWidgets.QMenu) -> None:
         menu.clear()
         items = list(TEMPLATES.items())
+        p = self.project_sync.project()
+        if p:
+            menu.addSection(f"專案「{p.get('name') or p['id']}」的範本")
         for key, (label, fn) in items:
-            menu.addAction(label, lambda fn=fn: self._load_scheme(fn(), None))
+            a = menu.addAction(label, lambda k=key: self.project_sync.load_template(k))
+            a.setCheckable(True)
+            a.setChecked(key == self.doc.scheme.template)
         if not items:
             menu.addAction("（LAB/templates 沒有範本）").setEnabled(False)
         menu.addSeparator()
@@ -318,6 +373,43 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
             return True
         r = QtWidgets.QMessageBox.question(self, "未儲存", "目前方案尚未儲存，確定要放棄修改？")
         return r == QtWidgets.QMessageBox.StandardButton.Yes
+
+    def open_archive(self, sources=None) -> None:
+        from ..archive_dialog import ArchiveDialog
+
+        ArchiveDialog(self, project=self.files.current_project() or None, sources=sources).exec()
+
+    def rename_magnet_group(self, ref: str) -> None:
+        """0.0.31：改電磁鐵組的顯示名稱（instruments.yaml 的 label；流程圖、資料軸名稱都用它）。"""
+        from ....core.config import set_instrument_label
+
+        t = self.doc.catalog.target(ref)
+        cur = t.label if t else ref
+        name, ok = QtWidgets.QInputDialog.getText(self, "電磁鐵組名稱", f"{ref} 的名稱：", text=cur)
+        name = (name or "").strip()
+        if not ok or not name or name == cur:
+            return
+        if getattr(self, "remote_target", None):
+            QtWidgets.QMessageBox.information(self, "電磁鐵組名稱", "請在那台量測電腦上改（它的 instruments.yaml）。")
+            return
+        from ....settings import setting
+
+        path = lab_path(setting("app.instruments_file", "instruments.yaml"))
+        try:
+            path.write_text(set_instrument_label(path.read_text(encoding="utf-8"), ref, name), encoding="utf-8")
+        except Exception as e:  # noqa: BLE001
+            QtWidgets.QMessageBox.warning(self, "電磁鐵組名稱", f"無法修改 instruments.yaml：{e}")
+            return
+        inst = self.station.instruments.get(ref)
+        if inst is not None:
+            inst.options["label"] = name
+        self.doc.set_catalog(build_catalog(self.station))
+        self.statusBar().showMessage(f"✔ {ref} 改名為「{name}」（instruments.yaml）", 8000)
+
+    def _remapped(self, m: dict) -> None:
+        txt = "、".join(f"{a}→{b}" for a, b in m.items())
+        if hasattr(self, "statusBar"):
+            self.statusBar().showMessage(f"🔁 方案的儀器換成這台的：{txt}", 10000)
 
     def _load_scheme(self, scheme: Scheme, path: Optional[str]) -> None:
         if self._confirm_discard():
@@ -493,6 +585,8 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
             return
         if getattr(self, "local_link", None) is not None:
             self.local_link.stop()
+        if getattr(self, "_drop_filter", None) is not None:
+            QtWidgets.QApplication.instance().removeEventFilter(self._drop_filter)
         self._shutdown_remote()
         self.updates.stop()
         self.platform.close()
