@@ -51,6 +51,15 @@ class RemoteManager(QObject):
         self.timer.start(int(max(1.0, float(setting("remote.heartbeat_s", 2))) * 1000))
         self.retry = QtCore.QTimer(self)
         self.retry.timeout.connect(self.find)
+        # 1.0.4：手機看即時量測（Hub /m）——這台的量測摘要定期送到 Hub
+        self._live_name: Optional[str] = None
+        self.live = None
+        if station is not None and setting("remote.mobile_live", True):
+            from ....remote.live_publish import LivePublisher
+
+            self.live = LivePublisher(station, lambda: self.hub, lambda: self._live_name,
+                                      interval=float(setting("remote.mobile_live_interval_s", 1.0))).start()
+            self._update_live_name()
 
     # ---- Hub ------------------------------------------------------------
     def find(self) -> None:
@@ -108,7 +117,23 @@ class RemoteManager(QObject):
             info["state"], info["run"] = "idle", None
         return info
 
+    def _update_live_name(self) -> None:
+        """手機上顯示的名稱：量測節點名稱；不是節點 → 量測電腦對應的 LAB-1 / LAB-2；都不是 → 量過才用電腦名稱。"""
+        if self.live is None:
+            return
+        name = self.node.name if self.node is not None else None
+        if name is None:
+            w = self.parent()
+            try:
+                name = w.local_lab_node() if w is not None and hasattr(w, "local_lab_node") else None
+            except Exception:  # noqa: BLE001
+                name = None
+        if name is None and self.live.ever_ran:
+            name = hostname()
+        self._live_name = name
+
     def refresh(self) -> None:
+        self._update_live_name()
         if self.hub is None or self._refreshing:
             return
         self._refreshing = True
@@ -247,6 +272,8 @@ class RemoteManager(QObject):
     def shutdown(self) -> None:
         self.timer.stop()
         self.retry.stop()
+        if self.live is not None:
+            self.live.stop()
         if self.node is not None:
             self.node.stop()
             self.node = None

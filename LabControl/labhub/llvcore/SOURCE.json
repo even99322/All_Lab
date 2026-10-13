@@ -1,0 +1,28 @@
+{
+ "llv_version": "1.0.3",
+ "files": {
+  "app/__init__.py": "22e270209b5ec8084821ae75e7a2fc21868b4719e3da90de7cbbca4359bab035",
+  "app/core/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "app/core/data_identity.py": "2d14df1f0116595cfcfdfcc9ea7872322dc5a432da33b104be928b0140249d58",
+  "app/core/data_location.py": "85321d5c7e869a0152f8aa7c0c8c86ca54ae6d8dfbad290d438a677c5e65a2cd",
+  "app/core/data_model.py": "3919177be586345d24cee307757efbaa13ae8a98775e6fe4b59a36592f8bbd89",
+  "app/core/database_index_store.py": "436ab3b3919e47d0e282d8759ad4edcd4058d99bee492137c5cc908de8c3a44d",
+  "app/core/database_scanner.py": "944120b51c63db32a6e236f78b6a1867f81db3a40c7afc4112ecade5b6049c8e",
+  "app/core/external_state.py": "4c1a33ddb2082db9f1315c0d18e6c271df7ba2c9f4faef3155d978f7b6d46bcd",
+  "app/core/file_lock.py": "136dd84499c308e32ae2ac20bcb994985466bfb3c390499c9a07ffab848c2a08",
+  "app/core/formula.py": "6a535d4ce72a8cb481bb9cc6841757d8a50457694cae2c28495b82136f90a22e",
+  "app/core/hdf5_processing_writer.py": "04d6e45a9beb4e5da75e235d312675e3d1a35526c1b1cf7d71fe5bb1824f267d",
+  "app/core/hdf5_reader.py": "7dfefb610d8f16c27bd18c4465af9c64e94b3033fcf57a7a8af52a88c517c782",
+  "app/core/hub_index.py": "e77408a355610e2f7c040685735d2733ba6b6d776e15c738177b4adee382228a",
+  "app/core/labber_parser.py": "6825c06309025642beda0bab4776d7a66d9283dfb22d87b77454f3beb8a3ad21",
+  "app/core/lab_share.py": "ccbca0aab8384e47011f45f0be989969ac890110e35ab48ff7c912606cd426e9",
+  "app/core/labcontrol_nc.py": "5e8cc1993566753cffebde03a64114c052e63955994f82479c3df7afdeb85c18",
+  "app/core/net_cache.py": "fd7b72b1471b5ab2e05922c56153aca7566caccc469f8c8c4c2b3d987ec5ea18",
+  "app/core/quick_metadata.py": "14480e7d255b0dbe4724d22461b9aa4518785b05da80030397eb5680f8501681",
+  "app/core/quick_preview.py": "f27f40c49160c5b49df04ab03088ebcef20ff60073d8c874331050f871c85aba",
+  "app/core/safe_expr.py": "4f3c8487fe4ed041fa69e235d1faddb05a58cb6eb3fc3d8bee640c9662be6912",
+  "app/core/win_paths.py": "63a44e1a6dc0d736b98a7e81514c6fe089f1ef3c0df56f104a05045bb575147c",
+  "app/plotting/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "app/plotting/complex_transform.py": "cf81aec178e20a1b26d59bc8f09429c5e4fde59811066d4527763ba5c7f5532c"
+ }
+}

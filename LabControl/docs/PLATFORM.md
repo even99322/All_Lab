@@ -158,6 +158,18 @@
 - 讀檔程式 1.0.2：網路磁碟上不在畫面的執行緒做網路操作（資料夾清單來自掃描、註解背景讀取、路徑解析記住）；同時列出多個資料夾；
   自動更新清單在網路磁碟上每 5 分鐘完整掃一次。
 
+### 0h. 1.0.4：NAS 數據索引、手機看即時量測
+
+```
+數據集散地 ──(唯讀)── qel-indexer ── data/index/index.sqlite＋previews/ ── Hub /api/index/… ── 讀檔程式 1.0.3
+                       （讀檔程式的解析程式 labhub/llvcore）                      ↑ X-QEL-Share-Key = 數據集散地/.qel/index_key
+Lab Control（每台量測電腦）── POST /api/m/<名稱>/update（每秒）── Hub（記憶體）── /m 手機網頁（每 1.5 秒）
+```
+
+- 索引容器 `qel-indexer`（官方 python 映像，numpy / h5py 第一次啟動裝到 data/pydeps）跑同一份 labhub 程式；Hub 更新時控制代理會重新啟動它。
+- 讀檔程式：大小相同、時間差 2 秒以內 → 用索引；否則照舊自己讀。Hub 連不到 → 60 秒內不再問。
+- 手機：權限同 `/nodes`；資料只在記憶體，Hub 重新啟動後 Lab Control 補送整張熱圖。
+
 以下第 1–7 節是 0.0.13–0.0.25（有啟動器時）的說明，平台 API、數據目錄、標籤與論文仍然適用。
 
 ## 1. 組成

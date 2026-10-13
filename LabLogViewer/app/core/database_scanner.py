@@ -240,7 +240,8 @@ class DatabaseScanner:
              index_store: DatabaseIndexStore | None = None, *, fast_listing: bool = False,
              should_cancel: Callable[[], bool] | None = None,
              priority: Callable[[], tuple[str, ...] | None] | None = None,
-             batch_callback: Callable[[list[LogEntry]], None] | None = None) -> DatabaseScanResult:
+             batch_callback: Callable[[list[LogEntry]], None] | None = None,
+             remote_index: Callable[[], dict[str, dict] | None] | None = None) -> DatabaseScanResult:
         """Full scan: find every HDF5 file under root_path, then parse
         just enough of each to get its log name. `progress_callback`,
         if given, is called as (files_done, files_total) after each
@@ -253,13 +254,33 @@ class DatabaseScanner:
           parsing goes on, so switching folders re-prioritises);
         * ``batch_callback(entries)``: newly parsed entries in small batches, so the Browser fills its rows
           as they come instead of waiting for the whole folder tree;
-        * parsing waits while a preview / Viewer is reading from the network (net_cache.busy)."""
+        * parsing waits while a preview / Viewer is reading from the network (net_cache.busy).
+
+        v1.0.3: ``remote_index()`` → the NAS index of this folder ({relative path: record}, see hub_index); it is
+        asked while the folders are listed, and a file whose size / time match is taken from it, not opened."""
         from app.core import net_cache
 
         root = Path(root_path)
         database_id = DatabaseScanner.compute_database_id(root)
         folders: set[tuple[str, ...]] = set()
+        remote_box: dict[str, dict | None] = {}
+        remote_thread = None
+        if remote_index is not None:
+            import threading
+
+            def ask_remote():
+                try:
+                    remote_box["records"] = remote_index()
+                except Exception:
+                    remote_box["records"] = None
+
+            remote_thread = threading.Thread(target=ask_remote, name="llv-hub-index", daemon=True)
+            remote_thread.start()
         listed = DatabaseScanner.find_hdf5_files_with_stats(root, should_cancel, folders)
+        remote: dict[str, dict] | None = None
+        if remote_thread is not None:
+            remote_thread.join(30.0)
+            remote = remote_box.get("records")
         network = net_cache.is_network_path(root)
 
         slots: list[LogEntry | None] = [None] * len(listed)
@@ -278,6 +299,13 @@ class DatabaseScanner:
                       if index_store is not None and stat is not None else None)
             if cached is not None and ("file_tags" not in cached or "file_star" not in cached):
                 cached = None                       # indexed before tags were read: scan this file again
+            if cached is None and remote and stat is not None:
+                record = remote.get(rel)
+                if record is not None and record.get("status") == "ok":
+                    from app.core import hub_index
+
+                    if hub_index.matches(record, stat.st_size, stat.st_mtime):
+                        cached = hub_index.entry_fields(record, root, rel, stat)
             if cached is not None:
                 cached["absolute_path"] = str(file_path)
                 slots[i] = LogEntry(**cached)

@@ -102,6 +102,8 @@ remote:
   timeout_s: 15                # 一般 Hub 請求的逾時（VPN 較慢）
   heartbeat_s: 2               # 回報狀態的間隔（節點與這台電腦）
   live_interval_s: 0.5         # 節點上傳即時資料（進度、曲線）的間隔
+  mobile_live: true            # 1.0.4：量測摘要送到 Hub，手機開 http://<NAS>:8765/m 看即時量測
+  mobile_live_interval_s: 1.0  # 送的間隔（秒）
   command_wait_s: 20           # 節點等待指令的 long-poll 時間（有指令會立即收到）
   reply_timeout_s: 20          # 等待節點回覆的上限
   auto_update_nodes: true      # 這台版本比節點新時，自動請節點更新

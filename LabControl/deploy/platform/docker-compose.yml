@@ -1,8 +1,9 @@
-# 量子工程平台：NAS 上「一個專案、三個容器」
+# 量子工程平台：NAS 上「一個專案、四個容器」
 #
 #   paperlib               論文庫網站            http://<NAS>:8080
-#   labcontrol-hub         Hub（平台入口、量測中繼）http://<NAS>:8765
+#   labcontrol-hub         Hub（平台入口、量測中繼、手機看量測 /m）http://<NAS>:8765
 #   labcontrol-hub-agent   控制代理（更新 Hub 與論文庫，Monitor「發佈中心」用）  :8766
+#   qel-indexer            數據索引（1.0.4）：先算好數據集散地每個檔的資訊與預覽，讀檔程式隔著 VPN 也馬上打開
 #
 # 三個容器在同一個 Docker 網路，彼此用容器名稱連線（Hub → http://paperlib:8080），不經過 NAS 的 IP。
 # 資料都留在原本的資料夾：/volume1/docker/paperlib/data、/volume1/docker/LabControlHub/data。
@@ -75,8 +76,33 @@ services:
       PAPERLIB_DIR: /stacks/paperlib
       PAPERLIB_CONTAINER: paperlib
       PAPERLIB_URL: http://paperlib:8080
+      INDEXER_CONTAINER: qel-indexer                          # Hub 更新後跟著重新啟動數據索引
       TZ: Asia/Taipei
     volumes:
       - /volume1/docker/LabControlHub:/hubdir                 # Hub 程式、資料、備份
       - /volume1/docker/paperlib:/stacks/paperlib             # 論文庫程式（更新時換程式、建置映像）
       - /var/run/docker.sock:/var/run/docker.sock             # 停止 / 建置 / 重建 / 啟動容器
+
+  # 1.0.4 數據索引：用讀檔程式的解析程式把數據集散地每個檔的資訊與預覽算好（結果在 LabControlHub/data/index），
+  # Hub 用它回答讀檔程式。第一次啟動會安裝 numpy、h5py 到 data/pydeps（NAS 要能上網，約 1–2 分鐘）；
+  # 第一次索引幾千個檔要一段時間（新的檔先做），之後只做新增 / 改過的檔。
+  # ⚠ 先在數據集散地裡建一個資料夾 .qel（Windows：\\192.168.50.2\ccuqel\數據集散地 → 新增資料夾 → 名稱 .qel），
+  #   索引程式把存取鑰匙放在那裡；讀得到數據集散地的電腦就讀得到鑰匙，讀檔程式不必另外登入。
+  # 數據集散地不在 /volume1/ccuqel/數據集散地 時，改下面兩行的路徑。
+  indexer:
+    image: python:3.12-slim
+    container_name: qel-indexer
+    restart: unless-stopped
+    working_dir: /app
+    command: ["python", "-m", "labhub.indexer"]
+    environment:
+      LABHUB_DATA: /data
+      LABHUB_SHARE: /share
+      LABHUB_INDEX_KEYDIR: /share_key
+      LABHUB_INDEX_INTERVAL: "300"          # 秒：多久檢查一次新的檔
+      TZ: Asia/Taipei
+    volumes:
+      - /volume1/docker/LabControlHub/labhub:/app/labhub:ro
+      - /volume1/docker/LabControlHub/data:/data
+      - /volume1/ccuqel/數據集散地:/share:ro                 # 只讀：索引程式不會改數據
+      - /volume1/ccuqel/數據集散地/.qel:/share_key           # 只有這個資料夾可寫（存取鑰匙）

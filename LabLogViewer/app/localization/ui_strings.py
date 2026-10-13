@@ -394,6 +394,7 @@ PATTERNS = [
     ("Rendered {} traces; skipped {} incompatible trace(s).", "已算圖 {0} 條 Trace；略過 {1} 條不相容的 Trace。"),
     ("Rendering frame {} / {}", "正在算圖第 {0} / {1} 幀"), ("Saved External Comment ({}).", "已儲存外部註解（{0}）。"),
     ("Reading the Comment…", "正在讀取註解…"),
+    ("  ·  Preview from the NAS index", "  ·  NAS 算好的預覽"),
     ("Saved external Comment ({}).", "已儲存外部註解（{0}）。"), ("Saved View Preset: {}", "已儲存視圖預設：{0}"),
     ("Saved plot image: {}", "已儲存圖表影像：{0}"), ("Saved {}", "已儲存 {0}"), ("Saved {} and {}", "已儲存 {0} 與 {1}"),
     ("Scanning HDF5 files...\n{} / {}", "正在掃描 HDF5 檔案⋯\n{0} / {1}"),

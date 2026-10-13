@@ -30,10 +30,11 @@ class QuickPreviewWorker(QThread):
     preview_ready = Signal(object, object)
     preview_failed = Signal(object, str)
 
-    def __init__(self, path: str, display_state: dict | None = None, parent=None):
+    def __init__(self, path: str, display_state: dict | None = None, parent=None, stamp=None):
         super().__init__(parent)
         self.path = path
         self.display_state = dict(display_state) if isinstance(display_state, dict) else None
+        self.stamp = stamp                 # v1.0.3: (size, mtime) from the listing → ask the NAS index first
 
     def cancel(self) -> None:
         """Another Data was selected: stop copying this one from the network drive."""
@@ -42,6 +43,19 @@ class QuickPreviewWorker(QThread):
     def run(self) -> None:
         from app.core import net_cache
 
+        if not self.display_state and self.stamp is not None:
+            # v1.0.3: the NAS already worked out the default preview — no need to copy the file over VPN
+            try:
+                from app.core import hub_index
+
+                preview = hub_index.fetch_preview(self.path, *self.stamp)
+            except Exception:
+                preview = None
+            if self.isInterruptionRequested():
+                return
+            if preview is not None:
+                self.preview_ready.emit(self, decimate_preview(preview))
+                return
         try:
             with net_cache.busy():
                 # v2.1.6: a file on the NAS (VPN) is copied once and previewed from the copy; the Viewer then

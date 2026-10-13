@@ -1778,3 +1778,19 @@ Date: 2026-10-13
   - TagStore.initialize_entries: session group ids computed once (was groups x files).
   - LogEntry.folder_parts cached per relative_path.
   - tests/test_v102_vpn_speed.py.
+
+v1.0.3 - THE NAS INDEX (FILE INFORMATION AND PREVIEWS WORKED OUT ON THE NAS)
+Date: 2026-10-14
+
+  - app/core/hub_index.py: split_share (path inside 數據集散地 → share root + relative path), hub_bases (the server
+    of the path first), read_key (<share>/.qel/index_key, sent as X-QEL-Share-Key), records_for(root) →
+    GET /api/index/tree (one request, gzip, cached 60 s), fetch_preview → GET /api/index/preview (.npz, Lab Control
+    labhub/index_codec.py format) → QuickPreviewData(from_index=True). No hub for 60 s → not asked again meanwhile.
+    LABLOGVIEWER_HUB_INDEX=0 turns it off.
+  - DatabaseScanner.scan(remote_index=…): asked while the folders are listed; a file whose size matches and whose
+    time is within 2 s becomes a complete LogEntry (this computer's own size / time) without being opened.
+    DatabaseScanWorker passes it (remote=True).
+  - QuickPreviewWorker(stamp=(size, mtime)): no saved Viewer display → the NAS preview first, else the old path.
+  - The hub side (Lab Control 1.0.4 labhub/indexer.py) runs a copy of this program's parser (labhub/llvcore,
+    tools/sync_llvcore.py), so the index matches what this program would read itself.
+  - tests/test_v103_hub_index.py.

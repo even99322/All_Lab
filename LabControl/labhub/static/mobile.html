@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16181d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="量測即時">
+<link rel="manifest" href="/m/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/m/icon-180.png">
+<link rel="icon" href="/m/icon-192.png">
+<title>量測即時</title>
+<style>
+  :root {
+    --bg:#f3f4f6; --card:#ffffff; --text:#1c1f24; --muted:#6b7280; --line:#e2e5e9; --soft:#eef0f3;
+    --accent:#1971c2; --ok:#2b8a3e; --warn:#e67700; --err:#e03131; --pause:#f08c00; --idle:#868e96;
+    --grid:rgba(0,0,0,.08); --axis:#4b5563;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#111317; --card:#1b1d22; --text:#e9ecef; --muted:#9aa1ab; --line:#2b2f36; --soft:#23262c;
+      --accent:#4dabf7; --ok:#51cf66; --warn:#ffa94d; --err:#ff6b6b; --pause:#fcc419; --idle:#8b9199;
+      --grid:rgba(255,255,255,.08); --axis:#aab1bb;
+    }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; background:var(--bg); color:var(--text); }
+  body { font:15px/1.45 -apple-system, "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+         padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  header { position:sticky; top:0; z-index:5; background:var(--bg); padding:10px 14px 6px; }
+  .top { display:flex; align-items:center; gap:10px; }
+  .top h1 { font-size:19px; margin:0; font-weight:700; letter-spacing:.5px; }
+  .top .sp { flex:1; }
+  .top .upd { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .tabs { display:flex; gap:8px; overflow-x:auto; padding:8px 0 4px; scrollbar-width:none; }
+  .tabs::-webkit-scrollbar { display:none; }
+  .tab { flex:none; display:flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; border:1px solid var(--line);
+         background:var(--card); color:var(--text); font-size:14px; font-weight:600; cursor:pointer; }
+  .tab.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--idle); flex:none; }
+  .dot.running, .dot.preparing { background:var(--accent); animation:pulse 1.4s infinite; }
+  .dot.paused { background:var(--pause); } .dot.finished { background:var(--ok); }
+  .dot.failed, .dot.aborted, .dot.stopped { background:var(--err); } .dot.off { background:transparent; border:1px solid var(--idle); }
+  @keyframes pulse { 50% { opacity:.35; } }
+  main { padding:4px 12px 28px; max-width:900px; margin:0 auto; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:12px; }
+  .card h2 { font-size:13px; font-weight:600; color:var(--muted); margin:0 0 8px; display:flex; gap:8px; align-items:baseline; }
+  .card h2 .r { margin-left:auto; font-weight:500; font-variant-numeric:tabular-nums; }
+  .runname { font-size:17px; font-weight:700; overflow-wrap:anywhere; margin-right:6px; }
+  .chip { display:inline-block; padding:1px 10px; border-radius:999px; font-size:12px; font-weight:700; color:#fff; background:var(--idle);
+          vertical-align:2px; }
+  .chip.running, .chip.preparing { background:var(--accent); } .chip.paused { background:var(--pause); color:#1c1f24; }
+  .chip.finished { background:var(--ok); } .chip.failed, .chip.aborted, .chip.stopped { background:var(--err); }
+  .bar { height:10px; border-radius:99px; background:var(--soft); overflow:hidden; margin:10px 0 6px; }
+  .bar > i { display:block; height:100%; width:0; background:var(--accent); border-radius:99px; transition:width .5s; }
+  .nums { display:grid; grid-template-columns:repeat(3, 1fr); gap:6px; font-variant-numeric:tabular-nums; }
+  .nums div { background:var(--soft); border-radius:10px; padding:6px 8px; }
+  .nums b { display:block; font-size:16px; } .nums span { font-size:11px; color:var(--muted); }
+  .sp-list { margin-top:10px; display:flex; flex-wrap:wrap; gap:6px; }
+  .sp-list span { font-size:13px; background:var(--soft); border-radius:8px; padding:3px 8px; font-variant-numeric:tabular-nums; }
+  .err { color:var(--err); margin-top:8px; font-size:13px; overflow-wrap:anywhere; }
+  canvas { display:block; width:100%; touch-action:pan-y; }
+  #heat { height:62vw; min-height:220px; max-height:360px; }
+  #trace { height:220px; }
+  @media (min-width:760px) { #heat { height:300px; } #trace { height:300px; } }
+  .heat-wrap { position:relative; }
+  .cbar { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); margin-top:6px; font-variant-numeric:tabular-nums; }
+  .cbar i { flex:1; height:8px; border-radius:4px; background:linear-gradient(90deg,#440154,#3b528b,#21918c,#5ec962,#fde725); }
+  .probe { min-height:20px; font-size:13px; margin-top:6px; font-variant-numeric:tabular-nums; color:var(--text); }
+  .log { font-size:13px; } .log div { padding:4px 0; border-top:1px solid var(--line); display:flex; gap:8px; }
+  .log div:first-child { border-top:0; } .log time { color:var(--muted); flex:none; font-variant-numeric:tabular-nums; }
+  .log .warn { color:var(--warn); } .log .error { color:var(--err); }
+  .banner { display:none; background:color-mix(in srgb, var(--warn) 16%, var(--card)); border:1px solid var(--warn); color:var(--text);
+            border-radius:12px; padding:10px 12px; margin-bottom:12px; font-size:14px; }
+  .empty { text-align:center; color:var(--muted); padding:40px 12px; }
+  .empty b { display:block; color:var(--text); font-size:16px; margin-bottom:6px; }
+  .hint { font-size:12px; color:var(--muted); margin-top:4px; }
+  @media (min-width:760px) { .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; } .two .card { margin-bottom:0; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="top"><h1>量測即時</h1><span class="sp"></span><span class="upd" id="upd"></span></div>
+  <div class="tabs" id="tabs"></div>
+</header>
+<main>
+  <div class="banner" id="banner"></div>
+  <div id="empty" class="empty" style="display:none"><b>目前沒有量測電腦回報</b>量測電腦開著 Lab Control（1.0.4 以上）、連得到 Hub 時，這裡會出現。</div>
+  <div id="view" style="display:none">
+    <div class="card" id="runCard">
+      <div><span class="runname" id="runName"></span><span class="chip" id="runChip"></span></div>
+      <div class="bar"><i id="bar"></i></div>
+      <div class="nums">
+        <div><b id="nPts">–</b><span>點</span></div>
+        <div><b id="nEl">–</b><span>經過</span></div>
+        <div><b id="nEta">–</b><span id="etaLabel">剩餘</span></div>
+      </div>
+      <div class="sp-list" id="sp"></div>
+      <div class="err" id="runErr"></div>
+    </div>
+    <div class="two">
+      <div class="card" id="heatCard">
+        <h2><span id="heatTitle">熱圖</span><span class="r" id="frameLabel"></span></h2>
+        <div class="heat-wrap"><canvas id="heat"></canvas></div>
+        <div class="cbar"><span id="cLo">–</span><i></i><span id="cHi">–</span></div>
+        <div class="probe" id="heatProbe"></div>
+      </div>
+      <div class="card" id="traceCard">
+        <h2><span id="traceTitle">最後一條</span><span class="r" id="traceMin"></span></h2>
+        <canvas id="trace"></canvas>
+        <div class="probe" id="traceProbe"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h2>紀錄</h2>
+      <div class="log" id="log"></div>
+      <div class="hint">加到主畫面：iPhone 用 Safari「分享 → 加入主畫面」；Android 用 Chrome「⋮ → 加到主畫面」。</div>
+    </div>
+  </div>
+</main>
+<script>
+"use strict";
+const STATE = { running:"量測中", preparing:"準備中", paused:"暫停", stopping:"停止中", finished:"完成",
+                aborted:"已停止", stopped:"已停止", failed:"失敗", idle:"閒置" };
+const $ = id => document.getElementById(id);
+let stations = [], current = null, detail = null, frame = null, ver = -1, lastCol = null;
+let listTimer = null, detailTimer = null, busy = false;
+try { current = localStorage.getItem("qel-m-station") || null; } catch (e) {}
+
+function fmtDur(s) {
+  if (s == null || !isFinite(s)) return "–";
+  s = Math.max(0, Math.round(s));
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60;
+  return h ? `${h} 時 ${m} 分` : m ? `${m} 分 ${x} 秒` : `${x} 秒`;
+}
+function fmtNum(v, d = 4) {
+  if (v == null || !isFinite(v)) return "–";
+  const a = Math.abs(v);
+  if (a !== 0 && (a >= 1e5 || a < 1e-3)) return v.toExponential(2);
+  return (+v.toPrecision(d + 2)).toString();
+}
+function clock(t) { const d = new Date(t * 1000); return d.toTimeString().slice(0, 5); }
+function stateOf(run) { return run ? (run.state || "running") : "idle"; }
+
+async function api(path) {
+  const r = await fetch(path, { credentials:"same-origin", cache:"no-store" });
+  if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent("/m"); throw new Error("login"); }
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
+  return r.json();
+}
+
+async function loadList() {
+  try {
+    const d = await api("/api/m");
+    stations = d.stations || [];
+    $("banner").style.display = "none";
+    if (!stations.length) { $("empty").style.display = ""; $("view").style.display = "none"; renderTabs(); return; }
+    $("empty").style.display = "none";
+    if (!current || !stations.some(s => s.name === current)) {
+      const run = stations.find(s => s.online && s.run && ["running", "paused", "preparing"].includes(s.run.state));
+      select((run || stations.find(s => s.online) || stations[0]).name);
+    }
+    renderTabs();
+  } catch (e) {
+    if (e.message !== "login") showBanner("連不到 Hub：" + e.message + "（手機要在實驗室網路，或開著 VPN）");
+  }
+}
+
+function renderTabs() {
+  const el = $("tabs"); el.innerHTML = "";
+  for (const s of stations) {
+    const b = document.createElement("button");
+    b.className = "tab" + (s.name === current ? " on" : "");
+    const st = s.online ? stateOf(s.run) : "off";
+    const pct = s.run && s.run.total ? ` ${Math.floor(100 * (s.run.index || 0) / s.run.total)}%` : "";
+    b.innerHTML = `<span class="dot ${st}"></span>${esc(s.name)}<span style="font-weight:400;color:var(--muted)">${s.online ? (STATE[stateOf(s.run)] || "") + pct : "沒有回報"}</span>`;
+    b.onclick = () => { select(s.name); renderTabs(); };
+    el.appendChild(b);
+  }
+}
+function esc(t) { return String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c])); }
+function showBanner(t) { const b = $("banner"); b.textContent = t; b.style.display = "block"; }
+
+function select(name) {
+  if (name === current && detail) return;
+  current = name; detail = null; frame = null; ver = -1; lastCol = null;
+  try { localStorage.setItem("qel-m-station", name); } catch (e) {}
+  loadDetail();
+}
+
+async function loadDetail() {
+  if (!current || busy) return;
+  busy = true;
+  try {
+    const q = frame ? `?frame=${encodeURIComponent(frame.id)}&since=${ver}` : "";
+    const d = await api("/api/m/" + encodeURIComponent(current) + q);
+    if (d.name !== current) return;
+    merge(d);
+    detail = d;
+    render();
+  } catch (e) {
+    if (e.message !== "login") showBanner("讀取失敗：" + e.message);
+  } finally { busy = false; }
+}
+
+function merge(d) {
+  const f = d.frame;
+  if (!f) { frame = null; }
+  else if (f.reset || !frame || frame.id !== f.id) {
+    frame = { ...f, rows:{}, series:{} };
+    lastCol = null;
+  }
+  if (f && frame) {
+    for (const kind of ["rows", "series"]) {
+      for (const [c, v] of Object.entries(f[kind] || {})) {
+        frame[kind][c] = v;
+        if (lastCol == null || +c >= lastCol || f.reset) lastCol = +c;
+      }
+    }
+    if (f.cols) frame.cols = f.cols;
+  }
+  ver = d.ver;
+}
+
+function render() {
+  const d = detail; if (!d) return;
+  $("view").style.display = "";
+  $("upd").textContent = d.online ? `${Math.round(d.age)} 秒前更新` : `已 ${fmtDur(d.age)} 沒有回報`;
+  if (!d.online) showBanner(`${d.name} 已 ${fmtDur(d.age)} 沒有回報（Lab Control 關了、電腦睡眠，或連不到 Hub）。下面是最後收到的內容。`);
+  else $("banner").style.display = "none";
+  const run = d.run, st = stateOf(run);
+  $("runName").textContent = run ? run.name : `${d.name} 閒置中`;
+  const chip = $("runChip"); chip.className = "chip " + st; chip.textContent = STATE[st] || st;
+  const idx = run ? (run.index || 0) : 0, tot = run && run.total ? run.total : 0;
+  const done = run && ["finished"].includes(st);
+  $("bar").style.width = tot ? `${Math.min(100, 100 * (done ? tot : idx) / tot)}%` : "0";
+  $("nPts").textContent = tot ? `${done ? tot : idx} / ${tot}` : "–";
+  $("nEl").textContent = run ? fmtDur(run.finished ? run.finished - run.started : run.elapsed) : "–";
+  const live = run && ["running", "preparing", "paused"].includes(st);
+  $("etaLabel").textContent = live && run.eta != null ? `剩餘 · ${clock(d.time + run.eta)} 完成` : run && run.finished ? "結束於" : "剩餘";
+  $("nEta").textContent = live ? fmtDur(run.eta) : run && run.finished ? clock(run.finished) : "–";
+  const sp = $("sp"); sp.innerHTML = "";
+  for (const [k, v] of Object.entries((run && run.setpoints) || {})) {
+    const s = document.createElement("span"); s.textContent = `${k} = ${v}`; sp.appendChild(s);
+  }
+  $("runErr").textContent = run && run.error ? run.error : "";
+  const ch = d.chan;
+  $("heatCard").style.display = frame ? "" : "none";
+  $("traceCard").style.display = d.trace ? "" : "none";
+  if (frame) {
+    $("heatTitle").textContent = ch && ch.kind === "scalar" ? `${ch.name}` : `${ch ? ch.name : ""} 熱圖`;
+    $("frameLabel").textContent = frame.label || "";
+  }
+  if (d.trace && ch) {
+    $("traceTitle").textContent = `最後一條 ${ch.name}（第 ${d.trace.index + 1} 點）`;
+    const m = d.trace.min;
+    $("traceMin").textContent = m && m.y != null ? `最低 ${fmtNum(m.y, 3)} ${ch.unit} @ ${fmtNum(m.x, 6)} ${ch.x_unit || ""}` : "";
+  }
+  const log = $("log"); log.innerHTML = "";
+  for (const l of (d.log || []).slice(-8).reverse()) {
+    const r = document.createElement("div");
+    r.innerHTML = `<time>${clock(l.time)}</time><span class="${esc(l.level)}">${esc(l.message)}</span>`;
+    log.appendChild(r);
+  }
+  if (!(d.log || []).length) log.innerHTML = `<div><span style="color:var(--muted)">沒有紀錄</span></div>`;
+  requestAnimationFrame(draw);
+}
+
+// ---- 畫圖 --------------------------------------------------------------------------
+const VIRIDIS = [[68,1,84],[72,40,120],[62,74,137],[49,104,142],[38,130,142],[31,158,137],[53,183,121],[109,205,89],[180,222,44],[253,231,37]];
+function cmap(t) {
+  t = Math.max(0, Math.min(1, t)) * (VIRIDIS.length - 1);
+  const i = Math.min(VIRIDIS.length - 2, Math.floor(t)), f = t - i, a = VIRIDIS[i], b = VIRIDIS[i + 1];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function setup(cv) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight || 220;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  g.font = "11px -apple-system, system-ui, sans-serif";
+  return [g, w, h];
+}
+function ticks(lo, hi, n) {
+  if (!(isFinite(lo) && isFinite(hi)) || lo === hi) return [lo];
+  const span = Math.abs(hi - lo), step0 = span / n, mag = Math.pow(10, Math.floor(Math.log10(step0)));
+  const step = [1, 2, 2.5, 5, 10].map(k => k * mag).find(s => s >= step0) || 10 * mag;
+  const a = Math.min(lo, hi), b = Math.max(lo, hi), out = [];
+  for (let v = Math.ceil(a / step) * step; v <= b + step * 1e-6; v += step) out.push(+v.toPrecision(12));
+  return out;
+}
+function percentile(vals, p) { if (!vals.length) return NaN; const s = vals.slice().sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * (s.length - 1)))]; }
+const M = { l:52, r:16, t:8, b:32 };
+let heatGeom = null, traceGeom = null;
+
+function axes(g, w, h, xr, yr, xlab, ylab, xt, yt) {
+  const pw = w - M.l - M.r, ph = h - M.t - M.b;
+  g.strokeStyle = css("--grid"); g.fillStyle = css("--axis"); g.lineWidth = 1;
+  for (const v of yt) {
+    const y = M.t + ph * (1 - (v - yr[0]) / (yr[1] - yr[0] || 1));
+    g.beginPath(); g.moveTo(M.l, y); g.lineTo(M.l + pw, y); g.stroke();
+    g.textAlign = "right"; g.textBaseline = "middle"; g.fillText(fmtNum(v, 4), M.l - 4, y);
+  }
+  for (const [x, label] of xt) {
+    const px = M.l + pw * x;
+    g.beginPath(); g.moveTo(px, M.t); g.lineTo(px, M.t + ph); g.stroke();
+    g.textAlign = px > w - 30 ? "right" : px < M.l + 14 ? "left" : "center";
+    g.textBaseline = "top"; g.fillText(label, g.textAlign === "right" ? Math.min(px + 8, w - 2) : px, M.t + ph + 3);
+  }
+  g.textAlign = "center"; g.textBaseline = "bottom"; g.fillText(xlab, M.l + pw / 2, h - 1);
+  g.save(); g.translate(10, M.t + ph / 2); g.rotate(-Math.PI / 2); g.textBaseline = "middle"; g.fillText(ylab, 0, 0); g.restore();
+  return [pw, ph];
+}
+
+function draw() {
+  const d = detail; if (!d) return;
+  if (frame && d.chan && d.chan.kind === "trace") drawHeat(d); else if (frame) drawSeries(d);
+  if (d.trace) drawTrace(d);
+}
+
+function colTicks(cols, n) {
+  const out = [], N = cols.length;
+  if (!N) return out;
+  for (let k = 0; k < n; k++) {
+    const i = Math.round(k * (N - 1) / Math.max(1, n - 1));
+    out.push([(i + .5) / N, fmtNum(cols[i], 4)]);
+  }
+  return out;
+}
+
+function drawHeat(d) {
+  const cv = $("heat"), [g, w, h] = setup(cv), cols = frame.cols || [], N = cols.length;
+  const entries = Object.entries(frame.rows || {});
+  let ny = 0; for (const [, v] of entries) if (v && v.length > ny) ny = v.length;
+  // 色階：窄的 dip 只佔很少的點，所以下限用（幾乎）最小值、上限去掉少數突波
+  const total = entries.reduce((n, [, v]) => n + (v ? v.length : 0), 0), stride = Math.max(1, Math.ceil(total / 150000));
+  const vals = [];
+  for (const [, v] of entries) {
+    if (!v) continue;
+    let m = Infinity;
+    for (let i = 0; i < v.length; i++) { const x = v[i]; if (x == null) continue; if (x < m) m = x; if (i % stride === 0) vals.push(x); }
+    if (isFinite(m)) vals.push(m);
+  }
+  const lo = percentile(vals, .001), hi = percentile(vals, .995);
+  $("cLo").textContent = isFinite(lo) ? `${fmtNum(lo, 3)} ${d.chan.unit}` : "–";
+  $("cHi").textContent = isFinite(hi) ? `${fmtNum(hi, 3)} ${d.chan.unit}` : "–";
+  const y0 = frame.y0 != null ? frame.y0 : 0, y1 = frame.y1 != null ? frame.y1 : ny;
+  const [pw, ph] = axes(g, w, h, [0, 1], [Math.min(y0, y1), Math.max(y0, y1)],
+                        `${frame.col_name || ""} [${frame.col_unit || "-"}]`, frame.y_label || "",
+                        colTicks(cols, w < 380 ? 3 : 5), ticks(Math.min(y0, y1), Math.max(y0, y1), 4));
+  heatGeom = { pw, ph, N, ny, y0, y1, lo, hi };
+  if (!N || !ny) return;
+  const off = document.createElement("canvas"); off.width = N; off.height = ny;
+  const og = off.getContext("2d"), img = og.createImageData(N, ny), px = img.data, span = (hi - lo) || 1;
+  const flip = y1 >= y0;
+  for (const [c, v] of entries) {
+    const col = +c; if (col < 0 || col >= N || !v) continue;
+    for (let i = 0; i < ny; i++) {
+      const val = v[i]; if (val == null) continue;
+      const [r, gg, b] = cmap((val - lo) / span), row = flip ? ny - 1 - i : i, k = 4 * (row * N + col);
+      px[k] = r; px[k + 1] = gg; px[k + 2] = b; px[k + 3] = 255;
+    }
+  }
+  og.putImageData(img, 0, 0);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(off, M.l, M.t, pw, ph);
+  if (lastCol != null && N > 1) {
+    const x = M.l + pw * (lastCol + .5) / N;
+    g.strokeStyle = "rgba(255,255,255,.85)"; g.lineWidth = 1.5; g.setLineDash([4, 3]);
+    g.beginPath(); g.moveTo(x, M.t); g.lineTo(x, M.t + ph); g.stroke(); g.setLineDash([]);
+  }
+}
+
+function drawSeries(d) {
+  const cv = $("heat"), [g, w, h] = setup(cv), cols = frame.cols || [];
+  const pts = Object.entries(frame.series || {}).map(([c, v]) => [+c, v]).filter(p => p[1] != null).sort((a, b) => a[0] - b[0]);
+  $("cLo").textContent = ""; $("cHi").textContent = "";
+  const ys = pts.map(p => p[1]), lo = Math.min(...ys), hi = Math.max(...ys);
+  const yr = isFinite(lo) ? (lo === hi ? [lo - 1, hi + 1] : [lo - (hi - lo) * .05, hi + (hi - lo) * .05]) : [0, 1];
+  const N = Math.max(1, cols.length);
+  const [pw, ph] = axes(g, w, h, [0, 1], yr, `${frame.col_name || ""} [${frame.col_unit || "-"}]`, frame.y_label || "",
+                        colTicks(cols, w < 380 ? 3 : 5), ticks(yr[0], yr[1], 4));
+  heatGeom = null;
+  g.strokeStyle = css("--accent"); g.lineWidth = 2; g.beginPath();
+  pts.forEach(([c, v], k) => { const x = M.l + pw * (c + .5) / N, y = M.t + ph * (1 - (v - yr[0]) / (yr[1] - yr[0])); k ? g.lineTo(x, y) : g.moveTo(x, y); });
+  g.stroke();
+}
+
+function drawTrace(d) {
+  const cv = $("trace"), [g, w, h] = setup(cv), t = d.trace, ch = d.chan || {};
+  const xs = t.x, ys = t.y, fx = xs.filter(v => v != null), fy = ys.filter(v => v != null);
+  if (!fx.length || !fy.length) return;
+  const x0 = Math.min(...fx), x1 = Math.max(...fx); let y0 = Math.min(...fy), y1 = Math.max(...fy);
+  const pad = (y1 - y0) * .06 || 1; y0 -= pad; y1 += pad;
+  const xt = ticks(x0, x1, w < 380 ? 3 : 5).map(v => [(v - x0) / ((x1 - x0) || 1), fmtNum(v, 4)]);
+  const [pw, ph] = axes(g, w, h, [x0, x1], [y0, y1], `${ch.x_name || ""} [${ch.x_unit || "-"}]`, `${ch.name || ""} [${ch.unit || ""}]`,
+                        xt, ticks(y0, y1, 4));
+  traceGeom = { pw, ph, x0, x1, y0, y1 };
+  g.strokeStyle = css("--accent"); g.lineWidth = 1.6; g.beginPath(); let started = false;
+  for (let i = 0; i < xs.length; i++) {
+    if (xs[i] == null || ys[i] == null) { started = false; continue; }
+    const x = M.l + pw * (xs[i] - x0) / ((x1 - x0) || 1), y = M.t + ph * (1 - (ys[i] - y0) / (y1 - y0));
+    started ? g.lineTo(x, y) : g.moveTo(x, y); started = true;
+  }
+  g.stroke();
+  if (t.min && t.min.x != null && t.min.y != null) {
+    const x = M.l + pw * (t.min.x - x0) / ((x1 - x0) || 1), y = M.t + ph * (1 - (t.min.y - y0) / (y1 - y0));
+    g.fillStyle = css("--err"); g.beginPath(); g.arc(x, y, 4, 0, 2 * Math.PI); g.fill();
+  }
+}
+
+// ---- 點一下看數值 --------------------------------------------------------------------
+$("heat").addEventListener("click", ev => {
+  const d = detail; if (!d || !frame) return;
+  const r = ev.target.getBoundingClientRect(), x = ev.clientX - r.left - M.l, y = ev.clientY - r.top - M.t;
+  const cols = frame.cols || [];
+  if (!heatGeom) {        // 純量：最近的點
+    const N = Math.max(1, cols.length), c = Math.max(0, Math.min(N - 1, Math.floor(x / (r.width - M.l - M.r) * N)));
+    const v = (frame.series || {})[c];
+    $("heatProbe").textContent = `${frame.col_name} = ${fmtNum(cols[c], 6)} ${frame.col_unit} · ${v == null ? "還沒量" : fmtNum(v, 5)}`;
+    return;
+  }
+  const { pw, ph, N, ny, y0, y1 } = heatGeom; if (x < 0 || y < 0 || x > pw || y > ph || !N || !ny) return;
+  const c = Math.min(N - 1, Math.floor(x / pw * N)), fy = 1 - y / ph;
+  const i = Math.min(ny - 1, Math.floor((y1 >= y0 ? fy : 1 - fy) * ny));
+  const freq = y0 + (y1 - y0) * (i + .5) / ny, row = (frame.rows || {})[c], v = row ? row[i] : null;
+  $("heatProbe").textContent = `${frame.col_name} = ${fmtNum(cols[c], 6)} ${frame.col_unit} · ${fmtNum(freq, 6)} ${d.chan.x_unit || ""} · ` +
+    (v == null ? "還沒量" : `${fmtNum(v, 4)} ${d.chan.unit}`);
+});
+$("trace").addEventListener("click", ev => {
+  const d = detail; if (!d || !d.trace || !traceGeom) return;
+  const r = ev.target.getBoundingClientRect(), x = ev.clientX - r.left - M.l, { pw, x0, x1 } = traceGeom;
+  const xv = x0 + (x1 - x0) * Math.max(0, Math.min(1, x / pw));
+  let best = -1, dist = Infinity;
+  d.trace.x.forEach((v, k) => { if (v != null && Math.abs(v - xv) < dist) { dist = Math.abs(v - xv); best = k; } });
+  if (best >= 0) $("traceProbe").textContent = `${fmtNum(d.trace.x[best], 7)} ${d.chan.x_unit || ""} · ${fmtNum(d.trace.y[best], 4)} ${d.chan.unit}`;
+});
+
+// ---- 更新節奏：畫面看不到時停止 ---------------------------------------------------------
+function startTimers() {
+  stopTimers();
+  loadList(); loadDetail();
+  listTimer = setInterval(loadList, 5000);
+  detailTimer = setInterval(loadDetail, 1500);
+}
+function stopTimers() { clearInterval(listTimer); clearInterval(detailTimer); listTimer = detailTimer = null; }
+document.addEventListener("visibilitychange", () => document.hidden ? stopTimers() : startTimers());
+window.addEventListener("resize", () => requestAnimationFrame(draw));
+startTimers();
+</script>
+</body>
+</html>

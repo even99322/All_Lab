@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.4 — 2026-10-14
+
+NAS 上的數據索引：先算好數據集散地每個檔的資訊與預覽，讀檔程式 1.0.3 用 VPN 開大資料夾也馬上完成；手機看即時量測（`http://<NAS>:8765/m`，Android / iOS，可以加到主畫面）。NAS 要更新 Hub、建 `.qel` 資料夾、換 docker-compose.yml。詳見 [docs/releases/v1.0.4.md](docs/releases/v1.0.4.md)。
+
+---
+
 ## 1.0.3 — 2026-10-13
 
 更新後工作列的釘選不再失效（Windows 程式 ID 固定為 `CCUQEL.LabControl`，捷徑帶同一個 ID；更新到 1.0.3 後再釘選一次）；讀檔程式 1.0.2：用 VPN 開大資料夾不再卡住。詳見 [docs/releases/v1.0.3.md](docs/releases/v1.0.3.md)。

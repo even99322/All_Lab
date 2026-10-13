@@ -1710,7 +1710,11 @@ class BrowserWindow(QMainWindow):
         for old in tuple(self._preview_workers):        # v2.1.6: stop reading what is no longer wanted
             if old is not prewarm and old.isRunning():
                 old.cancel()
-        worker = QuickPreviewWorker(entry.absolute_path, state, parent=self)
+        from app.core import net_cache
+
+        stamp = ((entry.size_bytes, entry.mtime) if entry.mtime > 0 and net_cache.is_network_path(entry.absolute_path)
+                 else None)
+        worker = QuickPreviewWorker(entry.absolute_path, state, parent=self, stamp=stamp)
         worker.cache_key = key
         self._preview_worker = worker
         self._preview_workers.add(worker)
@@ -1756,6 +1760,8 @@ class BrowserWindow(QMainWindow):
             )
         if preview.restored:
             status += "  ·  Restored last Viewer display"
+        if getattr(preview, "from_index", False):
+            status += "  ·  Preview from the NAS index"
         self.preview_status.setText(status)
         if preview.kind == "1d":
             trace = preview.data

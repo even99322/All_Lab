@@ -262,6 +262,8 @@ class AgentConfig:
         self.paperlib_container = paperlib_container
         self.paperlib_url = (paperlib_url or "").rstrip("/")
         self.paperlib_verify_s = paperlib_verify_s
+        # 1.0.4：NAS 上的數據索引（同一份 labhub 程式）；Hub 換程式後跟著重新啟動
+        self.indexer_container = os.environ.get("INDEXER_CONTAINER", "qel-indexer")
 
     @classmethod
     def from_env(cls) -> "AgentConfig":
@@ -536,9 +538,24 @@ class Agent:
                 return False, f"更新失敗，已換回 v{old}（{e}）"
             if agent_changed:
                 self.restart_self = True
+            self._restart_indexer(job)
             return True, f"Hub 已更新到 v{new}"
         finally:
             shutil.rmtree(work, ignore_errors=True)
+
+    def _restart_indexer(self, job: Job) -> None:
+        """數據索引用同一份 labhub 程式：重新啟動讓它用新版（沒有這個容器 → 略過）。"""
+        try:
+            info = self.docker.inspect(self.cfg.indexer_container)
+        except DockerError:
+            return
+        if not info:
+            return
+        try:
+            self.docker.restart(info["Id"])
+            job.say(f"數據索引（{self.cfg.indexer_container}）已重新啟動")
+        except DockerError as e:
+            job.say(f"⚠ 數據索引沒有重新啟動：{e}")
 
     def _restore(self, job: Job, backup_zip: Path) -> None:
         tmp = self.cfg.hub_dir / ".update" / f"restore-{job.id}"
@@ -574,6 +591,7 @@ class Agent:
             self._rebuild(job)
             self._start(job)
             ok = self._verify(job, v)
+            self._restart_indexer(job)
             return ok, (f"已回到 v{v}" if ok else "Hub 沒有正常啟動")
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
