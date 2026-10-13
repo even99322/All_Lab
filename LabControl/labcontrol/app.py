@@ -21,6 +21,9 @@ from . import APP_NAME, __version__
 from .paths import ensure_lab_home, lab_home, lab_path
 from .settings import setting
 
+# Windows 工作列 / 開始功能表的程式 ID（1.0.3 起固定，不帶版本號；安裝程式的捷徑用同一個）
+APP_USER_MODEL_ID = "CCUQEL.LabControl"
+
 ASSETS = Path(__file__).resolve().parent.parent / "assets"
 ICON_FILES = ("icon.ico", "icon.png")
 
@@ -85,7 +88,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if sys.platform == "win32":   # 工作列顯示自己的 icon，而不是 python.exe 的
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(f"LabControl.{__version__}")
+            # 1.0.3：固定的 ID（以前帶版本號 → 每次更新 Windows 都當成另一個程式，釘選在工作列的就失效）
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(APP_USER_MODEL_ID)
         except Exception:  # noqa: BLE001
             pass
 

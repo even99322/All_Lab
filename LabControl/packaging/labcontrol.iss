@@ -49,9 +49,11 @@ Type: filesandordirs; Name: "{app}\_internal"
 Source: "..\dist\LabControl\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Lab Control"; Filename: "{app}\LabControl.exe"
+; AppUserModelID 跟程式裡的一樣（labcontrol/app.py APP_USER_MODEL_ID）：工作列把捷徑和執行中的視窗當成同一個程式，
+; 釘選到工作列後更新也不會失效（1.0.3）
+Name: "{group}\Lab Control"; Filename: "{app}\LabControl.exe"; AppUserModelID: "CCUQEL.LabControl"
 Name: "{group}\{cm:UninstallProgram,Lab Control}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\Lab Control"; Filename: "{app}\LabControl.exe"; Tasks: desktopicon
+Name: "{autodesktop}\Lab Control"; Filename: "{app}\LabControl.exe"; Tasks: desktopicon; AppUserModelID: "CCUQEL.LabControl"
 
 [Run]
 Filename: "{app}\LabControl.exe"; Description: "{cm:LaunchProgram,Lab Control}"; Flags: nowait postinstall skipifsilent

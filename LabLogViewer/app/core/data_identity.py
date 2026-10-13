@@ -20,6 +20,29 @@ def display_name_for_source(source_path: str | Path, metadata_log_name: object =
     return metadata or "(unnamed)"
 
 
+_NETWORK_IDENTITIES: dict[str, str] = {}
+_NETWORK_LIMIT = 50000
+
+
 def stable_data_identity(source_path: str | Path) -> str:
-    """Return a resolved source key, never a mutable display name."""
-    return str(Path(source_path).expanduser().resolve())
+    """Return a resolved source key, never a mutable display name.
+
+    v1.0.2: resolving a path on a network drive asks the server (each folder of the path over VPN),
+    and the Browser does it several times per click — the answer for the same path string is
+    remembered for the session."""
+    text = str(source_path)
+    known = _NETWORK_IDENTITIES.get(text)
+    if known is not None:
+        return known
+    resolved = str(Path(source_path).expanduser().resolve())
+    try:
+        from app.core.net_cache import is_network_path
+
+        network = is_network_path(resolved)
+    except Exception:
+        network = False
+    if network:
+        if len(_NETWORK_IDENTITIES) >= _NETWORK_LIMIT:
+            _NETWORK_IDENTITIES.clear()
+        _NETWORK_IDENTITIES[text] = resolved
+    return resolved

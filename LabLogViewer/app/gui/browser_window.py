@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from time import perf_counter
 
-from PySide6.QtCore import QSize, QTimer, Qt
+from PySide6.QtCore import QObject, QSize, QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup, QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QInputDialog, QMainWindow, QMenu,
@@ -72,6 +72,11 @@ PREVIEW_CACHE_SIZE = 6
 
 
 _UPDATE_FETCHES: set = set()
+
+
+class _CommentRelay(QObject):
+    """Carries a Comment read in the background (network drive) back to the window's thread."""
+    done = Signal(object)
 
 
 class BrowserWindow(QMainWindow):
@@ -181,6 +186,9 @@ class BrowserWindow(QMainWindow):
         self._comment_timer.setSingleShot(True)
         self._comment_timer.setInterval(450)
         self._comment_timer.timeout.connect(self._flush_browser_comment)
+        self._comment_token = 0
+        self._comment_relay = _CommentRelay(self)
+        self._comment_relay.done.connect(self._native_comment_arrived, Qt.QueuedConnection)
         self._folder_items: dict[tuple[str, ...], QTreeWidgetItem] = {}
         self._active_query: tuple[frozenset[str], str] | None = None
         self.disk_folders: set[tuple[str, ...]] = set()      # folders on disk, empty ones too
@@ -856,16 +864,60 @@ class BrowserWindow(QMainWindow):
         self._comment_source = entry.absolute_path if entry is not None else None
         self._comment_database_id = self._entry_database(entry) if entry is not None and self.scan_result else None
         self._comment_relative_path = entry.relative_path if entry is not None else None
-        self._comment_loading = True
-        try:
-            if entry is None:
+        self._comment_token = getattr(self, "_comment_token", 0) + 1
+        if entry is None:
+            self._comment_loading = True
+            try:
                 self.comment_editor.clear()
                 self.comment_editor.setEnabled(False)
                 self.comment_editor.setToolTip("")
-                return
-            native = read_native_comment(entry.absolute_path)
+            finally:
+                self._comment_loading = False
+                self._comment_dirty = False
+            return
+        from app.core import net_cache
+
+        if not net_cache.is_network_path(entry.absolute_path):
+            self._apply_browser_comment(read_native_comment(entry.absolute_path))
+            return
+        # v1.0.2: on a network drive (VPN) opening the file takes a while — read the Comment in the
+        # background so clicking through the list never waits for the server
+        self._comment_loading = True
+        try:
+            self.comment_editor.clear()
+            self.comment_editor.setEnabled(False)
+            self.comment_editor.setToolTip("Reading the Comment…")
+        finally:
+            self._comment_loading = False
+            self._comment_dirty = False
+        token, path = self._comment_token, entry.absolute_path
+        relay = self._comment_relay
+
+        def work():
+            try:
+                native = read_native_comment(path)
+            except Exception as error:                  # never let a worker exception reach the window
+                from app.core.labber_comment import NativeComment
+
+                native = NativeComment("", False, reason=str(error))
+            try:
+                relay.done.emit((token, path, native))
+            except RuntimeError:
+                pass                                    # the window was closed meanwhile
+
+        threading.Thread(target=work, name="llv-comment", daemon=True).start()
+
+    def _native_comment_arrived(self, payload) -> None:
+        token, path, native = payload
+        if token != getattr(self, "_comment_token", None) or path != self._comment_source:
+            return                                      # another Data was selected meanwhile
+        self._apply_browser_comment(native)
+
+    def _apply_browser_comment(self, native) -> None:
+        self._comment_loading = True
+        try:
             external = self.comment_store.get_for_source(
-                entry.absolute_path, database_id=self._comment_database_id,
+                self._comment_source, database_id=self._comment_database_id,
                 relative_path=self._comment_relative_path,
             )
             self._comment_native_text = native.text
@@ -1338,9 +1390,15 @@ class BrowserWindow(QMainWindow):
 
     def _on_scan_finished(self, result: DatabaseScanResult) -> None:
         active_query = self._active_query
+        from app.core import net_cache
         from app.core.change_watch import folders_on_disk
 
-        self.disk_folders = folders_on_disk(result.root_path)     # empty folders are shown too
+        # empty folders are shown too; v1.0.2: taken from the scan's own listing (walking a NAS folder again
+        # here froze the window for a minute over VPN)
+        if result.folders is not None:
+            self.disk_folders = set(result.folders)
+        elif not net_cache.is_network_path(result.root_path):
+            self.disk_folders = folders_on_disk(result.root_path)
         self.scan_result = result
         self._populate_folder_tree(result)
         if self._pending_selection_relative_path is not None:
@@ -1480,12 +1538,32 @@ class BrowserWindow(QMainWindow):
         if self.scan_result is None:
             return
         self._append_rows(self.LIST_PAGE)
+        self._warm_identities(self._list_entries)
         for column in range(len(headers)):
             self.data_list.resizeColumnToContents(column)
         self._sync_star_button()
         self._sync_tag_button()
         self._sync_selected_tags()
         self._select_first_readable()
+
+    @staticmethod
+    def _warm_identities(entries: list[LogEntry], limit: int = 2000) -> None:
+        """v1.0.2: on a network drive, work out the files' identities (stable_data_identity asks the
+        server) in the background, so clicking a row does not wait for it."""
+        from app.core import net_cache
+
+        paths = [entry.absolute_path for entry in entries[:limit]]
+        if not paths or not net_cache.is_network_path(paths[0]):
+            return
+
+        def work():
+            for path in paths:
+                try:
+                    stable_data_identity(path)
+                except Exception:
+                    pass
+
+        threading.Thread(target=work, name="llv-identities", daemon=True).start()
 
     def _select_first_readable(self) -> None:
         """Preview something by default: the first readable entry of the list being shown."""
@@ -1578,6 +1656,12 @@ class BrowserWindow(QMainWindow):
         self._schedule_session_save()
 
     def _preview_cache_key(self, entry: LogEntry, state) -> tuple | None:
+        from app.core import net_cache
+
+        if entry.mtime > 0 and entry.size_bytes > 0 and net_cache.is_network_path(entry.absolute_path):
+            # v1.0.2: size / time from the folder listing (kept current by auto refresh) instead of asking
+            # the server again on every click
+            return (entry.absolute_path, entry.mtime, entry.size_bytes, repr(state))
         return self._preview_key_for(entry.absolute_path, state)
 
     @staticmethod
@@ -1586,7 +1670,7 @@ class BrowserWindow(QMainWindow):
             stat = Path(path).stat()
         except OSError:
             return None
-        return (path, stat.st_mtime_ns, stat.st_size, repr(state))
+        return (path, stat.st_mtime, stat.st_size, repr(state))
 
     def _prewarm_preview(self, root: str, state: dict) -> None:
         """Start reading the Data selected last time while the database is still being scanned."""

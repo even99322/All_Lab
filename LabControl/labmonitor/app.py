@@ -26,7 +26,7 @@ def main() -> int:
         try:
             import ctypes
 
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(f"LabControlMonitor.{__version__}")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("CCUQEL.LabControlMonitor")  # 1.0.3：不帶版本號，更新後工作列釘選仍有效
         except Exception:  # noqa: BLE001
             pass
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv[:1])

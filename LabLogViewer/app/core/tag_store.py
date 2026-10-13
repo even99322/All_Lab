@@ -817,19 +817,25 @@ class TagStore:
             groups = self._group_defaults.setdefault(database_id, {})
             # v0.10A assignments are explicit. Their union bootstraps one stable
             # session default, excluding Flux because Flux is entry-specific.
-            for group_id in {session_group_id(path) for path, _, _ in records}:
+            # v1.0.2: group ids worked out once (was groups × files: seconds for a 9000-file database)
+            group_of = {path: session_group_id(path) for path, _, _ in records}
+            members: dict[str, list[str]] = {}
+            for path, group_id in group_of.items():
+                members.setdefault(group_id, []).append(path)
+            known_states = self._states.get(database_id, {})
+            for group_id, paths_in_group in members.items():
                 if group_id in groups:
                     continue
                 inherited: set[str] = set()
-                for path, _, _ in records:
-                    state = self._states.get(database_id, {}).get(path)
-                    if state and session_group_id(path) == group_id:
+                for path in paths_in_group:
+                    state = known_states.get(path)
+                    if state:
                         inherited.update(tag for tag in state["explicit_tags"] if tag != "Flux")
                 if inherited:
                     groups[group_id] = self._ordered(inherited)
                     changed = True
             for relative_path, log_name, entry in records:
-                group_id = session_group_id(relative_path)
+                group_id = group_of[relative_path]
                 names = (relative_path, log_name or "", getattr(entry, "file_name", ""),
                          getattr(entry, "sweep_dimension", ""))
                 metadata = getattr(entry, "metadata", None)

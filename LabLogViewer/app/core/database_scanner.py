@@ -37,6 +37,7 @@ from app.core.hdf5_reader import HDF5ReadError, HDF5Reader
 from app.core.labber_parser import AutoDetector, UnsupportedLabberFormat
 
 HDF5_EXTENSIONS = (".hdf5", ".h5", ".nc")   # .nc = Lab Control xarray/NetCDF (v2.1.0)
+LISTING_THREADS = 8                         # folders listed at once on a network drive (v1.0.2)
 
 ProgressCallback = Callable[[int, int], None]
 
@@ -75,9 +76,16 @@ class LogEntry:
     def folder_parts(self) -> tuple[str, ...]:
         """The relative_path's directory components, for building a
         nested folder/project tree in the GUI - e.g.
-        'Experiment_A/sweep_01.hdf5' -> ('Experiment_A',)."""
+        'Experiment_A/sweep_01.hdf5' -> ('Experiment_A',).
+
+        v1.0.2: remembered per relative_path (the Browser asks for every file at each folder change)."""
+        cached = self.__dict__.get("_folder_parts")
+        if cached is not None and cached[0] == self.relative_path:
+            return cached[1]
         parent = Path(self.relative_path).parent
-        return () if str(parent) in ("", ".") else parent.parts
+        parts = () if str(parent) in ("", ".") else parent.parts
+        self.__dict__["_folder_parts"] = (self.relative_path, parts)
+        return parts
 
     @property
     def display_name(self) -> str:
@@ -95,6 +103,9 @@ class DatabaseScanResult:
     root_path: str
     database_id: str
     entries: list[LogEntry] = field(default_factory=list)
+    # v1.0.2: every folder under the root (relative parts, empty ones too) seen while listing, so the
+    # Browser need not walk the whole share again on the GUI thread (seconds to minutes over VPN).
+    folders: set[tuple[str, ...]] | None = None
 
     @property
     def n_total(self) -> int:
@@ -137,41 +148,82 @@ class DatabaseScanner:
         return [path for path, _stat in DatabaseScanner.find_hdf5_files_with_stats(root_path, should_cancel)]
 
     @staticmethod
-    def find_hdf5_files_with_stats(root_path: str | Path, should_cancel: Callable[[], bool] | None = None
+    def find_hdf5_files_with_stats(root_path: str | Path, should_cancel: Callable[[], bool] | None = None,
+                                   folders_out: set[tuple[str, ...]] | None = None
                                    ) -> list[tuple[Path, os.stat_result | None]]:
         """Like ``find_hdf5_files`` with each file's size / time from the directory listing (v2.1.6).
 
         On Windows the listing already carries them, so a NAS folder of thousands of files needs no extra
-        network request per file (one request per folder instead)."""
+        network request per file (one request per folder instead). ``folders_out`` collects every folder
+        (relative parts; hidden ``.folders`` are not shown in the tree, as in ``change_watch``)."""
         root = Path(root_path)
         if not root.exists() or not root.is_dir():
             return []
+        from app.core import net_cache
+
         found: list[tuple[Path, os.stat_result | None]] = []
-        pending = [str(root)]
-        while pending:
-            if should_cancel is not None and should_cancel():
-                raise ScanCancelled()
-            folder = pending.pop()
-            try:
-                with os.scandir(folder) as listing:
-                    items = list(listing)
-            except OSError:
-                continue                    # a subdirectory couldn't be listed: skip it, keep walking
-            for item in items:
-                try:
-                    if item.is_dir(follow_symlinks=False) or (item.is_symlink() and item.is_dir()):
-                        pending.append(item.path)
-                        continue
-                except OSError:
-                    continue
-                if not item.name.lower().endswith(HDF5_EXTENSIONS):
-                    continue
-                try:
-                    stat = item.stat()
-                except OSError:
-                    stat = None
-                found.append((Path(item.path), stat))
+
+        def take(folder: str, listed: tuple[list[str], list[tuple[Path, os.stat_result | None]]]) -> list[str]:
+            dirs, files = listed
+            found.extend(files)
+            if folders_out is not None:
+                for path in dirs:
+                    try:
+                        parts = Path(path).relative_to(root).parts
+                    except ValueError:
+                        parts = ()
+                    if parts and not any(part.startswith(".") for part in parts):
+                        folders_out.add(parts)
+            return dirs
+
+        if net_cache.is_network_path(root):
+            # v1.0.2: over VPN every folder listing waits for the server — list several folders at once
+            from concurrent.futures import ThreadPoolExecutor
+
+            frontier = [str(root)]
+            with ThreadPoolExecutor(max_workers=LISTING_THREADS, thread_name_prefix="llv-list") as pool:
+                while frontier:
+                    if should_cancel is not None and should_cancel():
+                        raise ScanCancelled()
+                    following: list[str] = []
+                    for folder, listed in zip(frontier, pool.map(DatabaseScanner._list_folder, frontier)):
+                        following.extend(take(folder, listed))
+                    frontier = following
+        else:
+            pending = [str(root)]
+            while pending:
+                if should_cancel is not None and should_cancel():
+                    raise ScanCancelled()
+                folder = pending.pop()
+                pending.extend(take(folder, DatabaseScanner._list_folder(folder)))
         return sorted(found, key=lambda pair: str(pair[0]).lower())
+
+    @staticmethod
+    def _list_folder(folder: str) -> tuple[list[str], list[tuple[Path, os.stat_result | None]]]:
+        """(sub-folders, measurement files with their size / time) of one folder; ([], []) when it
+        cannot be listed (skipped, the walk goes on)."""
+        try:
+            with os.scandir(folder) as listing:
+                items = list(listing)
+        except OSError:
+            return [], []
+        dirs: list[str] = []
+        files: list[tuple[Path, os.stat_result | None]] = []
+        for item in items:
+            try:
+                if item.is_dir(follow_symlinks=False) or (item.is_symlink() and item.is_dir()):
+                    dirs.append(item.path)
+                    continue
+            except OSError:
+                continue
+            if not item.name.lower().endswith(HDF5_EXTENSIONS):
+                continue
+            try:
+                stat = item.stat()
+            except OSError:
+                stat = None
+            files.append((Path(item.path), stat))
+        return dirs, files
 
     @staticmethod
     def _index_record(entry: LogEntry) -> dict:
@@ -206,7 +258,8 @@ class DatabaseScanner:
 
         root = Path(root_path)
         database_id = DatabaseScanner.compute_database_id(root)
-        listed = DatabaseScanner.find_hdf5_files_with_stats(root, should_cancel)
+        folders: set[tuple[str, ...]] = set()
+        listed = DatabaseScanner.find_hdf5_files_with_stats(root, should_cancel, folders)
         network = net_cache.is_network_path(root)
 
         slots: list[LogEntry | None] = [None] * len(listed)
@@ -295,7 +348,7 @@ class DatabaseScanner:
                 indexed_entries[entry.relative_path] = DatabaseScanner._index_record(entry)
         if index_store is not None and not fast_listing:
             index_store.replace_root(database_id, indexed_entries)
-        return DatabaseScanResult(root_path=str(root), database_id=database_id, entries=entries)
+        return DatabaseScanResult(root_path=str(root), database_id=database_id, entries=entries, folders=folders)
 
     @staticmethod
     def _probe_hdf5(file_path: Path, attempts: int = 3):

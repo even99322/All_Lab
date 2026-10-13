@@ -1760,3 +1760,21 @@ Date: 2026-10-13
   - BrowserWindow.open_path(file) opens the Viewer without showing / raising the Browser; main.py: a file argument
     always starts single-file mode (also after an unclean exit).
   - tests/test_v101_viewer_speed_and_open.py.
+
+v1.0.2 - BIG DATABASES OVER VPN: NO GUI-THREAD NETWORK WALKS
+Date: 2026-10-13
+
+  - Opening a 9000-file NAS database over VPN froze the Browser after the scan: _on_scan_finished called
+    change_watch.folders_on_disk (os.walk of the whole share, ~2 requests per folder) on the GUI thread.
+    DatabaseScanner now collects every folder while listing (DatabaseScanResult.folders); the Browser uses it.
+    Simulated VPN (30 ms per request, 300 folders x 30 files): freeze 21 s -> ~1 s, listing 10.9 s -> 2.0 s.
+  - find_hdf5_files_with_stats lists network folders with 8 threads (_list_folder); DatabaseScanWorker emits
+    progress at most every 0.1 s.
+  - Per click on a network file: read_native_comment runs on a thread (_CommentRelay; editor disabled while
+    reading); stable_data_identity remembers resolved network paths; _warm_identities resolves the listed rows in
+    the background; _preview_cache_key uses the entry's size / mtime from the listing.
+  - change_watch: snapshots take size / mtime from DirEntry (no stat per file on Windows); auto refresh walks a
+    network database every 300 s (FULL_EVERY_NETWORK), local every 30 s.
+  - TagStore.initialize_entries: session group ids computed once (was groups x files).
+  - LogEntry.folder_parts cached per relative_path.
+  - tests/test_v102_vpn_speed.py.

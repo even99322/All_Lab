@@ -77,6 +77,14 @@ jobs:
           Write-Output "::notice title=pet pictures::$n files in $petsDir"
           if (Test-Path "$env:LOCALAPPDATA\Programs\LabLogViewer\_internal\app\pet\assets") { throw "pet pictures still inside the program" }
           $env:LLV_SELF_TEST_REQUIRE_PETS = "1"
+          # the Start-menu shortcut carries the program's fixed AppUserModelID (taskbar pins survive updates)
+          $lnk = Get-ChildItem "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter "Lab Control.lnk" | Select-Object -First 1
+          if ($lnk) {
+            $item = (New-Object -ComObject Shell.Application).NameSpace($lnk.DirectoryName).ParseName($lnk.Name)
+            $aumid = $item.ExtendedProperty("System.AppUserModel.ID")
+            Write-Output "::notice title=Lab Control shortcut AppUserModelID::$aumid ($($lnk.FullName))"
+            if ($aumid -ne "CCUQEL.LabControl") { Write-Output "::warning title=Lab Control shortcut AppUserModelID::expected CCUQEL.LabControl, got '$aumid'" }
+          } else { Write-Output "::warning title=Lab Control shortcut::no Start-menu shortcut found" }
 
           # 2. the installed programs check themselves
           $env:LABCONTROL_SELF_TEST_REPORT = "$env:RUNNER_TEMP\lc_self_test.txt"

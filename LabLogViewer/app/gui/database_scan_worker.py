@@ -12,6 +12,8 @@ file only bridges progress/completion into Qt signals.
 
 from __future__ import annotations
 
+import time
+
 from PySide6.QtCore import QThread, Signal
 
 from app.core.database_scanner import DatabaseScanner, DatabaseScanResult, ScanCancelled
@@ -36,11 +38,20 @@ class DatabaseScanWorker(QThread):
     def cancel(self) -> None:
         self.requestInterruption()
 
+    PROGRESS_EVERY = 0.1                   # v1.0.2: at most ~10 progress updates a second (9000 files → not 9000 repaints)
+
+    def _progress(self, done: int, total: int) -> None:
+        now = time.monotonic()
+        if done >= total or now - self._last_progress >= self.PROGRESS_EVERY:
+            self._last_progress = now
+            self.progress.emit(done, total)
+
     def run(self) -> None:
+        self._last_progress = 0.0
         try:
             result = DatabaseScanner.scan(
                 self.root_path,
-                progress_callback=lambda done, total: self.progress.emit(done, total),
+                progress_callback=self._progress,
                 index_store=self.index_store,
                 fast_listing=self.fast_listing,
                 should_cancel=self.isInterruptionRequested,

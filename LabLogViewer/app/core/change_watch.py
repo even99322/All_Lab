@@ -27,18 +27,48 @@ def _record(root: Path, folder: Path, name: str, out: Snapshot) -> None:
     out[(folder / name).relative_to(root).as_posix()] = (stat.st_size, stat.st_mtime)
 
 
+def _record_entry(root: Path, item: os.DirEntry, out: Snapshot) -> None:
+    """Like ``_record`` from a directory listing entry: on Windows its size / time come with the
+    listing, so a NAS folder needs one request, not one per file (v1.0.2)."""
+    name = item.name
+    if not name.lower().endswith(HDF5_SUFFIXES) or name.startswith("."):
+        return
+    try:
+        if not item.is_file(follow_symlinks=False) and not (item.is_symlink() and item.is_file()):
+            return
+        stat = item.stat()
+    except OSError:
+        return
+    out[Path(item.path).relative_to(root).as_posix()] = (stat.st_size, stat.st_mtime)
+
+
+def _listing(folder: str) -> list[os.DirEntry]:
+    try:
+        with os.scandir(folder) as entries:
+            return list(entries)
+    except OSError:
+        return []                                  # the folder was removed or is unreachable
+
+
 def full_snapshot(root: str | Path, folders_out: set[tuple[str, ...]] | None = None) -> Snapshot:
     """Every measurement file; ``folders_out`` also collects every folder (empty ones too)."""
     root = Path(root)
     out: Snapshot = {}
-    for folder, dirs, names in os.walk(root, onerror=lambda _error: None):
-        dirs[:] = [d for d in dirs if not d.startswith(".")]
-        if folders_out is not None:
-            relative = Path(folder).relative_to(root)
-            if str(relative) not in ("", "."):
-                folders_out.add(relative.parts)
-        for name in names:
-            _record(root, Path(folder), name, out)
+    pending = [str(root)]
+    while pending:
+        for item in _listing(pending.pop()):
+            try:
+                is_dir = item.is_dir(follow_symlinks=False) or (item.is_symlink() and item.is_dir())
+            except OSError:
+                continue
+            if is_dir:
+                if item.name.startswith("."):
+                    continue
+                pending.append(item.path)
+                if folders_out is not None:
+                    folders_out.add(Path(item.path).relative_to(root).parts)
+            else:
+                _record_entry(root, item, out)
     return out
 
 
@@ -59,13 +89,8 @@ def folder_snapshot(root: str | Path, folders: set[tuple[str, ...]]) -> Snapshot
     root = Path(root)
     out: Snapshot = {}
     for parts in folders:
-        folder = root.joinpath(*parts)
-        try:
-            names = [entry.name for entry in os.scandir(folder) if entry.is_file(follow_symlinks=False)]
-        except OSError:
-            continue                               # the folder was removed or is unreachable
-        for name in names:
-            _record(root, folder, name, out)
+        for item in _listing(str(root.joinpath(*parts))):
+            _record_entry(root, item, out)
     return out
 
 

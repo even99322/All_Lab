@@ -1,8 +1,8 @@
 """Auto refresh of the opened database (Settings > General, default every 2 s).
 
 Every tick a background thread compares file sizes and modification times (no file is
-opened) in the folder on screen and the folders written to last; every 30 s it walks
-the whole database to find new folders. Only new or changed files are read again
+opened) in the folder on screen and the folders written to last; every 30 s (network drive:
+5 min) it walks the whole database to find new folders. Only new or changed files are read again
 (the per-file cache keeps everything else), so a refresh costs almost nothing when
 nothing changed. Then, in the window:
 
@@ -31,6 +31,7 @@ from app.core.database_scanner import DatabaseScanner, LogEntry
 CHOICES = (0, 1, 2, 5)                 # seconds; 0 = off
 DEFAULT = 2
 FULL_EVERY = 30.0                      # seconds between whole-database walks
+FULL_EVERY_NETWORK = 300.0             # the same on a network drive (VPN)
 WRITING_WINDOW = 120.0                 # a file modified this recently may still be written
 
 
@@ -102,7 +103,11 @@ class AutoRefresher(QObject):
         root = Path(result.root_path)
         known = known_snapshot(result.entries)
         now = time.monotonic()
-        full = force_full or now - self._last_full >= FULL_EVERY
+        from app.core import net_cache
+
+        # v1.0.2: a whole-database walk over VPN is slow and competes with what the user opens
+        every = FULL_EVERY_NETWORK if net_cache.is_network_path(root) else FULL_EVERY
+        full = force_full or now - self._last_full >= every
         folders = None if full else change_watch.hot_folders(known, self._current_folder())
         if full:
             self._last_full = now

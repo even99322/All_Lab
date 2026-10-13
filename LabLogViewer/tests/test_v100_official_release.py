@@ -9,7 +9,7 @@ def test_version_is_1_0_0_and_notes_exist():
     from app import __version__
     from app.core.app_update import whats_new_text
 
-    assert __version__ == "1.0.1"
+    assert __version__ == "1.0.2"
     assert "正式發佈版" in whats_new_text("1.0.0", "zh")
     assert "2.1.6" not in whats_new_text("1.0.0", "en", since=None).split("\n")[0]
 
