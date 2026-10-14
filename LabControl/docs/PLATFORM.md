@@ -218,8 +218,10 @@ iPhone / iPad Safari「加入主畫面」）。
   兩邊都會用的人裝 VPN 位址那個。
 - **http 也能裝**：電腦（Chrome / Edge「將網頁安裝為應用程式」、Safari「加入 Dock」）與 iPhone / iPad（加入主畫面）都會是獨立視窗；
   Android 在 http 下可能只是主畫面捷徑。**要每台都是完整 App**（一鍵安裝按鈕、離線畫面、Android 真正的 App）需要 https 網址，例如：
-  - Tailscale：tailnet 開 MagicDNS＋HTTPS 憑證後，在 NAS 上 `tailscale serve --bg --https=443 http://127.0.0.1:8765`，
-    用 `https://<NAS 名稱>.<tailnet>.ts.net/` 安裝（有開 VPN 時實驗室裡外都能用）。
+  - Tailscale：tailnet 開 MagicDNS＋HTTPS 憑證後，在 NAS 上 `tailscale serve --bg --https=8443 http://127.0.0.1:8765`，
+    用 `https://<NAS 名稱>.<tailnet>.ts.net:8443/` 安裝（有開 VPN 時實驗室裡外都能用）。443 留給論文庫
+    （`tailscale serve --bg --https=443 http://127.0.0.1:8080`）；同一個 https 埠只能接一個服務，Hub 的網址都是從 `/` 開始，不能用子路徑。
+    `tailscale serve status` 看目前的對應。
   - DSM：控制台 → 登入入口 → 進階 → 反向代理伺服器，來源 `HTTPS <網域>:<埠>` → 目的地 `HTTP localhost:8765`，
     搭配受信任的憑證（例如 Let's Encrypt）。自簽憑證不算安全網址。
 - 1.0.9：已安裝的偵測——manifest `related_applications`（webapp）＋ `getInstalledRelatedApps()`，以及 `localStorage qel.installed`
