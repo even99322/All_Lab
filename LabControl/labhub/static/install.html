@@ -65,14 +65,17 @@
         <li>網址列右邊有 <b>安裝</b> 圖示（螢幕加箭頭）就按它；</li>
         <li>沒有的話：右上 <b class="k">⋮</b> →「<b>投放、儲存及分享</b>」→「<b>將網頁安裝為應用程式…</b>」（舊版是「建立捷徑」，記得勾「<b>以視窗開啟</b>」）；</li>
         <li>按「安裝」。之後在開始選單 / 啟動台、工作列 / Dock 都找得到「量子工程」。</li>
+        <li class="muted">網址列右邊是 <b>在「量子工程」中開啟</b> 圖示（方框加箭頭）＝這台已經裝好了。</li>
       </ol>
     </div>
     <div class="card" data-os="win-edge mac-edge">
       <h3>Windows / Mac · Edge <span class="tag">這台</span></h3>
       <ol>
-        <li>網址列右邊的 <b>App 可用</b> 圖示，或</li>
-        <li>右上 <b class="k">…</b> →「<b>應用程式</b>」→「<b>將此網站安裝為應用程式</b>」；</li>
+        <li>網址列右邊出現 <b>App 可用</b> 圖示（方塊加「＋」）就按它；</li>
+        <li>沒有的話：右上 <b class="k">…</b> →「<b>更多工具</b>」→「<b>應用程式</b>」→「<b>將此網站安裝為應用程式</b>」
+          （舊版 Edge 的「應用程式」直接在 … 選單裡）；</li>
         <li>按「安裝」，可勾選釘選到工作列 / 開始。</li>
+        <li class="muted">網址列右邊是 <b>在應用程式中開啟</b> 圖示（方框加箭頭）＝這台已經裝好了，按它就切到 App。</li>
       </ol>
     </div>
     <div class="card" data-os="mac-safari">
@@ -131,8 +134,11 @@
       go.disabled = true; go.hidden = false; go.textContent = "✓ 已經在 App 裡";
       st.className = "state ok"; st.textContent = "你現在就是在 App 裡開的。"; hint.textContent = "";
     } else if (app.installed) {
-      go.disabled = true; go.hidden = false; go.textContent = "✓ 已安裝";
-      st.className = "state ok"; st.textContent = "裝好了！從桌面、Dock 或主畫面的「量子工程」開啟。";
+      go.disabled = true; go.hidden = false; go.textContent = "✓ 這台已經裝好了"; hint.textContent = "";
+      st.className = "state ok";
+      st.textContent = ios || android ? "從主畫面的「量子工程」圖示開啟。"
+        : "按網址列右邊的「在應用程式中開啟」圖示（方框加箭頭），或從開始選單 / 工作列 / Dock 的「量子工程」開啟。"
+          + "要重裝：先在 App 視窗右上選單解除安裝。";
     } else if (app.prompt) {
       go.disabled = false; go.hidden = false; go.textContent = "⬇ 安裝 App"; hint.textContent = "";
       st.className = "state"; st.textContent = "這個瀏覽器可以直接安裝：按上面的按鈕。";

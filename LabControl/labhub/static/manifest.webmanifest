@@ -11,17 +11,84 @@
   "theme_color": "#16181d",
   "lang": "zh-Hant",
   "dir": "ltr",
-  "categories": ["productivity", "education", "utilities"],
+  "categories": [
+    "productivity",
+    "education",
+    "utilities"
+  ],
   "icons": [
-    {"src": "/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-    {"src": "/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
-    {"src": "/app-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
-    {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+    {
+      "src": "/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
   ],
   "shortcuts": [
-    {"name": "數據查看", "url": "/data", "icons": [{"src": "/app-icon-192.png", "sizes": "192x192"}]},
-    {"name": "量測查看", "url": "/live", "icons": [{"src": "/app-icon-192.png", "sizes": "192x192"}]},
-    {"name": "量測設置", "url": "/setup", "icons": [{"src": "/app-icon-192.png", "sizes": "192x192"}]},
-    {"name": "模塊下載", "url": "/portal", "icons": [{"src": "/app-icon-192.png", "sizes": "192x192"}]}
-  ]
+    {
+      "name": "數據查看",
+      "url": "/data",
+      "icons": [
+        {
+          "src": "/app-icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "量測查看",
+      "url": "/live",
+      "icons": [
+        {
+          "src": "/app-icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "量測設置",
+      "url": "/setup",
+      "icons": [
+        {
+          "src": "/app-icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "模塊下載",
+      "url": "/portal",
+      "icons": [
+        {
+          "src": "/app-icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "/manifest.webmanifest"
+    }
+  ],
+  "prefer_related_applications": false
 }

@@ -222,6 +222,9 @@ iPhone / iPad Safari「加入主畫面」）。
     用 `https://<NAS 名稱>.<tailnet>.ts.net/` 安裝（有開 VPN 時實驗室裡外都能用）。
   - DSM：控制台 → 登入入口 → 進階 → 反向代理伺服器，來源 `HTTPS <網域>:<埠>` → 目的地 `HTTP localhost:8765`，
     搭配受信任的憑證（例如 Let's Encrypt）。自簽憑證不算安全網址。
+- 1.0.9：已安裝的偵測——manifest `related_applications`（webapp）＋ `getInstalledRelatedApps()`，以及 `localStorage qel.installed`
+  （在 App 裡開過或 `appinstalled` 時設定，再收到 `beforeinstallprompt` 時清掉）；已安裝時導覽列是「✓ 已安裝 App」，`/install` 教按網址列
+  「在應用程式中開啟」。新版 Edge 的安裝在「… → 更多工具 → 應用程式」。
 - iPhone / iPad 裝好的 App 有自己的登入（第一次開要登入，之後 30 天不用）。舊的 `/m` 捷徑仍可用。
 
 以下第 1–7 節是 0.0.13–0.0.25（有啟動器時）的說明，平台 API、數據目錄、標籤與論文仍然適用。

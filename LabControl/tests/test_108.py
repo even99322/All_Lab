@@ -33,6 +33,8 @@ def test_manifest_is_installable(hubsrv):
     pngs = {(i["sizes"], i.get("purpose", "any")) for i in m["icons"] if i["type"] == "image/png"}
     assert {("192x192", "any"), ("512x512", "any"), ("512x512", "maskable")} <= pngs
     assert [s["url"] for s in m["shortcuts"]][:3] == ["/data", "/live", "/setup"]
+    # 已經裝過的裝置：網頁用 getInstalledRelatedApps 認得自己，顯示「已安裝」而不是叫人再裝
+    assert m["related_applications"] == [{"platform": "webapp", "url": "/manifest.webmanifest"}]
     for icon in m["icons"]:                                         # 每個圖示都拿得到、尺寸對
         code, body, _ = _get(base + icon["src"])
         assert code == 200, icon["src"]
@@ -67,6 +69,7 @@ def test_every_page_is_the_same_app(hubsrv):
         assert 'rel="apple-touch-icon" sizes="180x180" href="/app-icon-180.png"' in head, path
         assert 'name="apple-mobile-web-app-capable" content="yes"' in head and 'id="qel-app"' in head, path
         assert "beforeinstallprompt" in head and "serviceWorker" in head, path
+        assert "getInstalledRelatedApps" in head and "qel.installed" in head, path
     for path in ("/portal", "/data", "/live", "/setup", "/install"):
         text = _get(base + path, COOKIE)[1].decode("utf-8")
         nav = text.split('class="qel-nav"')[1].split("</div>")[0]
@@ -74,7 +77,7 @@ def test_every_page_is_the_same_app(hubsrv):
     text = _get(base + "/install", COOKIE)[1].decode("utf-8")
     assert 'class="i on" id="nav-install"' in text
     for label in ("Windows / Mac · Chrome", "Windows / Mac · Edge", "Mac · Safari", "Android", "iPhone / iPad",
-                  "加入主畫面", "將此網站安裝為應用程式"):
+                  "加入主畫面", "將此網站安裝為應用程式", "更多工具", "在應用程式中開啟"):
         assert label in text, label
 
 

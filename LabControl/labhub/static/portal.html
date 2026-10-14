@@ -197,7 +197,7 @@ function viewHome() {
   const shown = mods.filter(m => !m.hidden && !["catalog", "nodes"].includes(m.id));   // 1.0.7：換成「數據查看」「量測設置」
   let hideBanner = false;
   try { hideBanner = localStorage.getItem("qel.installBanner") === "off"; } catch (e) { /* 無痕視窗 */ }
-  const banner = (window.qelApp && window.qelApp.standalone) || hideBanner ? "" :
+  const banner = (window.qelApp && (window.qelApp.standalone || window.qelApp.installed)) || hideBanner ? "" :
     `<div class="appbar" id="appbar"><img src="/app-icon-192.png" alt=""><div><b>把平台裝成 App</b><br><span>跟論文庫一樣，從桌面或主畫面直接開。</span></div>
      <a class="btn primary" href="/install" id="appbar-go">安裝</a><button class="x" id="appbar-x" title="不再顯示">✕</button></div>`;
   $("#main").innerHTML = banner + `<h2>模塊下載 <span class="n">${shown.filter(m => m.allowed).length} 個可用</span></h2>

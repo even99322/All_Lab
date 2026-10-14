@@ -55,10 +55,16 @@ SCRIPT = """<script id="qel-app">(function(){
  var w=window; if(w.qelApp) return;
  var app=w.qelApp={prompt:null,standalone:!!(w.matchMedia&&(matchMedia('(display-mode: standalone)').matches||
    matchMedia('(display-mode: window-controls-overlay)').matches))||navigator.standalone===true};
- function upd(){var b=document.getElementById('nav-install');if(b)b.style.display=app.standalone?'none':'';
+ function upd(){var b=document.getElementById('nav-install');
+   if(b){b.style.display=app.standalone?'none':'';b.textContent=app.installed&&!app.prompt?'✓ 已安裝 App':'⬇ 安裝 App';}
    document.dispatchEvent(new Event('qel-app'));}
- w.addEventListener('beforeinstallprompt',function(e){e.preventDefault();app.prompt=e;upd();});
- w.addEventListener('appinstalled',function(){app.prompt=null;app.installed=true;upd();});
+ w.addEventListener('beforeinstallprompt',function(e){e.preventDefault();app.prompt=e;app.installed=false;mark(0);upd();});
+ function mark(v){try{v?localStorage.setItem('qel.installed','1'):localStorage.removeItem('qel.installed');}catch(e){}}
+ try{app.installed=localStorage.getItem('qel.installed')==='1';}catch(e){}
+ if(app.standalone){app.installed=true;mark(1);}
+ if(navigator.getInstalledRelatedApps)navigator.getInstalledRelatedApps().then(function(a){
+   if(a.length&&!app.prompt){app.installed=true;mark(1);upd();}}).catch(function(){});
+ w.addEventListener('appinstalled',function(){app.prompt=null;app.installed=true;mark(1);upd();});
  app.install=function(){if(!app.prompt)return Promise.resolve(false);var p=app.prompt;app.prompt=null;p.prompt();
    return p.userChoice.then(function(c){upd();return c&&c.outcome==='accepted';});};
  document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('#nav-install');

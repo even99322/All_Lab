@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.9 — 2026-10-14
+
+安裝 App 頁認得「這台已經裝好了」（不再說瀏覽器不提供安裝，改教按網址列「在應用程式中開啟」）；新版 Edge 的安裝位置「… → 更多工具 → 應用程式」。只需要更新 Hub。詳見 [docs/releases/v1.0.9.md](docs/releases/v1.0.9.md)。
+
+---
+
 ## 1.0.8 — 2026-10-14
 
 平台網站裝成 App（跟論文庫一樣用瀏覽器「安裝應用程式」）：Windows / Mac（Chrome、Edge、Safari）、Android、iPhone / iPad；導覽列「⬇ 安裝 App」與 `/install` 安裝步驟頁、正式 App 圖示與捷徑、離線畫面。只需要更新 Hub。詳見 [docs/releases/v1.0.8.md](docs/releases/v1.0.8.md)。
