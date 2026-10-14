@@ -57,8 +57,10 @@ class FilePanel(QtWidgets.QTabWidget):
         self.reload_projects()
 
     def _show_data_tab(self, nid) -> None:
+        from ....scheme.background import BG_ID
+
         b = self.doc.node(nid) if nid else None
-        if b is not None and b.kind in ("save", "debg"):
+        if nid == BG_ID or (b is not None and b.kind in ("save", "debg")):
             self.setCurrentWidget(self.data_panel)
 
     # ---- 檔案 -----------------------------------------------------------

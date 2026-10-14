@@ -1,10 +1,10 @@
 # 範本方案：編輯器「範本」選單列出 LAB/templates/ 內所有 *.scheme.yaml。
 # 可直接修改或另存新檔；run: 沒寫的欄位使用 settings.yaml run_defaults。
-# 2D（1.0.2）：掃電流 → 量測 VNA，掃完存一個檔；
-#   接著把電流設到背景值（遠離共振）→ 量一條背景 → 存背景檔 → 去背：主數據 ÷ 背景，另存 *_debg。
-#   背景電流、去背存檔位置請依實驗調整（點「去背」方塊在右邊設定）。
+# 2D（1.0.6）：掃電流 → 量測 VNA，掃完存一個檔；
+#   「背景＋去背」開關打開：主量測完成後把勾選的電源設到背景電流（遠離共振）→ 用相同的 VNA 設定量一條背景
+#   → 存背景檔 → 去背：主數據 ÷ 背景，另存 *_debg。點流程圖最下面的「背景＋去背」方塊，在右邊勾選電源、改電流。
 scheme: 1
-template_rev: 2
+template_rev: 3
 name: 2D
 blocks:
 - kind: set
@@ -35,29 +35,10 @@ blocks:
   file_name: 2D.nc
   formats:
   - netcdf
-- kind: set
-  id: a2bgset1
-  title: 背景電流
-  target: magnet_A
-  mode: fixed
-  value: 50
-  unit: mA
+background:
+  enabled: true
+  sets:
+  - target: magnet_A
+    value: 50
+    unit: mA
   settle: 0.5
-- kind: measure
-  id: a2bgmeas
-  instrument: VNA1
-  traces:
-  - S21
-  settings:
-    start_freq: 5.0198 GHz
-    stop_freq: 5.0298 GHz
-    points: 501
-    power: -10 dBm
-    if_bw: 10 kHz
-    averages: 1
-- kind: save
-  id: a2bgsave
-  formats:
-  - netcdf
-- kind: debg
-  id: a2debg01

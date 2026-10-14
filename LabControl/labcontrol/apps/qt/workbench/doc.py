@@ -33,6 +33,9 @@ def quick_values(scheme: Scheme) -> Dict[str, Any]:
     return out
 
 
+from ....scheme.background import BG_ID, enabled as background_enabled  # noqa: E402
+
+
 class WorkbenchDoc(QObject):
     changed = pyqtSignal(object)
     selection_changed = pyqtSignal(object)
@@ -83,7 +86,8 @@ class WorkbenchDoc(QObject):
         self._after_change(origin)
         if select != "keep":
             self.select(select)
-        elif self.selected and self.selected != START and self.node(self.selected) is None:
+        elif self.selected and self.selected != START and self.node(self.selected) is None \
+                and not (self.selected == BG_ID and background_enabled(self.scheme)):
             self.select(None)
         return out
 

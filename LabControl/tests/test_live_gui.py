@@ -170,7 +170,7 @@ def test_live_vna_and_popout_and_measure_tab(win, monkeypatch):
     grid = plots.grid
     pos = {k: grid.getItemPosition(grid.indexOf(plots.cells[k])) for k in plots.views}
     assert pos == {"db": (0, 0, 1, 1), "uphase": (0, 1, 1, 1), "iq": (1, 0, 1, 2)}
-    plots.cells["db"].swap.emit("iq", "db")                          # 把 IQ 拖到 dB 的位置
+    plots.swap("iq", "db")                                           # IQ 與 dB 交換位置
     assert live.vna.selected_views() == ["iq", "uphase", "db"]
     assert grid.getItemPosition(grid.indexOf(plots.cells["iq"])) == (0, 0, 1, 1)
     # 最多 5 張：第 6 張會被拒絕；5 張 = 四方格＋下
@@ -208,7 +208,8 @@ def test_live_vna_and_popout_and_measure_tab(win, monkeypatch):
     # 疊圖：dB 左軸、Phase / Unwrap 右軸，同一張畫布；IQ 不能疊
     live.vna.set_views(["db", "phase", "uphase"])
     live.vna.overlay.setChecked(True)
-    ov = plots.cells["overlay"].canvas
+    ov = plots.cell_for("db").canvas
+    assert plots.mode == "overlay" and len(plots.groups) == 1
     assert ov.series == [("db", "L"), ("phase", "R"), ("uphase", "R")] and ov.vb2 is not None
     live.vna._toggle_view("lin", True)                               # 第三種單位 → 拒絕
     assert "lin" not in live.vna.selected_views()

@@ -7,6 +7,7 @@ Data：
   * 數值格式：100350mA（3 位小數、去掉小數點）、100.35mA、100p35mA；
   * 預覽前幾個檔名。
 去背：存到哪個資料夾、檔名後綴（_debg）。
+背景＋去背（1.0.6，流程圖下方的精簡方塊）：勾選電源（不限台數）與背景電流、等待、背景檔名、去背存檔。
 """
 from __future__ import annotations
 
@@ -19,7 +20,8 @@ from PyQt6 import QtWidgets
 from ....data.dataset import AxisSpec
 from ....measure.experiment import split_name
 from ....measure.segments import segment_label
-from ....scheme.compile import norm_formats
+from ....scheme import background as bgmod
+from ....scheme.compile import norm_formats, split_stages
 from ....settings import setting
 from .doc import WorkbenchDoc
 
@@ -34,7 +36,7 @@ class DataPanel(QtWidgets.QWidget):
         self._loading = False
         v = QtWidgets.QVBoxLayout(self)
         v.setContentsMargins(6, 6, 6, 6)
-        self.hint = QtWidgets.QLabel("在流程圖上點一下 Data 或 去背 方塊，在這裡設定檔名與命名規則。")
+        self.hint = QtWidgets.QLabel("在流程圖上點一下 Data、去背 或「背景＋去背」方塊，在這裡設定。")
         self.hint.setWordWrap(True)
         self.hint.setProperty("role", "muted")
         v.addWidget(self.hint)
@@ -111,10 +113,11 @@ class DataPanel(QtWidgets.QWidget):
         self.debg_preview.setWordWrap(True)
         g.addRow(self.debg_preview)
         v.addWidget(self.debg_box)
+        v.addWidget(self._build_bg_box())
         v.addStretch(1)
 
         doc.selection_changed.connect(self.show_block)
-        doc.changed.connect(lambda _o: self.show_block(self.nid))
+        doc.changed.connect(lambda _o: self.show_block(self.doc.selected))
         self.show_block(None)
 
     # ---- 顯示 -------------------------------------------------------------------
@@ -122,6 +125,15 @@ class DataPanel(QtWidgets.QWidget):
         return self.doc.node(self.nid) if self.nid else None
 
     def show_block(self, nid) -> None:
+        if nid == bgmod.BG_ID and bgmod.enabled(self.doc.scheme):
+            self.nid = None
+            self.hint.setVisible(False)
+            self.save_box.setVisible(False)
+            self.debg_box.setVisible(False)
+            self.bg_box.setVisible(True)
+            self._show_background()
+            return
+        self.bg_box.setVisible(False)
         b = self.doc.node(nid) if nid else None
         self.nid = nid if b is not None and b.kind in ("save", "debg") else None
         b = self.block()
@@ -233,3 +245,172 @@ class DataPanel(QtWidgets.QWidget):
         if d:
             self.dest.setText(d)
             self._set("dest", d)
+
+    # ---- 背景＋去背（1.0.6）--------------------------------------------------------
+    def _build_bg_box(self) -> QtWidgets.QGroupBox:
+        from PyQt6.QtCore import Qt
+
+        self.bg_box = QtWidgets.QGroupBox("背景＋去背")
+        self.bg_box.setObjectName("backgroundBox")
+        g = QtWidgets.QFormLayout(self.bg_box)
+        note = QtWidgets.QLabel("主量測完成後：勾選的電源設到背景電流（遠離共振）→ 用與主量測相同的設定量一次背景 → "
+                                "存背景檔 → 主數據的每個檔除以背景，另存成「原檔名＋後綴」。")
+        note.setWordWrap(True)
+        note.setProperty("role", "muted")
+        g.addRow(note)
+        self.bg_measure = QtWidgets.QLabel()
+        self.bg_measure.setWordWrap(True)
+        g.addRow("量測", self.bg_measure)
+        self.bg_table = QtWidgets.QTableWidget(0, 3)
+        self.bg_table.setObjectName("backgroundSources")
+        self.bg_table.setHorizontalHeaderLabels(["電源（勾選要設定的）", "背景電流", "單位"])
+        self.bg_table.verticalHeader().setVisible(False)
+        hh = self.bg_table.horizontalHeader()
+        hh.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        hh.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        self.bg_table.setMinimumHeight(150)
+        self.bg_table.itemChanged.connect(self._bg_item_changed)
+        g.addRow(self.bg_table)
+        self.bg_settle = QtWidgets.QDoubleSpinBox()
+        self.bg_settle.setObjectName("backgroundSettle")
+        self.bg_settle.setRange(0, 3600)
+        self.bg_settle.setDecimals(2)
+        self.bg_settle.setSuffix(" s")
+        self.bg_settle.editingFinished.connect(lambda: self._set_bg("settle", float(self.bg_settle.value())))
+        g.addRow("設定後等待", self.bg_settle)
+        self.bg_file = QtWidgets.QLineEdit()
+        self.bg_file.setObjectName("backgroundFileName")
+        self.bg_file.editingFinished.connect(lambda: self._set_bg("file_name", self.bg_file.text().strip()))
+        g.addRow("背景檔名", self.bg_file)
+        row = QtWidgets.QHBoxLayout()
+        self.bg_dest = QtWidgets.QLineEdit()
+        self.bg_dest.setObjectName("backgroundDest")
+        self.bg_dest.setPlaceholderText("（與數據同一個資料夾）")
+        self.bg_dest.editingFinished.connect(lambda: self._set_bg("dest", self.bg_dest.text().strip()))
+        pick = QtWidgets.QPushButton("📂")
+        pick.clicked.connect(self._pick_bg_dest)
+        row.addWidget(self.bg_dest, 1)
+        row.addWidget(pick)
+        g.addRow("去背存到", row)
+        self.bg_suffix = QtWidgets.QLineEdit()
+        self.bg_suffix.setObjectName("backgroundSuffix")
+        self.bg_suffix.editingFinished.connect(
+            lambda: self._set_bg("suffix", self.bg_suffix.text().strip() or "_debg"))
+        g.addRow("檔名後綴", self.bg_suffix)
+        self.bg_preview = QtWidgets.QLabel()
+        self.bg_preview.setWordWrap(True)
+        g.addRow(self.bg_preview)
+        self.bg_box.setVisible(False)
+        self._bg_rows: List[str] = []
+        self._bg_spins: dict = {}
+        self._Qt = Qt
+        return self.bg_box
+
+    def _bg_targets(self) -> List[tuple]:
+        """[(ref, 名稱, 預設單位, 這台有沒有)]：這台的所有電源，加上方案裡有但這台沒有的。"""
+        cands = bgmod.candidates(self.doc.catalog)
+        rows = [(t.ref, t.label, t.unit, True) for t in cands]
+        have = {t.ref for t in cands}
+        for st in bgmod.config(self.doc.scheme)["sets"]:
+            if st["target"] not in have:
+                rows.append((st["target"], f"{st['target']}（這台沒有）", st.get("unit") or "mA", False))
+        return rows
+
+    def _show_background(self) -> None:
+        Qt = self._Qt
+        c = bgmod.config(self.doc.scheme)
+        sets = {st["target"]: st for st in c["sets"]}
+        rows = self._bg_targets()
+        self._loading = True
+        try:
+            if [r[0] for r in rows] != self._bg_rows:
+                self.bg_table.setRowCount(0)
+                self._bg_spins = {}
+                for i, (ref, label, unit, ok) in enumerate(rows):
+                    self.bg_table.insertRow(i)
+                    it = QtWidgets.QTableWidgetItem(label)
+                    it.setData(Qt.ItemDataRole.UserRole, ref)
+                    it.setFlags(Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsEnabled)
+                    if not ok:
+                        it.setForeground(QtWidgets.QApplication.palette().placeholderText())
+                    self.bg_table.setItem(i, 0, it)
+                    sp = QtWidgets.QDoubleSpinBox()
+                    sp.setRange(-1e6, 1e6)
+                    sp.setDecimals(4)
+                    sp.setKeyboardTracking(False)
+                    sp.editingFinished.connect(lambda r=ref: self._bg_value_changed(r))
+                    self.bg_table.setCellWidget(i, 1, sp)
+                    self._bg_spins[ref] = sp
+                    u = QtWidgets.QTableWidgetItem(unit)
+                    u.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                    self.bg_table.setItem(i, 2, u)
+                self._bg_rows = [r[0] for r in rows]
+                vh = self.bg_table.verticalHeader()
+                shown = min(max(len(rows), 3), 8)               # 8 台以內不用捲
+                self.bg_table.setMinimumHeight(self.bg_table.horizontalHeader().height() + 6 +
+                                               shown * vh.defaultSectionSize())
+            for i, (ref, _label, unit, _ok) in enumerate(rows):
+                st = sets.get(ref)
+                self.bg_table.item(i, 0).setCheckState(Qt.CheckState.Checked if st else Qt.CheckState.Unchecked)
+                sp = self._bg_spins[ref]
+                sp.blockSignals(True)
+                sp.setValue(float(bgmod._value(st.get("value")) or 0.0) if st else sp.value())
+                sp.blockSignals(False)
+                sp.setEnabled(st is not None)
+                self.bg_table.item(i, 2).setText((st or {}).get("unit") or unit)
+            self.bg_settle.setValue(float(bgmod._value(c.get("settle")) or 0.0))
+            stem = self._main_stem()
+            self.bg_file.setPlaceholderText(f"{stem}_bg.nc")
+            self.bg_file.setText(c.get("file_name") or "")
+            self.bg_dest.setText(c.get("dest") or "")
+            self.bg_suffix.setText(c.get("suffix") or "_debg")
+            main, _stages, _debg = split_stages(self.doc.scheme)
+            ms = bgmod._measures(main)
+            self.bg_measure.setText("、".join(f"{m.instrument} {'/'.join(m.traces)}" for m in ms) +
+                                    "（與主量測相同的設定）" if ms else "主流程還沒有量測")
+            self.bg_preview.setText(f"會產生：{c.get('file_name') or stem + '_bg.nc'}、"
+                                    f"每個主數據檔的 …{c.get('suffix') or '_debg'}.nc")
+        finally:
+            self._loading = False
+
+    def _bg_sets_from_table(self) -> List[dict]:
+        Qt = self._Qt
+        out = []
+        for i in range(self.bg_table.rowCount()):
+            it = self.bg_table.item(i, 0)
+            if it is None or it.checkState() != Qt.CheckState.Checked:
+                continue
+            ref = it.data(Qt.ItemDataRole.UserRole)
+            out.append({"target": ref, "value": float(self._bg_spins[ref].value()),
+                        "unit": self.bg_table.item(i, 2).text() or "mA"})
+        return out
+
+    def _bg_item_changed(self, item) -> None:
+        if self._loading or item.column() != 0:
+            return
+        self._set_bg("sets", self._bg_sets_from_table())
+
+    def _bg_value_changed(self, _ref: str) -> None:
+        if self._loading:
+            return
+        self._set_bg("sets", self._bg_sets_from_table())
+
+    def _set_bg(self, field: str, value: Any) -> None:
+        if self._loading:
+            return
+        c = bgmod.config(self.doc.scheme)
+        if c.get(field) == value:
+            return
+
+        def fn(s) -> None:
+            cur = bgmod.config(s)
+            cur[field] = value
+            s.background = cur
+        self.doc.mutate(fn, origin=self)
+
+    def _pick_bg_dest(self) -> None:
+        d = QtWidgets.QFileDialog.getExistingDirectory(self, "去背檔存到", self.bg_dest.text() or "")
+        if d:
+            self.bg_dest.setText(d)
+            self._set_bg("dest", d)

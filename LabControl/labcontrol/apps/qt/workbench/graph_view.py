@@ -204,6 +204,80 @@ class NodeItem(QtWidgets.QGraphicsObject):
         self.view.node_menu(self.nid, e.screenPos())
 
 
+class BackgroundItem(QtWidgets.QGraphicsObject):
+    """1.0.6：「背景＋去背」開關打開時，流程最下面的一個精簡方塊（點它 → 右邊「Data 方塊」分頁設定）。"""
+    BW, BH = 232.0, 50.0
+
+    def __init__(self, view: "FlowView") -> None:
+        super().__init__()
+        self.view = view
+        self.setZValue(2)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.level = "ok"
+        self.sub = ""
+        self.refresh()
+
+    def refresh(self) -> None:
+        from ....scheme import background as bgmod
+
+        doc = self.view.doc
+        c = bgmod.config(doc.scheme)
+        self.sub = f"{bgmod.summary(doc.scheme, doc.catalog)} → {c['suffix'] or '_debg'}"
+        iss = doc.result.issues_for(bgmod.BG_ID)
+        self.level = "error" if any(i.level == "error" for i in iss) else \
+            "warning" if any(i.level == "warning" for i in iss) else "ok"
+        self.setToolTip("\n".join(f"{'✖' if i.level == 'error' else '⚠'} {i.message}" for i in iss
+                                  if i.level != "info")
+                        or "主量測完成後：勾選的電源設到背景電流 → 用相同的 VNA 設定量一條背景 → 存背景檔 → 去背\n"
+                           "點一下在右邊「Data 方塊」分頁設定")
+        self.update()
+
+    def boundingRect(self) -> QRectF:
+        return QRectF(-4, -4, self.BW + 8, self.BH + 8)
+
+    def paint(self, p: QtGui.QPainter, opt, widget=None) -> None:
+        from ....scheme import background as bgmod
+
+        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
+        col = kind_color("save")
+        sel = self.view.doc.selected == bgmod.BG_ID
+        border = theme.qc("err") if self.level == "error" else theme.qc("orange") if self.level == "warning" else \
+            theme.qc("accent") if sel else theme.qc("node_border")
+        r = QRectF(0, 0, self.BW, self.BH)
+        p.setPen(QtGui.QPen(border, 2.6 if (sel or self.level != "ok") else 1.2, Qt.PenStyle.DashLine))
+        p.setBrush(theme.qc("node"))
+        p.drawRoundedRect(r, 9, 9)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(col)
+        p.drawRoundedRect(QRectF(0, 0, 7, self.BH), 4, 4)
+        f = p.font()
+        f.setPointSizeF(10)
+        f.setBold(True)
+        p.setFont(f)
+        p.setPen(theme.readable(col))
+        p.drawText(QRectF(16, 4, self.BW - 24, 20), Qt.AlignmentFlag.AlignVCenter, "背景＋去背")
+        f.setBold(False)
+        f.setPointSizeF(8.6)
+        p.setFont(f)
+        p.setPen(theme.qc("node_text"))
+        fm = QtGui.QFontMetrics(f)
+        p.drawText(QRectF(16, 25, self.BW - 22, 18), Qt.AlignmentFlag.AlignVCenter,
+                   fm.elidedText(self.sub, Qt.TextElideMode.ElideRight, int(self.BW - 24)))
+
+    def mousePressEvent(self, e) -> None:
+        from ....scheme import background as bgmod
+
+        self.view._scene.clearSelection()
+        self.view.doc.select(bgmod.BG_ID)
+        self.view.viewport().update()
+        e.accept()
+
+    def contextMenuEvent(self, e) -> None:
+        m = QtWidgets.QMenu()
+        m.addAction("關閉背景＋去背", lambda: self.view.set_background(False))
+        m.exec(e.screenPos())
+
+
 class EdgeItem(QtWidgets.QGraphicsPathItem):
     def __init__(self, view: "FlowView", src: str, port: str, dst: str, color: QtGui.QColor) -> None:
         super().__init__()
@@ -421,6 +495,8 @@ class FlowView(QtWidgets.QGraphicsView):
         self._drop_node: Optional[NodeItem] = None
         self._rebuilding = False
         self._first = True
+        self.bg_item: Optional[BackgroundItem] = None
+        self.bg_link = None
         doc.changed.connect(self._on_changed)
         doc.selection_changed.connect(self._on_selection)
         self._scene.selectionChanged.connect(self._scene_selection)
@@ -432,6 +508,8 @@ class FlowView(QtWidgets.QGraphicsView):
         if origin is self:
             for it in self.items_by_id.values():
                 it.refresh()
+            if self.bg_item is not None:
+                self.bg_item.refresh()
             self.viewport().update()
             return
         self.rebuild()
@@ -460,11 +538,45 @@ class FlowView(QtWidgets.QGraphicsView):
             e = EdgeItem(self, src, port, dst, col)
             self._scene.addItem(e)
             self.edges.append(e)
+        self.bg_item = None
+        self.bg_link = None
+        from ....scheme import background as bgmod
+
+        if bgmod.enabled(self.doc.scheme):
+            self._add_background_item()
         self._update_scene_rect()
         self._rebuilding = False
         if self._first:
             self._first = False
             QtCore.QTimer.singleShot(0, self.fit_all)
+
+    def _add_background_item(self) -> None:
+        """放在主流程最後一個節點下方，用虛線接上（只是顯示；執行順序固定在主量測之後）。"""
+        g = self.doc.graph
+        tail = g.chain_tail(START)
+        tail_item = self.items_by_id.get(tail)
+        nodes = [it for nid, it in self.items_by_id.items() if nid != START]
+        bottom = max((it.sceneBoundingRect().bottom() for it in nodes), default=0.0)
+        x = tail_item.pos().x() if tail_item is not None else 0.0
+        self.bg_item = BackgroundItem(self)
+        self.bg_item.setPos(x, bottom + 44)
+        self._scene.addItem(self.bg_item)
+        if tail_item is not None:
+            a = tail_item.mapToScene(QPointF(W / 2, tail_item.h))
+            b = self.bg_item.mapToScene(QPointF(BackgroundItem.BW / 2, 0))
+            path = QtGui.QPainterPath(a)
+            path.lineTo(b)
+            self.bg_link = self._scene.addPath(path, QtGui.QPen(theme.qc("edge"), 1.4, Qt.PenStyle.DashLine))
+            self.bg_link.setZValue(1)
+
+    def set_background(self, on: bool) -> None:
+        from ....scheme import background as bgmod
+
+        def fn(s):
+            if on and not bgmod.enabled(s) and bgmod.adopt_explicit(s):
+                return                                         # 原本的四個節點收成一個
+            bgmod.set_enabled(s, on, self.doc.catalog)
+        self.doc.mutate(fn, select=bgmod.BG_ID if on else None)
 
     def _theme_changed(self) -> None:
         self.rebuild()
@@ -862,6 +974,14 @@ class FlowPanel(QtWidgets.QWidget):
             b.setText(text)
             b.clicked.connect(fn)
             bar.addWidget(b)
+        self.bg_toggle = QtWidgets.QToolButton()
+        self.bg_toggle.setObjectName("backgroundToggle")
+        self.bg_toggle.setText("背景＋去背")
+        self.bg_toggle.setCheckable(True)
+        self.bg_toggle.setToolTip("打開：主量測完成後自動量背景（勾選的電源設到背景電流，VNA 設定與主量測相同）並去背，"
+                                  "\n流程圖最下面只多一個精簡方塊；點它在右邊設定")
+        self.bg_toggle.toggled.connect(self._toggle_background)
+        bar.addWidget(self.bg_toggle)
         bar.addStretch()
         self.summary = QtWidgets.QLabel()
         self.summary.setStyleSheet("color:palette(text);")
@@ -882,7 +1002,22 @@ class FlowPanel(QtWidgets.QWidget):
         hint.setStyleSheet("color:palette(placeholder-text); padding:2px 8px; font-size:11px;")
         lay.addWidget(hint)
         doc.changed.connect(lambda _o: self._summary())
+        doc.changed.connect(lambda _o: self._sync_bg_toggle())
         theme.on_change(self, lambda w: w._summary())
+        self._sync_bg_toggle()
+
+    def _sync_bg_toggle(self) -> None:
+        from ....scheme import background as bgmod
+
+        on = bgmod.enabled(self.doc.scheme)
+        if self.bg_toggle.isChecked() != on:
+            self.bg_toggle.blockSignals(True)
+            self.bg_toggle.setChecked(on)
+            self.bg_toggle.blockSignals(False)
+
+    def _toggle_background(self, on: bool) -> None:
+        self.view.set_background(on)
+        self._sync_bg_toggle()
 
     def _fill_add(self, menu: QtWidgets.QMenu) -> None:
         menu.clear()

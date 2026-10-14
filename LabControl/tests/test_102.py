@@ -171,16 +171,19 @@ def test_2d_template_has_background_and_debg(tmp_path):
     from labcontrol.scheme.compile import split_stages
     from labcontrol.scheme.templates import load_template
 
+    from labcontrol.scheme import background
+
     s = load_template("02_2d")
-    main, stages, debg = split_stages(s)
-    assert s.template_rev >= 2 and len(stages) == 1 and debg is not None
-    assert [b.kind for b in stages[0]] == ["set", "measure", "save"]
+    main, stages, debg = split_stages(s)                     # 1.0.6：背景＋去背改成開關（不是流程圖節點）
+    assert s.template_rev >= 3 and not stages and debg is None and background.enabled(s)
+    stage, debg = background.stage_blocks(s, main)
+    assert [b.kind for b in stage] == ["set", "measure", "save"] and debg.kind == "debg"
     # LAB/templates 裡比較舊的 2D → 換成新的（舊的留在 舊範本_rev0/）
     home = tmp_path / "LAB"
     (home / "templates").mkdir(parents=True)
     (home / "templates" / "02_2d.scheme.yaml").write_text("scheme: 1\nname: 2D\nblocks: []\n", encoding="utf-8")
     paths._upgrade_templates(home)
-    assert "template_rev: 2" in (home / "templates" / "02_2d.scheme.yaml").read_text(encoding="utf-8")
+    assert "template_rev: 3" in (home / "templates" / "02_2d.scheme.yaml").read_text(encoding="utf-8")
     assert (home / "templates" / "舊範本_rev0" / "02_2d.scheme.yaml").is_file()
 
 

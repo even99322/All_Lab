@@ -1115,6 +1115,9 @@ class BrowserWindow(QMainWindow):
 
     def open_database(self, root_path: str) -> None:
         self.scanner_root = str(Path(root_path).expanduser().resolve())
+        from app.core.data_identity import remember_network_root
+
+        remember_network_root(self.scanner_root, self.scanner_root)   # v1.0.4: no per-folder server call
         self._refresh_project_combo()
         self._record_operation("Database opening started")
         self._start_scan(self.scanner_root)
@@ -2637,6 +2640,28 @@ class BrowserWindow(QMainWindow):
         self._prewarm_preview(path, state)
         return True
 
+    def _entry_for_source(self, source_path) -> LogEntry | None:
+        """The readable entry whose identity is ``source_path``.
+
+        v1.0.4: compares the path text first and resolves only files with the same name — resolving every
+        entry (thousands on the NAS, each a request over VPN) froze the window while a session was restored."""
+        if not isinstance(source_path, str) or not source_path or self.scan_result is None:
+            return None
+        import os
+
+        def norm(text: str) -> str:
+            return os.path.normcase(os.path.normpath(text))
+
+        wanted, name = norm(source_path), os.path.basename(source_path).lower()
+        candidates = [e for e in self.scan_result.entries if e.status == "ok"]
+        hit = next((e for e in candidates if norm(e.absolute_path) == wanted), None)
+        if hit is not None:
+            return hit
+        for entry in candidates:
+            if entry.file_name.lower() == name and stable_data_identity(entry.absolute_path) == source_path:
+                return entry
+        return None
+
     def _restore_after_scan(self, state: dict) -> None:
         """Restore valid pieces only after the database scan has populated entries."""
         self._restoring_session = True
@@ -2673,12 +2698,7 @@ class BrowserWindow(QMainWindow):
                 for viewer_state in state.get("viewers", []):
                     if not isinstance(viewer_state, dict):
                         continue
-                    source_path = viewer_state.get("source_path")
-                    entry = next(
-                        (candidate for candidate in self.scan_result.entries
-                         if stable_data_identity(candidate.absolute_path) == source_path
-                         and candidate.status == "ok"), None
-                    )
+                    entry = self._entry_for_source(viewer_state.get("source_path"))
                     if entry is not None and Path(entry.absolute_path).is_file():
                         self._open_viewer_for(entry, viewer_state)
         finally:

@@ -145,6 +145,9 @@ def remap_scheme(scheme: Scheme, cat: Catalog, roles: Dict[str, Dict[str, List[s
             used.append(b.target.split(".")[0] if "." in b.target else b.target)
         elif b.kind == "measure" and b.instrument:
             used.append(b.instrument)
+    from . import background
+
+    used += [u for u in background.used_instruments(scheme) if u not in used]
     m = mapping(used, cat, roles, node)
     if not m:
         return {}
@@ -155,5 +158,6 @@ def remap_scheme(scheme: Scheme, cat: Catalog, roles: Dict[str, Dict[str, List[s
                 b.target = m[head] + ("." + rest if rest else "")
         elif b.kind == "measure" and b.instrument in m:
             b.instrument = m[b.instrument]
+    background.remap(scheme, m)
     scheme.sync_from_graph()
     return m

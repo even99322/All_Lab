@@ -25,7 +25,8 @@ API（JSON；需要 token：``Authorization: Bearer <token>``，網頁用 cookie
 
 網頁：``/portal``（量子工程平台入口：模塊、數據目錄、標籤與論文、站長管理）、``/nodes``（量測節點監控）、
 ``/login``（論文庫帳號，或裝置 token）、``/logout``。平台 API 見 ``platform_routes.py``；
-數據索引 ``/api/index/…`` 見 ``index_routes.py``；手機看即時量測 ``/m`` 見 ``mobile_routes.py``。
+數據索引 ``/api/index/…`` 見 ``index_routes.py``；手機看即時量測 ``/m`` 見 ``mobile_routes.py``；
+手機 / 平板看數據 ``/m/data`` 見 ``data_routes.py``。
 """
 from __future__ import annotations
 
@@ -1242,6 +1243,7 @@ def _hub_restart(h: Handler) -> None:
 from . import platform_routes  # noqa: E402,F401  （平台 API：/api/platform/…、/portal）
 from . import index_routes  # noqa: E402,F401  （1.0.4 數據索引：/api/index/…）
 from . import mobile_routes  # noqa: E402,F401  （1.0.4 手機看即時量測：/m、/api/m/…）
+from . import data_routes  # noqa: E402,F401  （1.0.6 手機 / 平板看數據：/m/data、/api/data/…）
 
 
 # ---------------------------------------------------------------------------

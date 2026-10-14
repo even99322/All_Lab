@@ -3,9 +3,10 @@
 上半部（可以拉小 / 收起）：選 VNA、RF、S 參數、參數（含掃描時間）。
 S 參數按鈕依 VNA 的 port 數自動產生（4 port → S11…S44 的 4×4 矩陣，例如 S31、S43）：選 VNA 時自動偵測，
 「偵測 port」按鈕重新偵測；ZNA 上已經有 trace 的參數用粗體標示，沒有的量測時自動建立。
-下半部：曲線，可以複選 dB / Linear / Real / Imag / Phase / Unwrap phase / IQ（最多 5 張），九宮格排法：
-2 張上下、3 張上左右＋下、4 張四方格、5 張四方格＋下；拖曳圖的標題列交換位置；可以疊加數據點；
-「⧉ 曲線視窗」把圖拿出來單獨一個視窗。
+下半部：曲線，可以複選 dB / Linear / Real / Imag / Phase / Unwrap phase / IQ（最多 5 種）。
+1.0.6 像 VNA 儀器的 diagram：每張圖可以疊幾種曲線（左右兩軸），疊圖與並排同時存在——拖曳圖的 ⠿ 或曲線名稱，
+放到另一張圖中間 = 疊上去、放到邊緣 = 放在旁邊；版面：自動（2 張上下、3 張上左右＋下、4 張四方格…）、上下、左右。
+可以疊加數據點；「⧉ 曲線視窗」把圖拿出來單獨一個視窗。
 
 刷新：「連續」＋ 間隔（秒）。間隔 = 最短（預設）→ 上一次讀完立刻讀下一次，刷新間隔就是實際量測時間。
 VNA 掃描速度用「掃描時間」「自動掃描時間」、點數、IF 頻寬控制。
@@ -151,92 +152,237 @@ def _canvas(math=None):
     return TraceCanvas(view, lambda k: VIEWS[k][1], lambda k: UNITS[k], lambda k: VIEWS[k][0])
 
 
+def normalize_groups(groups: List[List[str]], limit: int = MAX_VIEWS) -> List[List[str]]:
+    """1.0.6：整理圖的分組（每一組 = 一張圖，組內疊圖）。去掉重複與未知的種類、最多 ``limit`` 種；
+    IQ 只能自己一張；一張圖最多兩種單位（左右兩軸），放不下的另開一張（緊接在後面）。"""
+    seen: set = set()
+    out: List[List[str]] = []
+    for g in groups or []:
+        keys = [k for k in (g if isinstance(g, (list, tuple)) else [g]) if k in VIEWS]
+        cur: List[str] = []
+        extra: List[List[str]] = []
+        units: List[str] = []
+        for k in keys:
+            if k in seen or len(seen) >= limit:
+                continue
+            seen.add(k)
+            u = UNIT_GROUP[k]
+            if k == "iq" or (u not in units and len(units) == 2):
+                extra.append([k])
+                continue
+            if u not in units:
+                units.append(u)
+            cur.append(k)
+        out += ([cur] if cur else []) + extra
+    return out
+
+
+def can_overlay(keys: List[str]) -> bool:
+    return "iq" not in keys and len({UNIT_GROUP[k] for k in keys}) <= 2
+
+
+def cell_id(keys: List[str]) -> str:
+    return "+".join(keys)
+
+
+def layout_positions(n: int, mode: str = "auto") -> List[tuple]:
+    """auto = 九宮格排法；rows = 上下一張一張；cols = 左右並排。→ (row, col, rowspan, colspan)，2 欄。"""
+    if mode == "rows":
+        return [(i, 0, 1, 2) for i in range(n)]
+    if mode == "cols":
+        return [(0, i, 1, 1) for i in range(n)]
+    return grid_positions(n)
+
+
+DROP_CENTER, DROP_BEFORE, DROP_AFTER = "center", "before", "after"
+
+
+class _DropHint(QtWidgets.QLabel):
+    def __init__(self, parent: QtWidgets.QWidget) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.hide()
+
+    def show_zone(self, zone: str, edge: str) -> None:
+        p = self.parentWidget().rect()
+        col = QtGui.QColor(theme.c("accent"))
+        rgba = f"rgba({col.red()},{col.green()},{col.blue()},70)"
+        if zone == DROP_CENTER:
+            self.setGeometry(p.adjusted(p.width() // 6, p.height() // 6, -p.width() // 6, -p.height() // 6))
+            self.setText("疊在這張圖")
+        else:
+            t = 26
+            geo = {"left": QtCore.QRect(0, 0, t, p.height()), "right": QtCore.QRect(p.width() - t, 0, t, p.height()),
+                   "top": QtCore.QRect(0, 0, p.width(), t),
+                   "bottom": QtCore.QRect(0, p.height() - t, p.width(), t)}[edge]
+            self.setGeometry(geo)
+            self.setText("放旁邊" if edge in ("top", "bottom") else "")
+        self.setStyleSheet(f"background:{rgba}; border:2px solid {theme.c('accent')}; border-radius:6px; "
+                           f"color:{theme.c('text')}; font-weight:600;")
+        self.raise_()
+        self.show()
+
+
 class PlotCell(QtWidgets.QFrame):
-    """一張圖：標題列（⠿ 拖曳換位置）＋ 畫布。"""
+    """一張圖（1.0.6 像 VNA 的 diagram）：標題列 ⠿ = 拖整張圖，曲線名稱 = 只拖那條曲線；畫布可以疊多種曲線。
 
-    swap = pyqtSignal(str, str)          # 拖來的 key、放到的 key
+    拖到另一張圖的中間 = 疊在那張圖；拖到邊緣 = 放在那張圖旁邊（左 / 上 = 前面，右 / 下 = 後面）。"""
 
-    def __init__(self, key: str, math=None) -> None:
+    dropped = pyqtSignal(str, str, str)          # 拖來的東西（cell:<id> / trace:<key>）、放到的圖 id、位置
+    split_trace = pyqtSignal(str)                # 曲線右鍵「分開成獨立的圖」
+
+    def __init__(self, keys: List[str], math=None) -> None:
         super().__init__()
-        self.key = key
+        self.keys = list(keys)
+        self.key = cell_id(self.keys)
         self.setAcceptDrops(True)
         self.setObjectName("plotcell")
         v = QtWidgets.QVBoxLayout(self)
         v.setContentsMargins(2, 2, 2, 2)
         v.setSpacing(0)
+        bar = QtWidgets.QWidget()
+        hb = QtWidgets.QHBoxLayout(bar)
+        hb.setContentsMargins(4, 1, 4, 1)
+        hb.setSpacing(4)
+        self.grip = QtWidgets.QLabel("⠿")
+        self.grip.setCursor(Qt.CursorShape.OpenHandCursor)
+        self.grip.setToolTip("拖曳整張圖：放到另一張圖中間 = 疊圖，放到邊緣 = 放在旁邊")
+        hb.addWidget(self.grip)
+        self.chips: Dict[str, QtWidgets.QLabel] = {}
+        for k in self.keys:
+            chip = QtWidgets.QLabel(VIEWS[k][0])
+            chip.setCursor(Qt.CursorShape.OpenHandCursor)
+            chip.setToolTip("拖曳這條曲線到另一張圖 = 疊上去；拖到邊緣 = 自己一張圖放旁邊；右鍵 = 分開")
+            chip.mousePressEvent = lambda ev, w=chip: self._press_at(ev, w)
+            chip.mouseMoveEvent = lambda ev, k=k, w=chip: self._move_at(ev, f"trace:{k}", w)
+            chip.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            chip.customContextMenuRequested.connect(lambda _p, k=k: self._chip_menu(k))
+            self.chips[k] = chip
+            hb.addWidget(chip)
         self.head = QtWidgets.QLabel()
         self.head.setCursor(Qt.CursorShape.OpenHandCursor)
-        self.head.setToolTip("拖曳標題列到另一張圖 = 交換位置")
-        self.head.setContentsMargins(6, 2, 6, 2)
-        v.addWidget(self.head)
+        self.head.setToolTip(self.grip.toolTip())
+        hb.addWidget(self.head, 1)
+        for w in (self.grip, self.head):
+            w.mousePressEvent = lambda ev, w=w: self._press_at(ev, w)
+            w.mouseMoveEvent = lambda ev, w=w: self._move_at(ev, f"cell:{self.key}", w)
+        self.bar = bar
+        v.addWidget(bar)
         self.canvas = _canvas(math)
-        if key != "overlay":
-            self.canvas.set_series([(key, "L")])
+        self.canvas.set_series(overlay_sides(self.keys) if len(self.keys) > 1 else [(self.keys[0], "L")])
         v.addWidget(self.canvas, 1)
+        for w in [self.canvas, *self.canvas.findChildren(QtWidgets.QWidget)]:
+            w.setAcceptDrops(False)                      # 拖放交給整張圖（PlotCell）處理
         self.pw = self.canvas.pw
         self.plot = self.canvas.plot
         self._press: Optional[QtCore.QPoint] = None
-        self.head.mousePressEvent = self._head_press
-        self.head.mouseMoveEvent = self._head_move
+        self.hint = _DropHint(self)
         self.set_title("")
         self._hl(False)
 
     @property
     def curve(self):
-        return self.canvas.curves.get(self.key) or next(iter(self.canvas.curves.values()), None)
+        return self.canvas.curves.get(self.keys[0]) or next(iter(self.canvas.curves.values()), None)
 
     def set_title(self, tr: str) -> None:
-        name = "疊圖" if self.key == "overlay" else VIEWS[self.key][0]
-        self.head.setText(f"⠿  {name}" + (f"　·　{tr}" if tr else ""))
+        self.head.setText(f"　{tr}" if tr else "")
 
     def _hl(self, on: bool) -> None:
         self.setStyleSheet(f"#plotcell {{ border:1px {'dashed' if on else 'solid'} "
                            f"{theme.c('accent') if on else theme.c('border')}; border-radius:6px; }}")
         self.head.setStyleSheet(f"color:{theme.c('muted')}; font-size:11px;")
+        self.grip.setStyleSheet(f"color:{theme.c('muted')}; font-size:13px;")
+        for i, chip in enumerate(self.chips.values()):
+            col = theme.c(["curve", "orange", "ok", "err", "accent"][i % 5])
+            chip.setStyleSheet(f"color:{col}; border:1px solid {col}; border-radius:7px; padding:0 6px; "
+                               "font-size:11px; font-weight:600;")
 
-    def _head_press(self, ev) -> None:
+    # ---- 拖曳 ---------------------------------------------------------------------
+    def _press_at(self, ev, w) -> None:
         if ev.button() == Qt.MouseButton.LeftButton:
             self._press = ev.position().toPoint()
 
-    def _head_move(self, ev) -> None:
+    def _move_at(self, ev, payload: str, w) -> None:
         if self._press is None or (ev.position().toPoint() - self._press).manhattanLength() < 8:
             return
         self._press = None
         md = QtCore.QMimeData()
-        md.setData(PLOT_MIME, self.key.encode())
+        md.setData(PLOT_MIME, payload.encode())
         drag = QtGui.QDrag(self)
         drag.setMimeData(md)
-        drag.setPixmap(self.head.grab())
+        drag.setPixmap(w.grab() if payload.startswith("trace:") else self.bar.grab())
         drag.exec(Qt.DropAction.MoveAction)
 
+    def zone_at(self, pos: QtCore.QPoint) -> tuple:
+        """(位置, 邊)：中間 1/3 以內 = 疊圖；否則依最近的邊 = 前面 / 後面。"""
+        w, h = max(self.width(), 1), max(self.height(), 1)
+        fx, fy = pos.x() / w, pos.y() / h
+        if 0.25 <= fx <= 0.75 and 0.25 <= fy <= 0.75:
+            return DROP_CENTER, ""
+        d = {"left": fx, "right": 1 - fx, "top": fy, "bottom": 1 - fy}
+        edge = min(d, key=d.get)
+        return (DROP_BEFORE if edge in ("left", "top") else DROP_AFTER), edge
+
+    def _payload(self, ev) -> Optional[str]:
+        if not ev.mimeData().hasFormat(PLOT_MIME):
+            return None
+        return bytes(ev.mimeData().data(PLOT_MIME)).decode()
+
     def dragEnterEvent(self, ev) -> None:
-        if ev.mimeData().hasFormat(PLOT_MIME) and bytes(ev.mimeData().data(PLOT_MIME)).decode() != self.key:
-            self._hl(True)
-            ev.acceptProposedAction()
+        p = self._payload(ev)
+        if p is None or p == f"cell:{self.key}":
+            return
+        self._hl(True)
+        ev.acceptProposedAction()
+
+    def dragMoveEvent(self, ev) -> None:
+        p = self._payload(ev)
+        if p is None or p == f"cell:{self.key}":
+            ev.ignore()
+            return
+        zone, edge = self.zone_at(ev.position().toPoint())
+        self.hint.show_zone(zone, edge)
+        ev.acceptProposedAction()
 
     def dragLeaveEvent(self, ev) -> None:
         self._hl(False)
+        self.hint.hide()
 
     def dropEvent(self, ev) -> None:
         self._hl(False)
-        self.swap.emit(bytes(ev.mimeData().data(PLOT_MIME)).decode(), self.key)
+        self.hint.hide()
+        p = self._payload(ev)
+        if p is None:
+            return
+        zone, _edge = self.zone_at(ev.position().toPoint())
         ev.acceptProposedAction()
+        QtCore.QTimer.singleShot(0, lambda: self.dropped.emit(p, self.key, zone))   # 拖曳結束後再重排
+
+    def _chip_menu(self, k: str) -> None:
+        m = QtWidgets.QMenu(self)
+        a = m.addAction("分開成獨立的圖", lambda: self.split_trace.emit(k))
+        a.setEnabled(len(self.keys) > 1)
+        m.exec(QtGui.QCursor.pos())
 
 
 class TracePlots(QtWidgets.QWidget):
-    """分開：最多 5 張圖，九宮格排法、拖曳標題列交換位置；疊圖：同一張畫布、左右兩個 Y 軸。
+    """1.0.6：像 VNA 儀器的 diagram——每張圖可以疊多種曲線（左右兩軸），也可以分開；疊圖和並排可以同時存在。
+    拖曳圖或曲線名稱重新排列；版面：自動（九宮格）、上下、左右。
     每張圖都可以拖曲線上下移動、在軸上拖曳縮放、雙擊加 marker。"""
 
-    order_changed = pyqtSignal(list)
+    order_changed = pyqtSignal(list)              # 曲線種類的順序
+    groups_changed = pyqtSignal(list)             # 圖的分組（每組一張圖）
+    message = pyqtSignal(str)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.grid = QtWidgets.QGridLayout(self)
         self.grid.setContentsMargins(0, 0, 0, 0)
         self.grid.setSpacing(6)
-        self.views: List[str] = []
+        self.groups: List[List[str]] = []
         self.cells: Dict[str, PlotCell] = {}
-        self.mode = "grid"                 # grid | overlay
+        self.layout_mode = "auto"
         self.points = False
         self.last = None
         self._syncing = False
@@ -252,111 +398,200 @@ class TracePlots(QtWidgets.QWidget):
         if self.last is not None:
             self.update_data(*self.last)
 
+    # ---- 查詢 ---------------------------------------------------------------------
+    @property
+    def views(self) -> List[str]:
+        return [k for g in self.groups for k in g]
+
+    @property
+    def mode(self) -> str:
+        """相容：全部疊在一張 = overlay，否則 grid。"""
+        return "overlay" if len(self.groups) == 1 and len(self.groups[0]) > 1 else "grid"
+
+    def cell_for(self, k: str) -> Optional[PlotCell]:
+        g = next((g for g in self.groups if k in g), None)
+        return self._cell(g) if g is not None else None
+
     @property
     def plots(self) -> Dict[str, Any]:
-        if self.mode == "overlay":
-            c = self._cell("overlay")
-            return {k: c.plot for k in c.canvas.curves}
-        return {k: self.cells[k].plot for k in self.views}
+        return {k: self.cell_for(k).plot for k in self.views}
 
     @property
     def curves(self) -> Dict[str, Any]:
-        if self.mode == "overlay":
-            return dict(self._cell("overlay").canvas.curves)
-        return {k: self.cells[k].curve for k in self.views}
+        return {k: self.cell_for(k).canvas.curves.get(k) for k in self.views}
 
     def canvases(self) -> List[Any]:
-        keys = ["overlay"] if self.mode == "overlay" else self.views
-        return [self._cell(k).canvas for k in keys]
+        return [self._cell(g).canvas for g in self.groups]
 
-    def _cell(self, k: str) -> PlotCell:
-        c = self.cells.get(k)
+    def _cell(self, keys: List[str]) -> PlotCell:
+        cid = cell_id(keys)
+        c = self.cells.get(cid)
         if c is None:
-            c = PlotCell(k, self.math)
-            c.swap.connect(self.swap)
+            c = PlotCell(keys, self.math)
+            c.dropped.connect(self._on_drop)
+            c.split_trace.connect(self.split_out)
             c.canvas.set_points(self.points)
-            if k not in ("iq", "overlay"):
-                c.canvas.vb.sigXRangeChanged.connect(lambda _vb, r, k=k: self._sync_x(k, r))
-            self.cells[k] = c
+            if "iq" not in keys:
+                c.canvas.vb.sigXRangeChanged.connect(lambda _vb, r, cid=cid: self._sync_x(cid, r))
+            self.cells[cid] = c
         return c
 
+    # ---- 設定 ---------------------------------------------------------------------
     def set_points(self, on: bool) -> None:
         self.points = bool(on)
         for c in self.cells.values():
             c.canvas.set_points(on)
 
-    def set_mode(self, mode: str) -> None:
-        if mode != self.mode:
-            self.mode = mode
-            self._relayout()
-            if self.last is not None:
-                self.update_data(*self.last)
-
-    def set_views(self, views: List[str]) -> None:
-        views = [k for k in dict.fromkeys(views) if k in VIEWS][:MAX_VIEWS]
-        if views == self.views:
+    def set_groups(self, groups: List[List[str]], emit: bool = False) -> None:
+        groups = normalize_groups(groups)
+        if groups == self.groups:
             return
-        self.views = views
+        self.groups = groups
         self._relayout()
         if self.last is not None:
             self.update_data(*self.last)
+        if emit:
+            self.order_changed.emit(self.views)
+            self.groups_changed.emit([list(g) for g in self.groups])
+
+    def set_mode(self, mode: str) -> None:
+        """overlay = 全部疊在一張（放不下的另開）；grid = 每種一張。"""
+        views = self.views
+        self.set_groups([views] if mode == "overlay" else [[k] for k in views])
+
+    def set_views(self, views: List[str]) -> None:
+        """勾選的種類：保留原本的分組，新的種類自己一張圖（加在最後）。"""
+        views = [k for k in dict.fromkeys(views) if k in VIEWS][:MAX_VIEWS]
+        keep = [[k for k in g if k in views] for g in self.groups]
+        have = {k for g in keep for k in g}
+        self.set_groups([g for g in keep if g] + [[k] for k in views if k not in have])
+
+    def set_layout_mode(self, mode: str) -> None:
+        if mode in ("auto", "rows", "cols") and mode != self.layout_mode:
+            self.layout_mode = mode
+            self._relayout()
+
+    # ---- 拖曳重排 -------------------------------------------------------------------
+    def _index_of(self, cid: str) -> int:
+        return next((i for i, g in enumerate(self.groups) if cell_id(g) == cid), -1)
+
+    def _on_drop(self, payload: str, target: str, zone: str) -> None:
+        kind, _, what = payload.partition(":")
+        if kind == "trace":
+            self.move_trace(what, target, zone)
+        elif kind == "cell":
+            self.move_cell(what, target, zone)
+
+    def move_trace(self, k: str, target: str, zone: str) -> bool:
+        """把一條曲線移到另一張圖（中間 = 疊上去；邊緣 = 自己一張放在旁邊）。"""
+        groups = [list(g) for g in self.groups]
+        ti = self._index_of(target)
+        src = next((g for g in groups if k in g), None)
+        if ti < 0 or src is None:
+            return False
+        tgt = groups[ti]
+        if zone == DROP_CENTER:
+            if k in tgt:
+                return False
+            if not can_overlay(tgt + [k]):
+                self.message.emit("這張圖疊不下：一張圖最多兩種單位（左右兩軸），IQ 只能自己一張")
+                return False
+            src.remove(k)
+            tgt.append(k)
+        else:
+            if src == [k] and src is tgt:
+                return False
+            src.remove(k)
+            ti = next(i for i, g in enumerate(groups) if g is tgt)
+            groups.insert(ti if zone == DROP_BEFORE else ti + 1, [k])
+        self.set_groups([g for g in groups if g], emit=True)
+        return True
+
+    def move_cell(self, cid: str, target: str, zone: str) -> bool:
+        """整張圖：中間 = 合併成疊圖；邊緣 = 移到那張圖前面 / 後面。"""
+        si, ti = self._index_of(cid), self._index_of(target)
+        if si < 0 or ti < 0 or si == ti:
+            return False
+        groups = [list(g) for g in self.groups]
+        moving = groups[si]
+        tgt = groups[ti]
+        if zone == DROP_CENTER:
+            if not can_overlay(tgt + moving):
+                self.message.emit("這兩張圖疊不起來：一張圖最多兩種單位（左右兩軸），IQ 只能自己一張")
+                return False
+            tgt.extend(moving)
+            groups.pop(si)
+        else:
+            groups.pop(si)
+            ti = next(i for i, g in enumerate(groups) if g is tgt)
+            groups.insert(ti if zone == DROP_BEFORE else ti + 1, moving)
+        self.set_groups(groups, emit=True)
+        return True
+
+    def split_out(self, k: str) -> None:
+        groups = [list(g) for g in self.groups]
+        i = next((i for i, g in enumerate(groups) if k in g), -1)
+        if i < 0 or len(groups[i]) < 2:
+            return
+        groups[i].remove(k)
+        groups.insert(i + 1, [k])
+        self.set_groups(groups, emit=True)
 
     def swap(self, a: str, b: str) -> None:
-        if a not in self.views or b not in self.views or a == b:
+        """相容（舊的拖曳換位置）：交換 a、b 所在的兩張圖。"""
+        ia = next((i for i, g in enumerate(self.groups) if a in g), -1)
+        ib = next((i for i, g in enumerate(self.groups) if b in g), -1)
+        if ia < 0 or ib < 0 or ia == ib:
             return
-        i, j = self.views.index(a), self.views.index(b)
-        self.views[i], self.views[j] = b, a
-        self._relayout()
-        self.order_changed.emit(list(self.views))
+        groups = [list(g) for g in self.groups]
+        groups[ia], groups[ib] = groups[ib], groups[ia]
+        self.set_groups(groups, emit=True)
 
     def _relayout(self) -> None:
         while self.grid.count():
             self.grid.takeAt(0)
-        for c in self.cells.values():
+        live = {cell_id(g) for g in self.groups}
+        for cid in [c for c in self.cells if c not in live]:
+            c = self.cells.pop(cid)                      # 分組改了：舊的圖不再用
             c.hide()
-        if self.mode == "overlay":
-            c = self._cell("overlay")
-            c.canvas.set_series(overlay_sides(self.views))
-            self.grid.addWidget(c, 0, 0, 1, 2)
-            c.show()
-            for r in range(3):
-                self.grid.setRowStretch(r, 1 if r == 0 else 0)
-            return
-        for k, pos in zip(self.views, grid_positions(len(self.views))):
-            c = self._cell(k)
+            c.deleteLater()
+        positions = layout_positions(len(self.groups), self.layout_mode)
+        for g, pos in zip(self.groups, positions):
+            c = self._cell(g)
             self.grid.addWidget(c, *pos)
             c.show()
-        rows = max((r + rs for r, _c, rs, _cs in grid_positions(len(self.views))), default=1)
-        for r in range(3):
+        rows = max((r + rs for r, _c, rs, _cs in positions), default=1)
+        cols = max((c + cs for _r, c, _rs, cs in positions), default=1)
+        for r in range(max(rows, self.grid.rowCount())):
             self.grid.setRowStretch(r, 1 if r < rows else 0)
-        for col in range(2):
-            self.grid.setColumnStretch(col, 1)
+        for col in range(max(cols, self.grid.columnCount(), 2)):
+            self.grid.setColumnStretch(col, 1 if col < max(cols, 2 if self.layout_mode != "cols" else cols) else 0)
 
     def _sync_x(self, src: str, r) -> None:
-        """分開模式的頻率軸連動：用數值同步（圖寬不同時 setXLink 會依像素對齊而錯開）。"""
-        if self._syncing or src not in self.views or self.mode != "grid":
+        """頻率軸連動：用數值同步（圖寬不同時 setXLink 會依像素對齊而錯開）。"""
+        if self._syncing or src not in self.cells:
             return
         self._syncing = True
         try:
-            for k in self.views:
-                if k != src and k != "iq":
-                    self.cells[k].plot.setXRange(float(r[0]), float(r[1]), padding=0)
+            for g in self.groups:
+                cid = cell_id(g)
+                if cid != src and "iq" not in g:
+                    self.cells[cid].plot.setXRange(float(r[0]), float(r[1]), padding=0)
         finally:
             self._syncing = False
 
     def update_data(self, tr: str, x, z, unit: str) -> None:
         self.last = (tr, x, z, unit)
-        keys = ["overlay"] if self.mode == "overlay" else self.views
         m = self.math
-        for k in keys:
-            c = self._cell(k)
+        for g in self.groups:
+            c = self._cell(g)
             c.canvas.x_is_freq = m.fx is None
             c.canvas.update_data(tr, x, z, unit)
             c.set_title(tr + (f"　·　{self.math_text()}" if m.active else ""))
-            if m.fx is not None and k != "iq":
+            if m.fx is not None and "iq" not in g:
                 c.canvas.plot.setLabel("bottom", f"x = {m.x_text}（x = 頻率 Hz）", units="")
-            if k != "overlay":
-                y0 = VIEWS[k][1]
+            if len(g) == 1:
+                y0 = VIEWS[g[0]][1]
                 c.canvas.plot.setLabel("left", f"y = {m.y_text}（y = {y0}）" if m.fy is not None else y0)
 
     def math_text(self) -> str:
@@ -546,11 +781,19 @@ class VNAPanel(QtWidgets.QWidget):
         self.vbtn: Dict[str, QtWidgets.QPushButton] = {}
         views = [k for k in (saved.get("views") or ["db"]) if k in VIEWS][:MAX_VIEWS] or ["db"]
         self.order: List[str] = list(views)          # 圖的順序（勾選順序；拖曳可交換）
+        # 1.0.6：圖的分組（每組一張圖、組內疊圖）；舊設定只有 mode → 全部疊或全部分開
+        saved_groups = saved.get("groups")
+        if isinstance(saved_groups, list) and saved_groups:
+            self.groups = normalize_groups([g for g in saved_groups if isinstance(g, list)]) or [[k] for k in views]
+        else:
+            self.groups = [list(views)] if saved.get("mode") == "overlay" else [[k] for k in views]
+        self.order = [k for g in self.groups for k in g]
+        views = list(self.order)
         for k, (text, _y) in VIEWS.items():
             b = QtWidgets.QPushButton(text)
             b.setCheckable(True)
             b.setChecked(k in views)
-            b.setToolTip(f"可以複選（最多 {MAX_VIEWS} 張）：每種一張圖；拖曳圖的標題列可以換位置")
+            b.setToolTip(f"可以複選（最多 {MAX_VIEWS} 種）：新的種類自己一張圖；拖曳圖或曲線名稱可以疊圖 / 換位置")
             b.clicked.connect(lambda on, k=k: self._toggle_view(k, on))
             self.vbtn[k] = b
             row.addWidget(b)
@@ -566,11 +809,20 @@ class VNAPanel(QtWidgets.QWidget):
         row = QtWidgets.QHBoxLayout(self.tool_bar)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(4)
-        self.overlay = QtWidgets.QCheckBox("疊圖（同一張、左右兩軸）")
-        self.overlay.setToolTip("勾選的種類畫在同一張圖：第一種單位用左軸，另一種單位用右軸（例如 dB 左、Phase 右）")
-        self.overlay.setChecked(saved.get("mode") == "overlay")
+        self.overlay = QtWidgets.QCheckBox("全部疊圖")
+        self.overlay.setToolTip("勾選的種類全部畫在同一張圖：第一種單位用左軸，另一種單位用右軸（例如 dB 左、Phase 右）。\n"
+                                "只想疊其中幾種：拖曳圖的標題（⠿）或曲線名稱到另一張圖的中間；拖到邊緣 = 放在旁邊")
+        self.overlay.setChecked(len(self.groups) == 1 and len(self.order) > 1)
         self.overlay.toggled.connect(self._mode_changed)
         row.addWidget(self.overlay)
+        self.layout_box = QtWidgets.QComboBox()
+        self.layout_box.setObjectName("plotLayout")
+        for key, text in (("auto", "自動排列"), ("rows", "上下排列"), ("cols", "左右並排")):
+            self.layout_box.addItem(text, key)
+        self.layout_box.setToolTip("圖的排法：自動（2 張上下、3 張上左右＋下、4 張四方格…）、全部上下、全部左右")
+        self.layout_box.setCurrentIndex(max(0, self.layout_box.findData(saved.get("layout") or "auto")))
+        self.layout_box.currentIndexChanged.connect(self._layout_changed)
+        row.addWidget(self.layout_box)
         for text, tip, fn in (("自動範圍", "所有軸回到自動範圍", lambda: self.plots.auto_range()),
                               ("重設偏移", "拖曳曲線造成的上下偏移歸零", lambda: self.plots.reset_offsets()),
                               ("清除 Marker", "刪除所有 marker（單一 marker：在 marker 上按右鍵）",
@@ -579,7 +831,8 @@ class VNAPanel(QtWidgets.QWidget):
             b.setToolTip(tip)
             b.clicked.connect(fn)
             row.addWidget(b)
-        hint = QtWidgets.QLabel("雙擊 = 加 marker · 拖曲線 = 上下移動 · 在軸上拖曳 = 縮放該軸")
+        hint = QtWidgets.QLabel("拖 ⠿ 或曲線名稱：放中間 = 疊圖、放邊緣 = 放旁邊 · 雙擊 = 加 marker · "
+                                "拖曲線 = 上下移動 · 在軸上拖曳 = 縮放該軸")
         hint.setProperty("role", "muted")
         row.addWidget(hint, 1)
         bl.addWidget(self.tool_bar)
@@ -613,10 +866,12 @@ class VNAPanel(QtWidgets.QWidget):
         bl.addWidget(self.math_bar)
         self.plots = TracePlots()
         self.plots.set_points(self.points.isChecked())
-        self.plots.set_mode("overlay" if self.overlay.isChecked() else "grid")
-        self.plots.set_views(self.order)
+        self.plots.set_layout_mode(self.layout_box.currentData())
+        self.plots.set_groups(self.groups)
         self.compact = False
         self.plots.order_changed.connect(self._order_changed)
+        self.plots.groups_changed.connect(self._groups_changed)
+        self.plots.message.connect(self.message.emit)
         try:
             self.plots.set_math(self.x_expr.text(), self.y_expr.text())
         except Exception as e:  # noqa: BLE001
@@ -660,19 +915,18 @@ class VNAPanel(QtWidgets.QWidget):
     def set_views(self, views: List[str]) -> None:
         views = [k for k in dict.fromkeys(views) if k in VIEWS][:MAX_VIEWS] or ["db"]
         self.order = views
+        self.groups = []                       # 指定的順序：每種一張（「全部疊圖」勾著 → 一張）
         self._apply_views()
 
     def _toggle_view(self, k: str, on: bool) -> None:
-        if on and k not in self.order and self.overlay.isChecked():
-            groups = {UNIT_GROUP[x] for x in self.order if x != "iq"}
-            if k == "iq" or (UNIT_GROUP[k] not in groups and len(groups) >= 2):
-                self.vbtn[k].setChecked(False)
-                self.message.emit("疊圖只有左右兩個 Y 軸：最多兩種單位（dB / 線性 / 角度），IQ 請用分開的圖")
-                return
+        if on and k not in self.order and self.overlay.isChecked() and not can_overlay(self.order + [k]):
+            self.vbtn[k].setChecked(False)
+            self.message.emit("全部疊圖只有左右兩個 Y 軸：最多兩種單位（dB / 線性 / 角度），IQ 請用分開的圖")
+            return
         if on and k not in self.order:
             if len(self.order) >= MAX_VIEWS:
                 self.vbtn[k].setChecked(False)
-                self.message.emit(f"最多同時顯示 {MAX_VIEWS} 張圖，請先取消一種")
+                self.message.emit(f"最多同時顯示 {MAX_VIEWS} 種，請先取消一種")
                 return
             self.order.append(k)
         elif not on and k in self.order:
@@ -685,16 +939,41 @@ class VNAPanel(QtWidgets.QWidget):
     def _apply_views(self) -> None:
         for k, b in self.vbtn.items():
             b.setChecked(k in self.order)
+        if self.overlay.isChecked():
+            groups = [list(self.order)]
+        else:
+            keep = [[k for k in g if k in self.order] for g in self.groups]
+            have = {k for g in keep for k in g}
+            groups = [g for g in keep if g] + [[k] for k in self.order if k not in have]
+        self.groups = normalize_groups(groups)
+        self.order = [k for g in self.groups for k in g]
         if not getattr(self, "compact", False):
-            self.plots.set_views(self.order)
-        self.ui.save(views=self.order)
+            self.plots.set_groups(self.groups)
+        self.ui.save(views=self.order, groups=self.groups)
 
     def _mode_changed(self, on: bool) -> None:
-        self.plots.set_mode("overlay" if on else "grid")
-        self.ui.save(mode="overlay" if on else "grid")
-        if on and len(overlay_sides(self.order)) < len([k for k in self.order if k != "iq"]) or \
-                (on and "iq" in self.order):
-            self.message.emit("疊圖只畫前兩種單位的資料（左右兩軸），IQ 只在分開的圖裡顯示")
+        self.groups = normalize_groups([list(self.order)] if on else [[k] for k in self.order])
+        if not getattr(self, "compact", False):
+            self.plots.set_groups(self.groups)
+        self.ui.save(groups=self.groups, mode="overlay" if on else "grid")
+        if on and len(self.groups) > 1:
+            self.message.emit("全部疊圖只畫兩種單位（左右兩軸），其他的另開一張；IQ 只能自己一張")
+
+    def _layout_changed(self, _i: int) -> None:
+        mode = self.layout_box.currentData()
+        self.plots.set_layout_mode(mode)
+        self.ui.save(layout=mode)
+
+    def _groups_changed(self, groups: List[List[str]]) -> None:
+        """拖曳重排後（圖或曲線）：記住分組，「全部疊圖」跟著目前狀態。"""
+        if getattr(self, "compact", False):
+            return
+        self.groups = [list(g) for g in groups]
+        self.order = [k for g in self.groups for k in g]
+        self.overlay.blockSignals(True)
+        self.overlay.setChecked(len(self.groups) == 1 and len(self.order) > 1)
+        self.overlay.blockSignals(False)
+        self.ui.save(views=self.order, groups=self.groups)
 
     def set_compact(self, on: bool) -> None:
         """嵌在主視窗時只顯示 dB 曲線與「量測 / 循環」；其餘在獨立視窗。"""
@@ -705,11 +984,9 @@ class VNAPanel(QtWidgets.QWidget):
         if on:
             if self.plot_window is not None:
                 self.plot_window.close()
-            self.plots.set_mode("grid")
-            self.plots.set_views(["db"])
+            self.plots.set_groups([["db"]])
         else:
-            self.plots.set_mode("overlay" if self.overlay.isChecked() else "grid")
-            self.plots.set_views(self.order)
+            self.plots.set_groups(self.groups)
 
     def _math_changed(self) -> None:
         x, y = self.x_expr.text().strip(), self.y_expr.text().strip()

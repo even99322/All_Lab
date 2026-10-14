@@ -154,6 +154,9 @@ class Scheme:
     template: str = ""                       # 0.0.31：從哪個範本來（02_2d…）；專案範本用它同步
     quick: Dict[str, int] = field(default_factory=dict)   # 0.0.31：「方塊id.欄位」→ 改過幾次（快速調整面板）
     template_rev: int = 0                    # 1.0.2：內建範本的版本（專案 / LAB 裡比較舊的版本會換成新的）
+    # 1.0.6：「背景＋去背」開關（scheme/background.py）：enabled、sets[{target, value, unit}]、settle、file_name、
+    # dest、suffix；主量測完成後把勾選的電源設到背景電流，用主量測相同的儀器設定量一條背景，再去背
+    background: Dict[str, Any] = field(default_factory=dict)
 
     def sync_from_graph(self) -> None:
         """由節點圖重建方塊樹（編輯器每次修改後呼叫）。"""
@@ -342,6 +345,8 @@ class Scheme:
             d["quick"] = dict(self.quick)
         if self.template_rev:
             d["template_rev"] = int(self.template_rev)
+        if self.background:
+            d["background"] = copy.deepcopy(self.background)
         return d
 
     @classmethod
@@ -360,7 +365,8 @@ class Scheme:
                    notes=d.get("notes", ""), graph=graph, template=str(d.get("template") or ""),
                    quick={str(k): int(v) for k, v in (d.get("quick") or {}).items()
                           if isinstance(v, (int, float))},
-                   template_rev=int(d.get("template_rev") or 0) if str(d.get("template_rev") or 0).isdigit() else 0)
+                   template_rev=int(d.get("template_rev") or 0) if str(d.get("template_rev") or 0).isdigit() else 0,
+                   background=copy.deepcopy(d["background"]) if isinstance(d.get("background"), dict) else {})
 
     def save(self, path: str | Path) -> None:
         import yaml

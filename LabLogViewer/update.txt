@@ -1794,3 +1794,16 @@ Date: 2026-10-14
   - The hub side (Lab Control 1.0.4 labhub/indexer.py) runs a copy of this program's parser (labhub/llvcore,
     tools/sync_llvcore.py), so the index matches what this program would read itself.
   - tests/test_v103_hub_index.py.
+
+v1.0.4 - NO START-UP FREEZE ON 數據集散地, NO SERVER CALL WHEN SWITCHING FOLDERS
+Date: 2026-10-14
+
+  - BrowserWindow._restore_after_scan: the Viewers of the last session were matched by calling
+    stable_data_identity (Path.resolve, a server round trip per path component over VPN) on EVERY scanned
+    entry — thousands on 數據集散地, minutes over VPN; users force-quit and got Safe Recovery Mode next time.
+    _entry_for_source compares the normalised path text first and resolves only entries with the same file name.
+  - data_identity.stable_data_identity on a network drive: resolves the folder, not the file, and derives a folder
+    below an already resolved one (the database root, remembered by open_database via remember_network_root)
+    without asking the server; local drives unchanged (the file itself is resolved, symlinks followed).
+    Harness (9000 files, 80 ms per call): first click in a new folder 0.44 s -> 0.03 s on the GUI thread.
+  - tests/test_v1_0_4_startup.py.

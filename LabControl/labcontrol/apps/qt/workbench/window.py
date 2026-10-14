@@ -220,10 +220,47 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         self._refresh()
 
     # ---- 工具列 -------------------------------------------------------------
-    def _toolbar(self) -> None:
-        tb = self.addToolBar("main")
+    def _new_toolbar(self, name: str) -> QtWidgets.QToolBar:
+        tb = self.addToolBar(name)
+        tb.setObjectName(f"toolbar_{name}")
         tb.setMovable(False)
+        tb.setFloatable(False)
         tb.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+        self._toolbars.append(tb)
+        return tb
+
+    def _reflow_toolbars(self) -> None:
+        """1.0.6：工具列分成幾段；視窗不夠寬時把放不下的段落移到下一列，右邊的按鈕不會被藏起來。"""
+        bars = [tb for tb in getattr(self, "_toolbars", []) if not tb.isHidden()]
+        if not bars:
+            return
+        avail = max(self.width() - 8, 200)
+        used = 0
+        changed = False
+        for i, tb in enumerate(bars):
+            need = tb.sizeHint().width()
+            wrap = i > 0 and used + need > avail
+            if wrap != self.toolBarBreak(tb):
+                if wrap:
+                    self.insertToolBarBreak(tb)
+                else:
+                    self.removeToolBarBreak(tb)
+                changed = True
+            used = need if wrap or i == 0 else used + need
+        if changed:
+            self.updateGeometry()
+
+    def resizeEvent(self, ev) -> None:  # noqa: N802
+        super().resizeEvent(ev)
+        self._reflow_toolbars()
+
+    def showEvent(self, ev) -> None:  # noqa: N802
+        super().showEvent(ev)
+        QtCore.QTimer.singleShot(0, self._reflow_toolbars)
+
+    def _toolbar(self) -> None:
+        self._toolbars: list = []
+        tb = self._new_toolbar("windows")
         act = tb.addAction("🖧 儀器伺服器", self.open_server)
         act.setToolTip("連線 / 新增 / 直接控制儀器、驅動測試（Labber Instrument Server）")
         a = tb.addAction("📡 即時數據", self.popout_live)
@@ -231,7 +268,7 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         a = tb.addAction("📈 量測監控", self.show_measure_window)
         a.setToolTip("量測進度、曲線、2D 影像、暫停 / 停止（開始量測時會自動彈出）")
         self._remote_toolbar(tb)
-        tb.addSeparator()
+        tb = self._new_toolbar("scheme")
         tb.addAction("新方案", self.new_scheme).setShortcut("Ctrl+N")
         tmpl = QtWidgets.QToolButton()
         tmpl.setText("範本 ▾")
@@ -250,10 +287,11 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         tb.addSeparator()
         tb.addAction("復原", self.doc.undo).setShortcut("Ctrl+Z")
         tb.addAction("重做", self.doc.redo).setShortcut("Ctrl+Y")
-        tb.addSeparator()
+        tb = self._new_toolbar("run")
         tb.addWidget(QtWidgets.QLabel(" 方案名稱 "))
         self.name = QtWidgets.QLineEdit()
         self.name.setMinimumWidth(190)
+        self.name.setMaximumWidth(360)
         self.name.editingFinished.connect(self._rename)
         tb.addWidget(self.name)
         tb.addSeparator()
@@ -267,6 +305,7 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         self.run_btn.setProperty("primary", True)
         tb.addWidget(self.run_btn)
 
+        tb = self._new_toolbar("app")
         spacer = QtWidgets.QWidget()
         spacer.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Preferred)
         tb.addWidget(spacer)

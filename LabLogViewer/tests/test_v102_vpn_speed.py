@@ -36,8 +36,10 @@ def net(tmp_path, monkeypatch):
     monkeypatch.setenv("LABLOGVIEWER_NET_CACHE", "force")
     monkeypatch.setenv("LABLOGVIEWER_NET_CACHE_DIR", str(tmp_path / "cache"))
     data_identity._NETWORK_IDENTITIES.clear()
+    data_identity._NETWORK_FOLDERS.clear()
     yield net_cache
     data_identity._NETWORK_IDENTITIES.clear()
+    data_identity._NETWORK_FOLDERS.clear()
 
 
 def _tree(root: Path, days: int = 4, per: int = 3) -> Path:

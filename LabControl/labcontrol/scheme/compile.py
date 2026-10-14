@@ -250,7 +250,14 @@ def split_stages(scheme: Scheme):
 
 def compile_scheme(scheme: Scheme, cat: Catalog) -> CompileResult:
     """量測方案 → 實驗設定。1.0.2：迴圈之後可以接背景量測與去背（主量測完成後依序執行）。"""
+    from . import background as bgmod
+
     main, stages, debg = split_stages(scheme)
+    auto = bgmod.enabled(scheme)
+    conflict = auto and (bool(stages) or debg is not None)
+    if auto and not conflict:
+        stages, debg = bgmod.stage_blocks(scheme, main)      # 1.0.6：「背景＋去背」開關展開成背景階段
+        stages = [stages]
     if not stages and debg is None:
         return _compile_stage(scheme, cat)
     sub = Scheme(name=scheme.name, blocks=main, snake=scheme.snake, run=dict(scheme.run), hooks=list(scheme.hooks),
@@ -297,6 +304,22 @@ def compile_scheme(scheme: Scheme, cat: Catalog) -> CompileResult:
                 res.issues.append(Issue("error", "背景量測的通道要包含主量測的通道（例如都量 S21）", debg.id))
             if res.config is not None:
                 res.n_files += res.n_files_main
+    if auto:
+        if conflict:
+            res.issues.append(Issue("error", "流程圖裡已經有背景／去背節點：關掉「背景＋去背」開關，或刪掉那些節點",
+                                    bgmod.BG_ID))
+        else:
+            if not bgmod.config(scheme)["sets"]:
+                res.issues.append(Issue("error", "背景＋去背：至少勾選一台電源並設定背景電流", bgmod.BG_ID))
+            if not bgmod._measures(main):
+                res.issues.append(Issue("error", "背景＋去背：主流程沒有量測，無法複製 VNA 設定", bgmod.BG_ID))
+            seen = set()
+            for it in res.issues:                  # 展開的方塊沒有畫在流程圖上：問題都指向「背景＋去背」方塊
+                if bgmod.is_background_id(it.block_id):
+                    it.block_id = bgmod.BG_ID
+            res.issues[:] = [it for it in res.issues
+                             if not ((it.level, it.message, it.block_id) in seen or seen.add((it.level, it.message,
+                                                                                              it.block_id)))]
     ok = res.ok and all(p.config is not None for p in res.post)
     if ok and res.config is not None:
         res.config["post"] = [p.config for p in res.post]
