@@ -3,7 +3,9 @@
 ``CrossSection`` attaches to a ``Plot2DWidget`` and rebuilds its layout: X cut on
 top, Y cut on the LEFT (mirrored: its vertical axis is the heat map's Y axis and
 the value grows towards the left, so the colour bar on the right stays free) and
-contrast Max/Min controls in the corner.  ``CrossSectionWindow``
+a "Contrast" button in the corner (v1.0.5: the intensity histogram and Max / Min / Auto / Full range
+open from it instead of filling the corner).  The X and Y cuts can be shown separately
+(``set_parts``).  ``CrossSectionWindow``
 is the same thing in its own window (used for multi-pane layouts).
 
 It only consumes an already-loaded ``Grid2DData``; moving a line slices a numpy
@@ -17,8 +19,8 @@ import pyqtgraph as pg
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
-    QCheckBox, QDoubleSpinBox, QGraphicsProxyWidget, QGridLayout, QHBoxLayout, QLabel,
-    QPushButton, QVBoxLayout, QWidget,
+    QCheckBox, QDoubleSpinBox, QFrame, QGraphicsProxyWidget, QGridLayout, QHBoxLayout, QLabel,
+    QPushButton, QToolButton, QVBoxLayout, QWidget,
 )
 
 from app.core.data_model import Grid2DData
@@ -136,6 +138,26 @@ class CrossSection:
 
         self._attached = False
         self._full_limits = (0.0, 1.0)
+        self.parts = {"x": True, "y": True}
+        # v1.0.5: the histogram and contrast controls live in a popup opened from a corner button
+        self.contrast_popup = QFrame(plot2d, Qt.WindowType.Popup)
+        self.contrast_popup.setObjectName("contrastPopup")
+        self.contrast_popup.setFrameShape(QFrame.Shape.StyledPanel)
+        popup_layout = QHBoxLayout(self.contrast_popup)
+        popup_layout.setContentsMargins(6, 6, 6, 6)
+        self.hist_view = pg.GraphicsLayoutWidget()
+        self.hist_view.setMinimumSize(320, 190)
+        self.hist_view.ci.addItem(self.hist_plot, row=0, col=0)
+        popup_layout.addWidget(self.hist_view, 1)
+        popup_layout.addWidget(self.controls)
+        self.controls.show()
+        self.contrast_button = QToolButton(plot2d.graphics_widget)
+        self.contrast_button.setObjectName("contrastButton")
+        self.contrast_button.setText("◧ Contrast")
+        self.contrast_button.setToolTip("Intensity histogram and color range (Max / Min / Auto / Full range)")
+        self.contrast_button.setAutoRaise(False)
+        self.contrast_button.clicked.connect(self.show_contrast_popup)
+        self.contrast_button.hide()
         plot2d.view_box.sigResized.connect(lambda *_: self._pad_timer.start())
 
     @staticmethod
@@ -149,20 +171,69 @@ class CrossSection:
 
     # ---- layout -------------------------------------------------------------
 
+    def show_contrast_popup(self) -> None:
+        button = self.contrast_button
+        self.sync_levels()
+        self._update_histogram()
+        self.contrast_popup.adjustSize()
+        self.contrast_popup.move(button.mapToGlobal(button.rect().bottomLeft()))
+        self.contrast_popup.show()
+
+    def set_parts(self, x: bool | None = None, y: bool | None = None) -> None:
+        """Show the X cut (top) and / or the Y cut (left); neither → the plain heat map."""
+        if x is not None:
+            self.parts["x"] = bool(x)
+        if y is not None:
+            self.parts["y"] = bool(y)
+        if not (self.parts["x"] or self.parts["y"]):
+            self.detach()
+            return
+        if self._attached:
+            self._layout_items()
+            self._refit_layout()
+            self._pad_timer.start()
+        else:
+            self.attach()
+
+    def _layout_items(self) -> None:
+        plot2d = self.plot2d
+        ci = plot2d.graphics_widget.ci
+        for item in (self.x_cut_plot, self.y_cut_plot, plot2d.plot_item):
+            if item in ci.items:
+                ci.removeItem(item)
+        show_x, show_y = self.parts["x"], self.parts["y"]
+        col = 1 if show_y else 0
+        row = 1 if show_x else 0
+        if show_x:
+            ci.addItem(self.x_cut_plot, row=0, col=col)
+        if show_y:
+            ci.addItem(self.y_cut_plot, row=row, col=0)
+        ci.addItem(plot2d.plot_item, row=row, col=col)
+        for index in (0, 1, 2):
+            ci.layout.setColumnStretchFactor(index, (1 if index == 0 else 4 if index == 1 else 0) if show_y
+                                             else (1 if index == 0 else 0))
+            ci.layout.setRowStretchFactor(index, (1 if index == 0 else 3 if index == 1 else 0) if show_x
+                                          else (1 if index == 0 else 0))
+        self.x_cut_plot.setVisible(show_x)
+        self.y_cut_plot.setVisible(show_y)
+        self.h_line.setVisible(show_x)            # the X cut is taken along the horizontal line
+        self.v_line.setVisible(show_y)            # the Y cut along the vertical one
+        self.x_marker.setVisible(show_y)
+        self.y_marker.setVisible(show_x)
+        self._place_contrast_button()
+
+    def _place_contrast_button(self) -> None:
+        """Top-right corner (above the color bar): free in every layout."""
+        view = self.plot2d.graphics_widget
+        button = self.contrast_button
+        button.adjustSize()
+        button.move(max(4, view.width() - button.width() - 6), 4)
+
     def attach(self) -> None:
         if self._attached:
             return
         plot2d = self.plot2d
-        ci = plot2d.graphics_widget.ci
-        ci.removeItem(plot2d.plot_item)
-        ci.addItem(self.x_cut_plot, row=0, col=1)
-        ci.addItem(self.y_cut_plot, row=1, col=0)
-        ci.addItem(plot2d.plot_item, row=1, col=1)
-        ci.addItem(self.hist_plot, row=0, col=0)
-        ci.layout.setColumnStretchFactor(0, 1)
-        ci.layout.setColumnStretchFactor(1, 4)
-        ci.layout.setRowStretchFactor(0, 1)
-        ci.layout.setRowStretchFactor(1, 3)
+        self._layout_items()
         plot2d.plot_item.setTitle(None)
         for plot in (plot2d.plot_item, self.x_cut_plot):
             plot.getAxis("left").setWidth(LEFT_AXIS_WIDTH)
@@ -171,6 +242,9 @@ class CrossSection:
         plot2d._vline.setVisible(False)
         plot2d._hline.setVisible(False)
         self._attached = True
+        self._place_contrast_button()
+        self.contrast_button.show()
+        self.contrast_button.raise_()
         self._refit_layout()
         self.on_plot()
         self._pad_timer.start()
@@ -186,8 +260,9 @@ class CrossSection:
             return
         plot2d = self.plot2d
         ci = plot2d.graphics_widget.ci
-        for item in (self.x_cut_plot, self.y_cut_plot, self.hist_plot, plot2d.plot_item):
-            ci.removeItem(item)
+        for item in (self.x_cut_plot, self.y_cut_plot, plot2d.plot_item):
+            if item in ci.items:
+                ci.removeItem(item)
         ci.addItem(plot2d.plot_item, row=0, col=0)
         # A stretch of 0 caps the lone plot at its size hint, so it would stay tiny.
         for index in (0, 1, 2):
@@ -196,6 +271,10 @@ class CrossSection:
         plot2d.plot_item.getAxis("left").setWidth(None)
         plot2d.plot_item.getAxis("bottom").setHeight(None)
         plot2d.plot_item.getAxis("left").setStyle(autoExpandTextSpace=True)
+        self.contrast_button.hide()
+        self.contrast_popup.hide()
+        self.h_line.setVisible(False)
+        self.v_line.setVisible(False)
         self._attached = False
         self._refit_layout()
         grid = plot2d._grid
@@ -205,6 +284,7 @@ class CrossSection:
     def _align(self) -> None:
         if not self._attached:
             return
+        self._place_contrast_button()
         plot2d = self.plot2d
         pad = plot2d.plot_item.sceneBoundingRect().right() - plot2d.view_box.sceneBoundingRect().right()
         axis = self.x_cut_plot.getAxis("right")
@@ -371,6 +451,11 @@ class CrossSection:
             label = getattr(item, "label", None)
             if label is not None and hasattr(label, "setColor"):
                 label.setColor(colors.text)
+        self.hist_view.setBackground(colors.plot_background)
+        self.contrast_button.setStyleSheet(
+            f"QToolButton {{ background: {colors.panel}; color: {colors.text}; border: 1px solid {colors.border};"
+            f" border-radius: 4px; padding: 2px 8px; }}")
+        self.contrast_popup.setStyleSheet(f"#contrastPopup {{ background: {colors.plot_background}; }}")
         self.controls.setStyleSheet(
             f"QWidget {{ background: {colors.plot_background}; color: {colors.text}; }}"
             f"QDoubleSpinBox {{ background: {colors.panel}; border: 1px solid {colors.border}; }}"

@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Tuple
 
 from .index_routes import _allowed, _db, _send_json, norm_rel
 from .indexer import preview_path
-from .server import STATIC, Handler, HubHTTPError, route
+from .server import Handler, HubHTTPError, route
 
 LIST_LIMIT = 3000              # 一個資料夾最多列出幾個檔
 SEARCH_LIMIT = 300
@@ -239,6 +239,8 @@ def _preview(h: Handler) -> None:
     _send_json(h, {"ok": True, "file": info, "preview": data})
 
 
-@route("GET", r"/m/data/?", auth="any")
+@route("GET", r"/(?:m/)?data/?", auth="any")
 def _page(h: Handler) -> None:
-    h._send(200, (STATIC / "mdata.html").read_bytes(), "text/html; charset=utf-8")
+    from .web_nav import page
+
+    page(h, "mdata.html", "data")

@@ -115,20 +115,7 @@
 </style>
 </head>
 <body>
-<header>
-  <div class="brand"><img src="/icon.svg" alt="">量子工程平台</div>
-  <nav id="nav">
-    <a href="#/" data-v="home">模塊</a>
-    <a href="#/projects" data-v="projects">專案</a>
-    <a href="#/data" data-v="data">數據</a>
-    <a href="#/tags" data-v="tags">標籤與論文</a>
-    <a href="/m/data" title="手機 / 平板：瀏覽數據集散地、看預覽；即時量測">手機版</a>
-    <a href="#/console" data-v="console" id="nav-console" hidden>控制台</a>
-    <a href="#/admin" data-v="admin" id="nav-admin" hidden>帳號與權限</a>
-  </nav>
-  <div class="sp"></div>
-  <div class="who"><span id="who"></span><a href="/logout">登出</a></div>
-</header>
+<!--QEL-NAV-->
 <main id="main"><div class="empty">載入中…</div></main>
 <div class="toast" id="toast"></div>
 
@@ -209,14 +196,14 @@ function viewHome() {
     return `<div class="tile${off ? " off" : ""}"><div class="t">${esc(m.name)}</div><div class="k">${esc(m.id)} · ${m.kind === "web" ? "網頁" : "桌面程式"}${m.owner_only ? " · 站長" : ""}</div>
       <div class="d">${esc(m.description || "")}</div><div>${act}</div></div>`;
   };
-  const shown = mods.filter(m => !m.hidden);
-  $("#main").innerHTML = `<h2>模塊 <span class="n">${shown.filter(m => m.allowed).length} 個可用</span></h2>
+  const shown = mods.filter(m => !m.hidden && !["catalog", "nodes"].includes(m.id));   // 1.0.7：換成「數據查看」「量測設置」
+  $("#main").innerHTML = `<h2>模塊下載 <span class="n">${shown.filter(m => m.allowed).length} 個可用</span></h2>
     <div class="tiles">${shown.map(tile).join("")}</div>
-    <h2>最近的數據</h2><div id="recent" class="list"><div class="empty">載入中…</div></div>`;
-  api("/api/platform/catalog?limit=8").then(r => {
-    $("#recent").innerHTML = r.items.length ? r.items.map(itemRow).join("") : `<div class="empty">還沒有數據</div>`;
-    $("#recent").onclick = e => { const it = e.target.closest(".item"); if (it) location.hash = "#/data?id=" + it.dataset.id; };
-  }).catch(e => $("#recent").innerHTML = `<div class="empty err">${esc(e.message)}</div>`);
+    <h2>網頁</h2><div class="tiles">
+      <div class="tile"><div class="t">數據查看</div><div class="d">瀏覽數據集散地、看預覽與量測參數；電腦上可以直接用讀檔程式開啟。</div><div><a class="btn primary" href="/data">開啟</a></div></div>
+      <div class="tile"><div class="t">量測查看</div><div class="d">每台量測電腦正在量什麼：進度、熱圖、最後一條 trace。</div><div><a class="btn primary" href="/live">開啟</a></div></div>
+      <div class="tile"><div class="t">量測設置</div><div class="d">量測電腦與儀器狀態、用範本編輯方案並送到量測電腦、量測電腦對應與設定檔。</div><div><a class="btn primary" href="/setup">開啟</a></div></div>
+    </div>`;
 }
 
 // ---- 數據目錄 -----------------------------------------------------------------
@@ -638,7 +625,7 @@ async function route() {
   const [path, qs] = h.slice(1).split("?");
   const params = new URLSearchParams(qs || "");
   const v = {"/data": "data", "/projects": "projects", "/tags": "tags", "/admin": "admin", "/console": "console"}[path] || "home";
-  document.querySelectorAll("#nav a").forEach(a => a.classList.toggle("on", a.dataset.v === v));
+  document.querySelectorAll("#nav a.i").forEach(a => a.classList.toggle("on", a.dataset.v === (v === "data" ? "" : v)));
   try {
     if (v === "data") await viewData(params);
     else if (v === "tags") await viewTags(params);
@@ -653,9 +640,7 @@ async function route() {
   try {
     ME = await api("/api/platform/me");
     const u = ME.user || {};
-    $("#who").innerHTML = `${esc(u.display_name || u.username)}${u.owner ? ' <span class="badge">站長</span>' : ""}`;
-    $("#nav-admin").hidden = !u.owner;
-    $("#nav-console").hidden = !u.owner;
+    // 1.0.7：導覽列由 Hub 產生（labhub/web_nav.py），站長才有控制台、帳號與權限
     await Promise.all([loadTags().catch(() => {}), loadProjects()]);
   } catch (e) { $("#main").innerHTML = `<div class="empty err">${esc(e.message)}</div>`; return; }
   window.addEventListener("hashchange", route);

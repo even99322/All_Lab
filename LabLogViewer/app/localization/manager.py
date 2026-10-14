@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import weakref
 
-from PySide6.QtCore import QObject, QEvent, Signal
+from PySide6.QtCore import QObject, QEvent, Qt, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QAbstractButton, QComboBox, QGroupBox, QLabel, QLineEdit, QMenu, QTableWidget,
@@ -137,6 +137,7 @@ class LocalizationManager(QObject):
                 self.bind(watched)
         elif kind == QEvent.Type.Paint and self._language != "en" and isinstance(watched, QComboBox) \
                 and not watched.isEditable():
+            _install_popup_translation(watched)
             return _paint_translated_combo(watched, self)
         return False
 
@@ -238,6 +239,72 @@ class LocalizationManager(QObject):
                 self._translate_action(action)
         finally:
             _BYPASS[0] = False
+
+
+_POPUP_DELEGATES = {"QComboMenuDelegate", "QComboBoxDelegate", "QItemDelegate", "QStyledItemDelegate"}
+
+
+def _install_popup_translation(combo: QComboBox) -> None:
+    """v1.0.5: the open drop-down list shows translated items too (the item text itself stays English).
+
+    Only Qt's own combo delegates are replaced; a combo with its own delegate keeps it."""
+    if combo.property("_lv_popup_translated"):
+        return
+    combo.setProperty("_lv_popup_translated", True)
+    view = combo.view()
+    current = view.itemDelegate()
+    if current is not None and current.metaObject().className() not in _POPUP_DELEGATES:
+        return
+    view.setItemDelegate(_TranslatingPopupDelegate(view))
+
+
+def _make_popup_delegate_class():
+    from PySide6.QtCore import QSize
+    from PySide6.QtWidgets import QStyle, QStyledItemDelegate
+
+    class TranslatingPopupDelegate(QStyledItemDelegate):
+        @staticmethod
+        def _separator(index) -> bool:
+            return index.data(Qt.ItemDataRole.AccessibleDescriptionRole) == "separator"
+
+        def initStyleOption(self, option, index) -> None:  # noqa: N802 - Qt API
+            super().initStyleOption(option, index)
+            if option.text:
+                option.text = translate_for_display(option.text)
+
+        def paint(self, painter, option, index) -> None:
+            if self._separator(index):
+                rect = option.rect
+                painter.save()
+                painter.setPen(option.palette.color(option.palette.ColorRole.Mid))
+                y = rect.center().y()
+                painter.drawLine(rect.left() + 4, y, rect.right() - 4, y)
+                painter.restore()
+                return
+            super().paint(painter, option, index)
+
+        def sizeHint(self, option, index):  # noqa: N802 - Qt API
+            if self._separator(index):
+                return QSize(10, 7)
+            size = super().sizeHint(option, index)
+            style = option.widget.style() if option.widget is not None else None
+            if style is not None:
+                size.setHeight(max(size.height(), style.pixelMetric(QStyle.PixelMetric.PM_SmallIconSize) + 6))
+            return size
+
+    return TranslatingPopupDelegate
+
+
+class _LazyDelegate:
+    cls = None
+
+    def __call__(self, parent):
+        if _LazyDelegate.cls is None:
+            _LazyDelegate.cls = _make_popup_delegate_class()
+        return _LazyDelegate.cls(parent)
+
+
+_TranslatingPopupDelegate = _LazyDelegate()
 
 
 def _paint_translated_combo(combo: QComboBox, manager) -> bool:

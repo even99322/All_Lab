@@ -961,14 +961,17 @@ def _index(h: Handler) -> None:
     if tok and h.hub.cfg.token is not None:        # http://NAS:8765/?token=... → 記住 token 後去掉網址上的 token
         h._redirect("/nodes", {"Set-Cookie": _cookie(tok)})
         return
-    # 登入過 → 平台網頁；第一次來的人 → 下載頁（只有一個網址要記）
-    plat_on = h.hub.platform.paperlib is not None
-    h._redirect("/get" if plat_on and h.principal() is None else "/portal")
+    # 1.0.7：http://<NAS>:8765 一律先登入，進去是平台（模塊下載、數據查看、量測查看、量測設置）
+    h._redirect("/portal" if h.principal() is not None else "/login?next=/portal")
 
 
 @route("GET", r"/nodes", auth=True)
 def _nodes_page(h: Handler) -> None:
-    h._html((STATIC / "index.html").read_text(encoding="utf-8"))
+    """舊的 Hub 監控頁 → 1.0.7 起是「量測設置」（舊頁仍可用 /nodes?old=1）。"""
+    if h._query().get("old"):
+        h._html((STATIC / "index.html").read_text(encoding="utf-8"))
+        return
+    h._redirect("/setup")
 
 
 @route("GET", r"/login", auth=False)
@@ -1096,7 +1099,14 @@ def _submit(h: Handler, name: str) -> None:
     msg.setdefault("from", {})
     if not isinstance(msg["from"], dict):
         msg["from"] = {}
-    msg["from"].setdefault("user", f"web@{h.ip}")
+    sess = h.session()
+    if sess is not None:                    # 1.0.7：網頁登入的使用者 → 節點看到真正的帳號與站長身分
+        u = sess.get("user") or {}
+        msg["from"]["user"] = str(u.get("username") or f"web@{h.ip}")
+        msg["from"]["owner"] = bool(u.get("owner"))
+    else:
+        msg["from"].pop("owner", None)      # 裝置 token 不能自稱站長
+        msg["from"].setdefault("user", f"web@{h.ip}")
     msg["from"]["ip"] = h.ip
     cid = h.hub.submit(name, msg)
     wait = h._qf("wait")
@@ -1244,6 +1254,7 @@ from . import platform_routes  # noqa: E402,F401  （平台 API：/api/platform/
 from . import index_routes  # noqa: E402,F401  （1.0.4 數據索引：/api/index/…）
 from . import mobile_routes  # noqa: E402,F401  （1.0.4 手機看即時量測：/m、/api/m/…）
 from . import data_routes  # noqa: E402,F401  （1.0.6 手機 / 平板看數據：/m/data、/api/data/…）
+from . import setup_routes  # noqa: E402,F401  （1.0.7 網頁：/data、/live、/setup 與共用導覽）
 
 
 # ---------------------------------------------------------------------------

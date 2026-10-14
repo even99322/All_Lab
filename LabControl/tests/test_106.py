@@ -343,6 +343,6 @@ def test_phone_data_browser_api(tmp_path, nc_files, llvcore):
             assert e.code == 303 and e.headers["Location"].startswith("/login?next=/m/data")
         code, body, _ = _get(base + "/m/data", auth)
         assert code == 200 and b"/api/data/list" in body and b"apple-touch-icon" in body
-        assert b"/m/data" in _get(base + "/m", auth)[1]                             # 即時量測頁有連過去
+        assert b'href="/data"' in _get(base + "/m", auth)[1]                        # 量測查看頁有連過去
     finally:
         srv.shutdown()

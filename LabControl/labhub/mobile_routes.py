@@ -131,9 +131,11 @@ def _detail(h: Handler, name: str) -> None:
     h._json(store(h).detail(name, q.get("frame") or None, since))
 
 
-@route("GET", r"/m/?")
+@route("GET", r"/(?:m|live)/?")
 def _page(h: Handler) -> None:
-    h._send(200, (STATIC / "mobile.html").read_bytes(), "text/html; charset=utf-8")
+    from .web_nav import page
+
+    page(h, "mobile.html", "live")
 
 
 @route("GET", r"/m/manifest\.webmanifest", auth=False)

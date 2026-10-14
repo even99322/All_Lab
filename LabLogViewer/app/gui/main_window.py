@@ -153,7 +153,8 @@ from app.plotting.complex_transform import VALID_TRANSFORMS, apply_transform, un
 from app.gui.channel_browser import ChannelBrowser
 from app.gui.plot_widget import Plot1DWidget
 from app.gui.range_spinbox import RangeSpinBox
-from app.gui.plot_2d_widget import Plot2DWidget, COLORMAPS, DEFAULT_COLORMAP
+from app.gui.plot_2d_widget import Plot2DWidget, COLORMAPS, DEFAULT_COLORMAP  # noqa: F401
+from app.gui.colormap_combo import ColormapCombo
 from app.gui.plot_config_panel import PlotConfigPanel
 from app.gui.slice_widget import SliceExplorerWidget
 from app.gui.cross_section_window import CrossSectionWindow
@@ -448,19 +449,23 @@ class MainWindow(QMainWindow):
         self.metadata_action.triggered.connect(self._show_metadata_dialog)
         self.data_table_action = QAction("&Data Table", self)
         self.data_table_action.triggered.connect(self._show_data_table_dialog)
+        # v1.0.5: X Cut / Y Cut are shown inside the 2D plot (top / left), each on its own; the histogram and
+        # contrast controls open from the "Contrast" button in the corner. Several panes: own windows as before.
         self.show_x_cut_action = QAction("Show X Cut", self)
-        self.show_x_cut_action.triggered.connect(lambda: self._show_cut_window("x"))
+        self.show_x_cut_action.setCheckable(True)
+        self.show_x_cut_action.triggered.connect(lambda on: self._toggle_cut_part("x", on))
         self.show_y_cut_action = QAction("Show Y Cut", self)
-        self.show_y_cut_action.triggered.connect(lambda: self._show_cut_window("y"))
+        self.show_y_cut_action.setCheckable(True)
+        self.show_y_cut_action.triggered.connect(lambda on: self._toggle_cut_part("y", on))
         self.show_menu = QMenu("&Show", self)
         self.show_menu.addAction(self.metadata_action)
         self.show_menu.addAction(self.data_table_action)
         self.show_menu.addSeparator()
-        self.show_cross_section_action = QAction("Show 2D X/Y Cross-section", self)
+        self.show_cross_section_action = QAction("Show 2D X/Y Cross-section", self)   # kept for code / presets
         self.show_cross_section_action.triggered.connect(self._toggle_cross_section)
-        self.show_menu.addAction(self.show_cross_section_action)
         self.show_menu.addAction(self.show_x_cut_action)
         self.show_menu.addAction(self.show_y_cut_action)
+        self.show_menu.aboutToShow.connect(self._sync_cut_actions)
         view_menu.addMenu(self.show_menu)
         # v2.1.5: interpolate sparse heatmaps for display (readouts / cuts / exports keep the real samples)
         self.smooth_heatmap_action = QAction("Smooth 2D Heatmap", self)
@@ -2731,6 +2736,43 @@ class MainWindow(QMainWindow):
             return
         source.set_cross_section_enabled(not source.cross_section_enabled)
 
+    def _cut_parts(self, source) -> dict:
+        cross = getattr(source, "_cross", None)
+        if source is None or cross is None or not source.cross_section_enabled:
+            return {"x": False, "y": False}
+        return dict(cross.parts)
+
+    def _sync_cut_actions(self) -> None:
+        source, _name, pane_id = self._cut_source_context()
+        parts = self._cut_parts(source) if pane_id is None else {"x": False, "y": False}
+        for axis, action in (("x", self.show_x_cut_action), ("y", self.show_y_cut_action)):
+            with QSignalBlocker(action):
+                action.setChecked(parts[axis])
+
+    def _toggle_cut_part(self, axis: str, on: bool) -> None:
+        """v1.0.5: X / Y cut inside the 2D plot of a single pane; several panes → the cut's own window."""
+        source, _name, pane_id = self._cut_source_context()
+        if source is None:
+            self._sync_cut_actions()
+            self.statusBar().showMessage("Open a 2D map first to use the X/Y cross-section.")
+            return
+        if pane_id is not None:
+            self._sync_cut_actions()
+            self._show_cut_window(axis)
+            return
+        parts = self._cut_parts(source)
+        parts[axis] = bool(on)
+        if parts["x"] or parts["y"]:
+            if not source.cross_section_enabled:
+                if source._cross is not None:
+                    source._cross.parts = dict(parts)
+                source.set_cross_section_enabled(True)
+            source._cross.set_parts(parts["x"], parts["y"])
+        else:
+            source.set_cross_section_enabled(False)
+        self._sync_cut_actions()
+        self.workspace_state_changed.emit()
+
     def _show_cross_section_window(self) -> None:
         if self._cross_section_window is None:
             self._cross_section_window = CrossSectionWindow(self)
@@ -3923,7 +3965,13 @@ class MainWindow(QMainWindow):
         form.addRow(self.auto_range_checkbox)
         form.addRow("Minimum", self.zmin_spin)
         form.addRow("Maximum", self.zmax_spin)
-        form.addRow(self.auto_range_button)
+        range_row = QWidget()
+        range_layout = QHBoxLayout(range_row)
+        range_layout.setContentsMargins(0, 0, 0, 0)
+        range_layout.setSpacing(6)
+        range_layout.addWidget(self.auto_range_button, 1)
+        range_layout.addWidget(self.full_range_button, 1)
+        form.addRow(range_row)
         self.slice_explorer_2d = SliceExplorerWidget()
         self.slice_explorer_2d.setVisible(False)
         self.slice_explorer_2d.slice_changed.connect(self._on_2d_slice_changed)
@@ -4334,8 +4382,7 @@ class MainWindow(QMainWindow):
 
         row2 = QHBoxLayout()
         row2.addWidget(QLabel("Colormap:"))
-        self.colormap_combo = QComboBox()
-        self.colormap_combo.addItems(COLORMAPS)
+        self.colormap_combo = ColormapCombo()            # v1.0.5: ramps, Reverse, Custom Colors...
         row2.addWidget(self.colormap_combo)
 
         row2.addWidget(QLabel("Color range:"))
@@ -4354,7 +4401,12 @@ class MainWindow(QMainWindow):
         row2.addWidget(self.zmax_spin)
 
         self.auto_range_button = QPushButton("Auto Range")
+        self.auto_range_button.setToolTip("Color range from the data, ignoring the few most extreme pixels")
         row2.addWidget(self.auto_range_button)
+        self.full_range_button = QPushButton("Full Range")          # v1.0.5
+        self.full_range_button.setObjectName("fullRangeButton")
+        self.full_range_button.setToolTip("Color range = the data's full minimum to maximum")
+        row2.addWidget(self.full_range_button)
         row2.addStretch(1)
         # Color controls are placed in the shared left settings column.
 
@@ -4377,6 +4429,7 @@ class MainWindow(QMainWindow):
         self.zmin_spin.valueChanged.connect(self._on_range_spin_changed)
         self.zmax_spin.valueChanged.connect(self._on_range_spin_changed)
         self.auto_range_button.clicked.connect(self._on_auto_range_button_clicked)
+        self.full_range_button.clicked.connect(self._on_full_range_button_clicked)
         self.plot_2d_widget.hover_moved.connect(
             lambda x, y, z: self._on_cut_source_hover(self.plot_2d_widget, x, y, z)
         )
@@ -4484,8 +4537,7 @@ class MainWindow(QMainWindow):
         self.point_size_spin.setSingleStep(0.005)
         self.point_size_spin.setDecimals(3)
         self.point_size_spin.setValue(0.018)
-        self.colormap_combo_nd = QComboBox()
-        self.colormap_combo_nd.addItems(COLORMAPS)
+        self.colormap_combo_nd = ColormapCombo()
         self.auto_range_checkbox_nd = QCheckBox(self.localizer.text("viewer.auto"))
         self.auto_range_checkbox_nd.setChecked(True)
         self.zmin_spin_nd = RangeSpinBox()
@@ -7988,6 +8040,19 @@ class MainWindow(QMainWindow):
         self.zmax_spin.setEnabled(False)
         self.plot_2d_widget.auto_range_color()
         self._sync_range_spins_from_widget()
+
+    def _on_full_range_button_clicked(self) -> None:
+        """v1.0.5: the data's whole minimum..maximum as a manual range (Min / Max show it)."""
+        limits = self.plot_2d_widget.full_range_color()
+        if limits is None:
+            return
+        with QSignalBlocker(self.auto_range_checkbox), QSignalBlocker(self.zmin_spin), QSignalBlocker(self.zmax_spin):
+            self.auto_range_checkbox.setChecked(False)
+            self.zmin_spin.setValue(limits[0])
+            self.zmax_spin.setValue(limits[1])
+        self.zmin_spin.setEnabled(True)
+        self.zmax_spin.setEnabled(True)
+        self._schedule_display_state_save()
 
     def _on_colorbar_range_changed(self, low: float, high: float) -> None:
         """Make an interactive colorbar adjustment a real 2D display choice."""

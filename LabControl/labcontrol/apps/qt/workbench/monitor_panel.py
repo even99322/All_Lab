@@ -100,9 +100,13 @@ class MonitorPanel(QtWidgets.QWidget):
         self.chk_retain = QtWidgets.QCheckBox("保留此點所有暫存")
         self.b_accept = QtWidgets.QPushButton("✅ 記錄並下一點")
         self.lbl_shots = QtWidgets.QLabel("暫存 0 筆")
+        self.b_review = QtWidgets.QPushButton("👀 檢視 / 挑選保留數據")
+        self.b_review.setToolTip("量測中提前看保留點的每一筆 trace、打星號、選要用哪一筆（量完還會再確認一次）")
+        self.b_review.clicked.connect(self.open_review)
         for w in (self.b_once, self.b_loop, self.chk_retain, self.b_accept, self.lbl_shots):
             mr.addWidget(w)
         mr.addStretch()
+        row.insertWidget(5, self.b_review)           # 控制列（手動步進或「每點重複量測」都用得到）
         self.b_once.clicked.connect(lambda: self.runner and self.runner.measure_once())
         self.b_loop.toggled.connect(lambda on: self.runner and (self.runner.loop_start() if on else self.runner.loop_stop()))
         self.b_accept.clicked.connect(self._accept)
@@ -432,10 +436,33 @@ class MonitorPanel(QtWidgets.QWidget):
             return
         if p.get("run_id") != self._own_run_id:
             return                   # 不是這個畫面啟動的量測（例如遠端要求的）：由啟動者負責匯出
-        if Experiment.needs_review(ds):
-            self._log(f"有 {len(ds.retained)} 個保留點；QC 挑選視窗尚未移植，先以最後一筆匯出。")
         exp, out = self.exp, self.output
+        if Experiment.needs_review(ds) and any(len(r.shots) > 1 for r in ds.retained):
+            self._log(f"有 {len(ds.retained)} 個保留點：在 QC 視窗挑好每一點要用的數據後存檔")
+            self._final_review(ds, lambda d: start_thread(lambda: self._export(exp, d, out), name="export"))
+            return
         start_thread(lambda: self._export(exp, ds, out), name="export")
+
+    # ---- QC 挑選（1.0.7）------------------------------------------------------------
+    def open_review(self) -> None:
+        """量測中提前挑（不存檔；量完會再開一次最後確認）。"""
+        ds = getattr(self.runner, "dataset", None) if self.runner is not None else None
+        if ds is None or not any(r.retained and len(r.shots) > 1 for r in ds.records):
+            self._log("ℹ 目前沒有保留多筆數據的點（手動步進勾「保留此點所有暫存」，或「執行」分頁設「每點重複量測」）")
+            return
+        from .qc_window import QCWindow
+
+        self._qc = QCWindow(ds, final=False, parent=self.window())
+        self._qc.show()
+
+    def _final_review(self, ds, then) -> None:
+        from .qc_window import QCWindow
+
+        w = QCWindow(ds, final=True, parent=self.window())
+        w.done.connect(then)
+        self._qc = w
+        w.show()
+        w.raise_()
 
     def _export(self, exp: Experiment, ds, output) -> None:
         try:

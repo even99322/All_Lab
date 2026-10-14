@@ -101,9 +101,9 @@ def test_public_download_page_and_measure_pc_token(hub):
     state.platform.add_release("labcontrol", "0.0.26", "LabControl_v0.0.26.zip", b"LC", "boss")
     state.platform.add_release("lablogviewer", "2.1.1", "LabLogViewer-Windows-setup.exe", b"MZSETUP", "boss")
     state.platform.add_release("launcher", "0.0.18", "QELLauncher_v0.0.18_macos-arm64.dmg", b"OLD", "boss")
-    # 0.0.26：不用登入的下載頁列出量測、讀檔兩個獨立程式（沒有啟動器）
+    # 1.0.7：下載頁要登入（程式用的 /get/info、安裝檔下載照舊不用登入）
     code, page = _call(url + "/get")
-    assert code == 200 and "量子工程平台".encode() in page and "不常下載".encode() in page
+    assert code == 200 and "登入".encode() in page and "不常下載".encode() not in page
     code, info = _call(url + "/get/info")
     apps = {a["id"]: a for a in info["apps"]}
     assert list(apps) == ["labcontrol", "lablogviewer"] and info["downloads"] == []
@@ -120,7 +120,7 @@ def test_public_download_page_and_measure_pc_token(hub):
     code, me_mods = _call(url + "/api/platform/modules", token=alice.token)
     hidden = {m["id"] for m in me_mods["modules"] if m.get("hidden")}
     assert {"launcher", "monitor"} <= hidden
-    # 沒登入打開網址 → 下載頁
+    # 沒登入打開網址 → 1.0.7：登入頁
     req = urllib.request.Request(url + "/")
     op = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     try:
@@ -128,7 +128,7 @@ def test_public_download_page_and_measure_pc_token(hub):
         loc = None
     except urllib.error.HTTPError as e:
         loc = e.headers.get("Location")
-    assert loc == "/get"
+    assert loc == "/login?next=/portal"
     # 量測電腦：只有站長拿得到裝置 token
     assert _call(url + "/api/platform/console/measure-pc", "POST", {"name": "LAB-A"}, token=alice.token)[0] == 403
     code, r = _call(url + "/api/platform/console/measure-pc", "POST", {"name": "LAB-A"}, token=owner.token)

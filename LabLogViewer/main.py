@@ -114,6 +114,23 @@ def main() -> int:
     app.aboutToQuit.connect(lifecycle.mark_clean)
 
     arg = sys.argv[1] if len(sys.argv) > 1 else None
+    # v1.0.5: lablogviewer://open?share=… from the Hub's web page "數據查看" → the file in 數據集散地
+    from app.core import link_open
+
+    link_open.register_windows()                    # installed program: the link opens this copy
+    if link_open.is_link(arg):
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QMessageBox
+
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            path, reason = link_open.resolve(arg)
+        finally:
+            QApplication.restoreOverrideCursor()
+        if path is None:
+            QMessageBox.warning(None, "LabLogViewer", reason)
+            return 1
+        arg = path
     # v2.1.6: another LabLogViewer is open → give it the file / folder (no second program)
     from app.core import local_link
 

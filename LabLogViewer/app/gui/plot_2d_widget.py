@@ -30,26 +30,78 @@ from app.gui.fonts import mono_family
 pg.setConfigOptions(antialias=True, background="w", foreground="k")
 
 DEFAULT_COLORMAP = "LabLog BWR"
-COLORMAPS = [DEFAULT_COLORMAP, "CoolWarm", "bwr", "viridis", "plasma", "inferno", "magma", "gray"]
+# v1.0.5: more maps (diverging first, then sequential); "<name>_r" reverses any of them and
+# "Custom: #rrggbb · #rrggbb[ · #rrggbb]" is a map built from the user's own 2–3 colors.
+COLORMAPS = [DEFAULT_COLORMAP, "CoolWarm", "bwr", "RdBu", "seismic", "Spectral", "viridis", "plasma", "inferno",
+             "magma", "cividis", "turbo", "jet", "gray"]
+CUSTOM_PREFIX = "Custom:"
+
+
+def custom_colormap_name(colors) -> str:
+    """["#1f77b4", "#ffffff", "#d62728"] → "Custom: #1f77b4 · #ffffff · #d62728"."""
+    return CUSTOM_PREFIX + " " + " · ".join(str(c).lower() for c in colors)
+
+
+def custom_colors(name: str) -> list[str] | None:
+    """The colors of a custom map name, or None when ``name`` is not a valid custom map."""
+    import re
+
+    if not isinstance(name, str) or not name.startswith(CUSTOM_PREFIX):
+        return None
+    colors = re.findall(r"#[0-9a-fA-F]{6}\b", name[len(CUSTOM_PREFIX):])
+    return [c.lower() for c in colors] if 2 <= len(colors) <= 5 else None
+
+
+def is_known_colormap(name: str) -> bool:
+    if not isinstance(name, str):
+        return False
+    base = name[:-2] if name.endswith("_r") else name
+    return base in COLORMAPS or custom_colors(name) is not None
+
+
+def _lablog_bwr() -> pg.ColorMap:
+    return pg.ColorMap(
+        np.array([0.0, 0.25, 0.5, 0.75, 1.0]),
+        np.array([
+            [125, 0, 0, 255],
+            [235, 80, 80, 255],
+            [255, 255, 255, 255],
+            [90, 150, 240, 255],
+            [0, 35, 130, 255],
+        ], dtype=np.ubyte),
+    )
 
 
 def get_colormap(name: str) -> pg.ColorMap:
-    """Resolve a display colormap, including LabLogViewer's reference LUT."""
+    """Resolve a display colormap, including LabLogViewer's reference LUT, reversed maps and custom maps."""
+    colors = custom_colors(name)
+    if colors is not None:
+        rgb = [[int(c[i:i + 2], 16) for i in (1, 3, 5)] + [255] for c in colors]
+        return pg.ColorMap(np.linspace(0.0, 1.0, len(rgb)), np.array(rgb, dtype=np.ubyte))
+    if isinstance(name, str) and name.endswith("_r") and name[:-2] in COLORMAPS:
+        base = get_colormap(name[:-2])
+        pos, cols = base.getStops(mode="byte")
+        return pg.ColorMap(1.0 - np.asarray(pos)[::-1], np.asarray(cols)[::-1])
     if name == DEFAULT_COLORMAP:
-        return pg.ColorMap(
-            np.array([0.0, 0.25, 0.5, 0.75, 1.0]),
-            np.array([
-                [125, 0, 0, 255],
-                [235, 80, 80, 255],
-                [255, 255, 255, 255],
-                [90, 150, 240, 255],
-                [0, 35, 130, 255],
-            ], dtype=np.ubyte),
-        )
+        return _lablog_bwr()
     cmap = pg.colormap.get("coolwarm" if name == "CoolWarm" else name, source="matplotlib")
     if cmap is None:
         raise ValueError(f"Unknown colormap '{name}'. Valid options: {COLORMAPS}")
     return cmap
+
+
+def colormap_pixmap(name: str, width: int = 96, height: int = 14):
+    """A horizontal ramp of ``name`` (low → high) for menus and previews."""
+    from PySide6.QtGui import QImage, QPixmap
+
+    try:
+        rgba = np.ascontiguousarray(get_colormap(name).map(np.linspace(0.0, 1.0, max(2, width)), mode="byte"),
+                                    dtype=np.uint8)[:, :4]
+    except Exception:
+        rgba = np.full((max(2, width), 4), 128, dtype=np.uint8)
+    rows = np.ascontiguousarray(np.repeat(rgba[None, :, :], max(1, height), axis=0))
+    image = QImage(rows.data, rows.shape[1], rows.shape[0], rows.shape[1] * 4, QImage.Format.Format_RGBA8888)
+    return QPixmap.fromImage(image.copy())
 
 
 AUTO_RANGE_TAIL = 5e-5          # fraction of pixels ignored at each end of the auto range
@@ -286,9 +338,15 @@ class Plot2DWidget(QWidget):
                 self.color_bar.setColorMap(cmap)
                 self.color_bar.setLevels((z_min, z_max))
                 try:
-                    self.color_bar.setLabels(right=z_label)
+                    # v1.0.5: the label lives on the bar's own value axis; setLabels(right=…) added a second,
+                    # duplicate label on the far right after every re-plot
+                    self.color_bar.axis.setLabel(z_label)
                 except Exception:
                     pass  # non-critical - colorbar label just won't update
+            for side in ("left", "right"):          # only the bar's value axis carries the label
+                other = self.color_bar.getAxis(side)
+                if other is not self.color_bar.axis:
+                    other.showLabel(False)
         finally:
             self._setting_color_levels = False
 
@@ -386,6 +444,21 @@ class Plot2DWidget(QWidget):
             return None
         self.plot(self._grid, colormap=self._colormap_name, z_min=None, z_max=None)
         return self._z_min, self._z_max
+
+    def full_range_color(self) -> tuple[float, float] | None:
+        """v1.0.5: the color range = the data's full minimum to maximum (Auto Range ignores the few most
+        extreme pixels). Applied as a manual range; returns it, or None if nothing is plotted."""
+        if self._grid is None:
+            return None
+        z = np.asarray(self._grid.z_values, dtype=float)
+        finite = z[np.isfinite(z)]
+        if finite.size == 0:
+            return None
+        low, high = float(finite.min()), float(finite.max())
+        if low == high:
+            high = low + max(abs(low), 1.0) * 1e-9
+        self.plot(self._grid, colormap=self._colormap_name, z_min=low, z_max=high)
+        return low, high
 
     def clear(self) -> None:
         self._grid = None

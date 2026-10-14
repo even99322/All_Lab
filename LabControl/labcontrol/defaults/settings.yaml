@@ -42,6 +42,7 @@ run_defaults:
   retries: 1                   # 量測失敗自動重試次數
   on_error: pause              # 重試仍失敗：pause | stop
   max_shots: 400               # 手動模式每點最多暫存幾筆
+  repeat_shots: 1              # 1.0.7：每點量幾次（> 1 → 全部保留，量完在 QC 視窗挑）
   loop_interval: 0.01 s
   stall_warn_s: 120            # 量測超過這麼久沒有任何進度 → 存程式狀態到 LAB/logs/stall_*.txt（0 = 關閉）
 

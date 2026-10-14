@@ -39,7 +39,19 @@ def _channel_order(experiment) -> list[str]:
     )
 
 
-_PREVIEW_COLORMAPS = {"LabLog BWR", "bwr", "viridis", "plasma", "inferno", "magma", "gray"}
+_PREVIEW_COLORMAPS = {"LabLog BWR", "CoolWarm", "bwr", "RdBu", "seismic", "Spectral", "viridis", "plasma", "inferno",
+                      "magma", "cividis", "turbo", "jet", "gray"}
+
+
+def _preview_colormap_ok(name: str) -> bool:
+    """v1.0.5: the Viewer's maps, their reversed "_r" forms and "Custom: #rrggbb · …" maps."""
+    import re
+
+    if name.endswith("_r"):
+        name = name[:-2]
+    if name.startswith("Custom:"):
+        return 2 <= len(re.findall(r"#[0-9a-fA-F]{6}\b", name)) <= 5
+    return name in _PREVIEW_COLORMAPS
 _PREVIEW_TRANSFORMS = {"raw", "real", "imag", "magnitude", "magnitude_db", "phase_deg", "phase_rad"}
 
 
@@ -59,7 +71,7 @@ def _valid_2d_options(experiment, state: dict[str, Any]) -> tuple[str, str, str,
     dimensions = experiment.list_dimensions(z_name)
     if len(dimensions) != 2 or {x_name, y_name} != {dimension.name for dimension in dimensions}:
         return None
-    if colormap not in _PREVIEW_COLORMAPS:
+    if not _preview_colormap_ok(colormap):
         return None
     auto_color = two_d.get("auto_color", True)
     if not isinstance(auto_color, bool):

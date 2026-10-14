@@ -71,7 +71,9 @@ def _portal(h: Handler) -> None:
     if not h.authorized():
         h._redirect("/login?next=/portal")
         return
-    h._html((STATIC / "portal.html").read_text(encoding="utf-8"))
+    from .web_nav import page
+
+    page(h, "portal.html", "home")
 
 
 @route("GET", r"/manifest\.webmanifest", auth=False)
@@ -463,9 +465,12 @@ def _console_measure_pc(h: Handler) -> None:
     h._json({"ok": True, "name": name, "token": h.hub.cfg.token})
 
 
-# ---- 下載頁（不用登入）：每個人只需要記這個網址 -------------------------------------------------
+# ---- 下載頁：1.0.7 起要登入（程式用的 /get/info、/get/feed、安裝檔下載照舊不用登入）----------------------
 @route("GET", r"/get", auth=False)
 def _get_page(h: Handler) -> None:
+    if not h.authorized():
+        h._redirect("/login?next=/get")
+        return
     h._html((STATIC / "get.html").read_text(encoding="utf-8"))
 
 

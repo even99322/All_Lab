@@ -170,5 +170,8 @@ if sys.platform == "darwin":
             "CFBundleDisplayName": "LabLogViewer",
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": "11.0",
+            # v1.0.5: lablogviewer:// links from the Hub's web page open files here
+            "CFBundleURLTypes": [{"CFBundleURLName": "tw.edu.ccu.qel.lablogviewer.link",
+                                  "CFBundleURLSchemes": ["lablogviewer"]}],
         },
     )

@@ -14,7 +14,7 @@ APP = Path(__file__).resolve().parents[1] / "app"
 # Technical values that are shown as they are (solver names, icon ids, log messages, symbols ...)
 NOT_INTERFACE_TEXT = {
     # pet: developer-only menus (LLV_PET_DEV=1) and pure format strings around translated parts
-    "Test pet events", "Level (now {})", "Lv.{}", "{} · Lv.{}", "✓ {} · Lv.{}",
+    "LabLogViewer", "Test pet events", "Level (now {})", "Lv.{}", "{} · Lv.{}", "✓ {} · Lv.{}",
     "3D Surface — {}", "AND", "OR", "Magnitude |S|", "S_ideal =", "T_avg |S|", "Trace {} / {}{}", "Trace —", "__chi2",
     "abs", "analysis", "annotate", "bell", "arctan", "back", "cauchy", "clear", "copy", "debackground", "dogbox", "export",
     "f_ref", "filter", "huber", "laser", "load", "max nfev", "maximize", "mean_pos", "nfev = {}   cost = {}   {} s", "open",

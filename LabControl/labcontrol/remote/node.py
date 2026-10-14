@@ -37,7 +37,8 @@ log = logging.getLogger(__name__)
 #: 不排隊、立即處理的指令（停止一定要馬上執行）
 QUICK = {"ping", "status", "stop", "pause", "update", "release", "group_stop", "ramp_status"}
 #: 只讀，不檢查 allowed_users
-READ_ONLY = {"ping", "status", "get", "get_all", "describe", "sources", "ramp_status", "vnas", "vna_catalog"}
+READ_ONLY = {"ping", "status", "get", "get_all", "describe", "sources", "ramp_status", "vnas", "vna_catalog",
+             "catalog", "templates", "check_scheme", "instruments_file"}
 #: 即時監控的讀取 / 控制：另一條佇列處理，不會排在「全部連線」「開始量測」這類慢指令後面而逾時
 LIVE = {"get", "describe", "get_all", "sources", "vnas", "vna_catalog", "vna_ports", "vna_trace", "fine_step", "output",
         "group_ramp"}
@@ -715,6 +716,118 @@ class NodeService:
         self.station.bus.log(f"🛰 {sender.get('user')} 新增儀器 {name}（{driver}）")
         self._status_now.set()
         return {"added": True, "name": name}
+
+    # ---- 1.0.7：Hub 網頁「量測設置」----------------------------------------------
+    def cmd_catalog(self, sender) -> Dict[str, Any]:
+        """這台可以設定 / 掃描的目標與量測儀器（網頁的方案編輯器用）。"""
+        from ..scheme import build_catalog
+
+        cat = build_catalog(self.station)
+        return {
+            "targets": [{"ref": t.ref, "label": t.label, "short": t.short, "group": t.group, "unit": t.unit,
+                         "common": t.common, "instrument": t.instrument} for t in cat.targets],
+            "measurers": [{"ref": m.ref, "label": m.label, "kind": m.kind, "traces": list(m.traces),
+                           "fields": [{"key": f.key, "label": f.label, "unit": f.unit, "kind": f.kind,
+                                       "choices": list(f.choices or [])} for f in m.fields],
+                           "defaults": {k: (v if isinstance(v, (int, float, str, bool)) or v is None else str(v))
+                                        for k, v in (m.defaults or {}).items()}} for m in cat.measurers],
+        }
+
+    @staticmethod
+    def _outline(sch) -> List[Dict[str, Any]]:
+        sch.ensure_graph()
+        sch.sync_from_graph()
+        return [{"id": b.id, "kind": b.kind, "depth": depth} for b, depth, _p in sch.walk()]
+
+    def cmd_templates(self, sender) -> List[Dict[str, Any]]:
+        """這台的量測範本（LAB/templates 與內建），連同流程順序（網頁照順序列出方塊）。"""
+        from ..scheme.templates import load_template, template_files
+
+        out = []
+        for key in template_files():
+            try:
+                sch = load_template(key)
+                outline = self._outline(sch)
+                out.append({"key": key, "name": sch.name, "scheme": sch.to_dict(), "outline": outline})
+            except Exception as e:  # noqa: BLE001 — 壞掉的範本不影響其他
+                out.append({"key": key, "name": key, "error": str(e)})
+        return out
+
+    def cmd_check_scheme(self, sender, scheme: Dict[str, Any]) -> Dict[str, Any]:
+        """在這台編譯方案（不執行）：問題、點數、預估時間、檔案數。"""
+        from ..scheme import Scheme, build_catalog, compile_scheme
+
+        sch = Scheme.from_dict(dict(scheme))
+        res = compile_scheme(sch, build_catalog(self.station))
+        return {"ok": res.ok, "issues": [{"level": i.level, "message": i.message, "block": i.block_id}
+                                         for i in res.issues if i.level in ("error", "warning")],
+                "points": res.total_points, "est_seconds": res.est_seconds, "files": res.n_files,
+                "outline": self._outline(sch)}
+
+    def _instruments_path(self) -> Path:
+        return Path(self.station.config_path or lab_path(setting("app.instruments_file", "instruments.yaml")))
+
+    def cmd_instruments_file(self, sender) -> Dict[str, Any]:
+        """這台的 instruments.yaml（文字）與各量測電腦的電磁鐵組 / VNA 對應。"""
+        import yaml
+
+        from ..scheme.remap import role_lists
+
+        path = self._instruments_path()
+        text = path.read_text(encoding="utf-8") if path.is_file() else ""
+        try:
+            data = yaml.safe_load(text) or {}
+            roles = role_lists((data.get("instruments") or {}) if isinstance(data, dict) else {},
+                               setting("lab_nodes", None))
+        except Exception:  # noqa: BLE001
+            roles = {}
+        return {"path": str(path), "text": text, "roles": roles, "node": self.name,
+                "loaded": sorted(self.station.instruments), "lab_nodes": list(setting("lab_nodes", []) or [])}
+
+    def cmd_save_lab_nodes(self, sender, lab_nodes: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """站長從網頁改「量測電腦對應」（settings.yaml lab_nodes：每台的電磁鐵組與 VNA，依序）。"""
+        from ..settings import settings
+
+        if not sender.get("owner"):
+            raise CommandError("只有站長可以從網頁修改量測電腦對應")
+        if not setting("remote.node.allow_remote_config", True):
+            raise CommandError("這個節點不允許遠端修改設定（settings.yaml remote.node.allow_remote_config）")
+        clean = []
+        for e in lab_nodes or []:
+            if not isinstance(e, dict) or not str(e.get("node") or "").strip():
+                continue
+            clean.append({"node": str(e["node"]).strip(),
+                          "magnet": [str(x) for x in (e.get("magnet") or []) if str(x).strip()],
+                          "vna": [str(x) for x in (e.get("vna") or []) if str(x).strip()]})
+        st = settings()
+        st.set("lab_nodes", clean)
+        st.save()
+        self.station.bus.log(f"🛰 {sender.get('user')} 從網頁修改了量測電腦對應")
+        return {"saved": True, "lab_nodes": clean}
+
+    def cmd_save_instruments(self, sender, text: str) -> Dict[str, Any]:
+        """站長從網頁改 instruments.yaml：檢查格式、備份成 .bak 再寫入；在這台重新載入設定後生效。"""
+        import yaml
+
+        if not sender.get("owner"):
+            raise CommandError("只有站長可以從網頁修改量測電腦的設定檔")
+        if not setting("remote.node.allow_remote_config", True):
+            raise CommandError("這個節點不允許遠端修改設定檔（settings.yaml remote.node.allow_remote_config）")
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError as e:
+            raise CommandError(f"YAML 格式錯誤：{e}")
+        if not isinstance(data, dict) or not isinstance(data.get("instruments"), dict):
+            raise CommandError("格式不對：最上層要有 instruments:")
+        for name, opts in data["instruments"].items():
+            if not isinstance(opts, dict) or not opts.get("driver"):
+                raise CommandError(f"儀器 {name} 缺少 driver")
+        path = self._instruments_path()
+        if path.is_file():
+            path.with_suffix(path.suffix + ".bak").write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+        path.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+        self.station.bus.log(f"🛰 {sender.get('user')} 從網頁修改了 {path.name}（重新載入設定後生效）")
+        return {"saved": True, "path": str(path), "instruments": sorted(data["instruments"])}
 
     def cmd_update(self, sender, version: str) -> Dict[str, Any]:
         if not setting("remote.node.allow_update", True):

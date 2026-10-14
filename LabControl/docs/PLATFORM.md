@@ -183,6 +183,24 @@ Lab Control（每台量測電腦）── POST /api/m/<名稱>/update（每秒�
 - Lab Control 工具列分成四段，視窗不夠寬時換行（不再藏到 » 裡）。
 - 讀檔程式 1.0.4：啟動還原 Viewer 不再解析每個檔的路徑（VPN 上會卡幾分鐘 → 安全復原模式）；網路磁碟的路徑由已解析的資料夾推算。
 
+### 0j. 1.0.7：平台網頁改版、網頁量測設置、每點重複量測＋QC
+
+```
+http://<NAS>:8765 ──(登入)── /portal 模塊下載 · /data 數據查看 · /live 量測查看 · /setup 量測設置 · 論文庫 ↗ ·（站長）控制台、帳號與權限
+/setup ── /api/state（量測電腦狀態）
+       └─ /api/nodes/<名稱>/commands：catalog · templates · check_scheme · run_scheme · pause/resume/stop ·
+                                      instruments_file · save_instruments（站長）· save_lab_nodes（站長）
+/data ── 「用讀檔程式開啟」→ lablogviewer://open?share=<數據集散地裡的路徑> → 讀檔程式 1.0.5（Windows 登錄 HKCU、macOS CFBundleURLTypes）
+```
+
+- 共用導覽 `labhub/web_nav.py`：頁面的 `<!--QEL-NAV-->` 由 Hub 換成導覽列（依登入者顯示站長項目）。
+- `/` 與 `/get` 頁要登入；程式用的 `/get/info`、`/get/feed`、`/get/watch`、安裝檔下載不用登入。`/nodes` → `/setup`（`/nodes?old=1` 舊頁）。
+- 網頁送出的節點指令：`from.user` = 登入帳號、`from.owner` = 是否站長（Hub 決定，裝置 token 不能自稱站長）；改設定檔的指令節點只接受站長，
+  `remote.node.allow_remote_config: false` 可以關掉。
+- 網頁方案編輯只改數值（目標、範圍、量測設定、檔名、重複次數、背景＋去背），流程結構在 Lab Control 裡改；送出前在量測電腦編譯檢查。
+- `run.repeat_shots` > 1：每點量 N 次、全部保留（PointRecord.retained）；本機開始的量測量完開 QC 視窗（`qc_window.QCWindow`），
+  選擇寫回 `PointRecord.selected`、星號在 `notes["qc_star"]`；HDF5 原生格式另存所有 shot。
+
 以下第 1–7 節是 0.0.13–0.0.25（有啟動器時）的說明，平台 API、數據目錄、標籤與論文仍然適用。
 
 ## 1. 組成

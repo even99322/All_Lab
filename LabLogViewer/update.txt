@@ -1807,3 +1807,25 @@ Date: 2026-10-14
     without asking the server; local drives unchanged (the file itself is resolved, symlinks followed).
     Harness (9000 files, 80 ms per call): first click in a new folder 0.44 s -> 0.03 s on the GUI thread.
   - tests/test_v1_0_4_startup.py.
+
+v1.0.5 - COLORMAP PICKER, FULL RANGE, INLINE X / Y CUTS, lablogviewer:// LINKS
+Date: 2026-10-14
+
+  - plot_2d_widget: COLORMAPS += RdBu, seismic, Spectral, cividis, turbo, jet; get_colormap resolves "<name>_r"
+    (reversed) and "Custom: #rrggbb · #rrggbb[ · #rrggbb]"; colormap_pixmap (ramp); full_range_color().
+    The color bar label is set on its value axis only (setLabels(right=) added a duplicate after every re-plot).
+  - app/gui/colormap_combo.py: ColormapCombo (ramp icons, "Reverse Current Colormap", "Custom Colors..." →
+    CustomColormapDialog, last 6 custom maps in QSettings view/custom_colormaps; findText / setCurrentText add a
+    valid reversed / custom name so saved views restore). Used for the 2D and 3D colormap combos.
+  - quick_preview: the Browser preview accepts every Viewer map, "_r" and custom names.
+  - Viewer: "Full Range" next to "Auto Range" (manual range = data min..max).
+  - cross_section_window.CrossSection: set_parts(x, y) — X cut (top) and Y cut (left) independently; the
+    histogram + Max / Min / Auto / Full range live in a popup from the "◧ Contrast" button (top-right corner).
+    View → Show → Show X Cut / Show Y Cut are checkable and toggle the inline parts (several panes: their own
+    windows as before); "Show 2D X/Y Cross-section" is no longer in the menu.
+  - localization: open combo drop-downs are drawn translated (TranslatingPopupDelegate replaces Qt's own combo
+    delegates only); missing Chinese for marks / analysis / form labels.
+  - app/core/link_open.py + main.py + file_drop: lablogviewer://open?share=<path in 數據集散地> (or ?path=) opens the
+    file; Windows: installer [Registry] HKCU\Software\Classes\lablogviewer and re-registration at start; macOS:
+    CFBundleURLTypes + QFileOpenEvent(url). Resolved off the GUI thread with time limits (lab_share.find).
+  - tests/test_v1_0_5_viewer.py, tests/test_v1_0_5_link.py.

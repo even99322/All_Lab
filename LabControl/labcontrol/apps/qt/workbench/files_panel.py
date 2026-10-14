@@ -206,12 +206,17 @@ class FilePanel(QtWidgets.QTabWidget):
         self.on_error.addItem("重試後自動暫停（等人處理）", "pause")
         self.on_error.addItem("重試後中斷量測", "stop")
         self.retries = ispin(0, 20)
+        self.repeat = ispin(1, 400)
+        self.repeat.setObjectName("repeatShots")
+        self.repeat.setToolTip("每個點量幾次。> 1：每次都保留，量完開「QC 挑選」視窗依 Mag / Phase / IQ 挑每點要用的那一筆\n"
+                               "（手動步進時用「保留此點所有暫存」也一樣）")
         self.dip = QtWidgets.QCheckBox("吸收峰型態變化（1 ⇌ 2 個）自動暫停")
         f.addRow("每點量測前等待", self.delay)
         f.addRow("移到起點速率", self.approach)
         f.addRow("結束後停靠速率", self.park_rate)
         f.addRow("量測錯誤", self.on_error)
         f.addRow("重試次數", self.retries)
+        f.addRow("每點重複量測", self.repeat)
         f.addRow("自動判斷", self.dip)
         note = QtWidgets.QLabel("數值 0 = 使用儀器的斜坡速率。各軸「掃完後回到第一點 / 停在最後」在該掃描節點設定。"
                                 "沒改過的欄位使用 settings.yaml 的 run_defaults。")
@@ -223,6 +228,7 @@ class FilePanel(QtWidgets.QTabWidget):
         self.park_rate.valueChanged.connect(lambda v: self._run("park_rate", f"{v:g} {self.rate_unit}" if v else None))
         self.on_error.currentIndexChanged.connect(lambda _i: self._run("on_error", self.on_error.currentData()))
         self.retries.valueChanged.connect(lambda v: self._run("retries", int(v)))
+        self.repeat.valueChanged.connect(lambda v: self._run("repeat_shots", int(v) if v > 1 else None))
         self.dip.toggled.connect(self._dip)
         return w
 
@@ -546,6 +552,7 @@ class FilePanel(QtWidgets.QTabWidget):
             self.park_rate.setSpecialValueText(f"預設（{run.get('park_rate') or '儀器速率'}）")
             self.on_error.setCurrentIndex(max(0, self.on_error.findData(run.get("on_error", "pause"))))
             self.retries.setValue(int(run.get("retries", 1)))
+            self.repeat.setValue(max(1, int(run.get("repeat_shots", 1) or 1)))
             self.dip.setChecked(any(h.get("type") == "dip_shape_pause" and h.get("enabled", True) for h in s.hooks))
         finally:
             self._loading = False

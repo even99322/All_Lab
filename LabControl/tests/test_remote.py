@@ -97,7 +97,7 @@ def test_dashboard_login_and_devices(hubsrv):
     assert "登入" in r.read().decode() and "/login" in r.geturl()
     r = opener.open(hub.url + "/login", data=f"token={TOKEN}".encode())
     page = r.read().decode()
-    assert "Lab Control Hub" in page and "量測節點" in page          # cookie 登入後看到監控頁
+    assert "量測設置" in page and "量測電腦" in page and "qel-nav" in page   # 1.0.7：登入後是平台網頁
     hub.heartbeat({"id": "alice@PC-01", "host": "PC-01", "user": "alice", "version": "0.0.7", "role": "client"})
     s = hub.state()
     d = next(d for d in s["devices"] if d["id"] == "alice@PC-01")

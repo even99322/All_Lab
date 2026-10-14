@@ -75,6 +75,7 @@ class RunOptions:
     retries: int = 1                        # 量測失敗自動重試次數
     on_error: str = "pause"                 # 重試仍失敗：pause（等人處理）| stop
     max_shots: int = 400                    # 手動模式每點最多暫存幾筆
+    repeat_shots: int = 1                   # 1.0.7：自動模式每點量幾次（> 1 → 全部保留，量完在 QC 視窗挑）
     loop_interval: float = 0.01
 
     @classmethod
@@ -83,6 +84,11 @@ class RunOptions:
         from ..settings import setting
 
         d = {**(setting("run_defaults", {}) or {}), **dict(d or {})}
+        if d.get("repeat_shots") is not None:
+            try:
+                d["repeat_shots"] = max(1, int(d["repeat_shots"]))
+            except (TypeError, ValueError):
+                d["repeat_shots"] = 1
         if d.get("loop_interval") is not None:
             d["loop_interval"] = parse_quantity(d["loop_interval"], "s")
         if d.get("settle_first") is not None:
@@ -387,10 +393,19 @@ class Runner:
                 attempt = 0
 
     def _acquire_auto(self, i: int, ctx: RunContext) -> Optional[PointRecord]:
-        shot = self._shot(i, ctx)
-        if shot is None:
-            return None
-        return PointRecord(index=i, setpoints=dict(ctx.setpoints), shots=[shot], selected=0)
+        n = max(1, int(self.options.repeat_shots or 1))
+        shots: List[Dict[str, Any]] = []
+        for k in range(n):
+            if k and (self._stop.is_set() or self._rollback):
+                return None
+            shot = self._shot(i, ctx)
+            if shot is None:
+                return None
+            shots.append(shot)
+            if n > 1:
+                self.bus.publish("manual.shots", run_id=self.run_id, index=i, count=len(shots))
+        return PointRecord(index=i, setpoints=dict(ctx.setpoints), shots=shots, selected=len(shots) - 1,
+                           retained=n > 1)
 
     def _acquire_manual(self, i: int, ctx: RunContext) -> Optional[PointRecord]:
         shots: List[Dict[str, Any]] = []

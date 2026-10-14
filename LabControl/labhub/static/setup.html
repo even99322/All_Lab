@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16181d">
+<link rel="icon" href="/icon.svg">
+<title>量測設置</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --soft:#f0f2f5; --text:#1f2328; --muted:#6b7280; --border:#e1e4e8;
+          --accent:#1971c2; --accent-soft:#e7f1fb; --ok:#2b8a3e; --warn:#e67700; --err:#e03131; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111317; --card:#1b1e24; --soft:#23272e; --text:#e9ecef; --muted:#9097a0; --border:#2f333a;
+            --accent:#4dabf7; --accent-soft:#1d2d3d; --ok:#51cf66; --warn:#ffa94d; --err:#ff6b6b; }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text);
+    font:14px/1.5 "Segoe UI","Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,sans-serif; }
+  main { max-width:1400px; margin:0 auto; padding:14px; display:grid; grid-template-columns:300px minmax(0,1fr); gap:14px; align-items:start; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; } }
+  h2 { font-size:15px; margin:0 0 8px; display:flex; gap:8px; align-items:center; }
+  h2 .n { color:var(--muted); font-weight:400; font-size:12px; }
+  h3 { font-size:13px; margin:14px 0 6px; color:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:12px; }
+  .node { border:1px solid var(--border); border-radius:10px; padding:9px 11px; margin-bottom:8px; cursor:pointer; background:var(--card); }
+  .node.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .node .nm { font-weight:700; display:flex; gap:6px; align-items:center; }
+  .node .mt { color:var(--muted); font-size:12px; }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); display:inline-block; flex:none; }
+  .dot.on { background:var(--ok); } .dot.run { background:var(--accent); animation:p 1.4s infinite; } .dot.pause { background:var(--warn); }
+  @keyframes p { 50% { opacity:.35; } }
+  .bar { height:6px; background:var(--soft); border-radius:6px; overflow:hidden; margin-top:6px; }
+  .bar > i { display:block; height:100%; background:var(--accent); }
+  .tabs { display:flex; gap:4px; margin-bottom:10px; flex-wrap:wrap; }
+  .tab { padding:6px 12px; border-radius:8px; border:1px solid var(--border); background:var(--card); cursor:pointer; font-weight:600; color:var(--muted); }
+  .tab.on { color:var(--accent); border-color:var(--accent); background:var(--accent-soft); }
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:8px; border:1px solid var(--border);
+         background:var(--soft); color:var(--text); font:inherit; font-weight:600; cursor:pointer; text-decoration:none; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.go { background:var(--ok); border-color:var(--ok); color:#fff; }
+  .btn.danger { color:var(--err); }
+  .btn:disabled { opacity:.5; cursor:default; }
+  input, select, textarea { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--border); border-radius:7px; padding:5px 8px; }
+  input[type=number] { width:110px; }
+  textarea { width:100%; min-height:360px; font-family:ui-monospace,Consolas,Menlo,monospace; font-size:12.5px; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:6px 8px; border-bottom:1px solid var(--border); text-align:left; font-size:13px; vertical-align:middle; }
+  th { color:var(--muted); font-weight:600; background:var(--soft); }
+  .muted { color:var(--muted); } .small { font-size:12px; } .ok { color:var(--ok); } .err { color:var(--err); } .warn { color:var(--warn); }
+  .blk { border:1px solid var(--border); border-left:5px solid var(--muted); border-radius:10px; padding:8px 10px; margin:6px 0; background:var(--card); }
+  .blk.set { border-left-color:#1971c2; } .blk.measure { border-left-color:#e8590c; } .blk.save { border-left-color:#2b8a3e; }
+  .blk.wait { border-left-color:#868e96; } .blk.debg { border-left-color:#2b8a3e; }
+  .blk .hd { font-weight:700; margin-bottom:6px; display:flex; gap:8px; align-items:center; }
+  .blk .hd .k { font-size:11px; color:#fff; background:var(--muted); border-radius:6px; padding:0 7px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:4px 0; }
+  .row label { display:flex; gap:5px; align-items:center; font-size:13px; }
+  .row label > span { color:var(--muted); }
+  .issues div { padding:3px 0; font-size:13px; }
+  .empty { padding:24px; text-align:center; color:var(--muted); }
+  .toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--text); color:var(--bg);
+           padding:8px 16px; border-radius:10px; font-weight:600; opacity:0; transition:.2s; pointer-events:none; z-index:40; max-width:90vw; }
+  .toast.show { opacity:.95; }
+  .sets td input { width:100px; }
+  .tw { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  @media (max-width:600px) { .hide-sm { display:none; } main { padding:10px; } }
+</style>
+</head>
+<body>
+<!--QEL-NAV-->
+<main>
+  <section>
+    <h2>量測電腦 <span class="n" id="upd"></span></h2>
+    <div id="nodes"><div class="empty">讀取中…</div></div>
+    <div class="small muted">量測電腦開著 Lab Control 並勾「🛰 量測節點」才會出現在這裡。</div>
+  </section>
+  <section>
+    <div class="tabs" id="tabs">
+      <button class="tab on" data-t="status">狀態與儀器</button>
+      <button class="tab" data-t="scheme">量測方案</button>
+      <button class="tab" data-t="config">對應與設定檔</button>
+    </div>
+    <div id="pane"><div class="empty">選一台量測電腦</div></div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? "" : t).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const STATE = { idle:"閒置", running:"量測中", paused:"暫停", updating:"更新中", offline:"離線", preparing:"準備中", stopping:"停止中" };
+let STATEJ = null, cur = null, tab = "status", cache = {}, scheme = null, outline = [], tmplKey = "", checkRes = null;
+try { cur = localStorage.getItem("qel-setup-node"); tab = localStorage.getItem("qel-setup-tab") || "status"; } catch (e) {}
+
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove("show"), 3500); }
+async function api(path, opts) {
+  const r = await fetch(path, Object.assign({ credentials:"same-origin", cache:"no-store" }, opts || {}));
+  if (r.status === 401) { location.href = "/login?next=/setup"; throw new Error("login"); }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.ok === false) throw new Error(d.error || r.statusText);
+  return d;
+}
+async function cmd(name, args, wait = 30) {
+  const d = await api(`/api/nodes/${encodeURIComponent(cur)}/commands?wait=${wait}`,
+    { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ cmd:name, args:args || {} }) });
+  const r = d.reply || {};
+  if (!r.ok) throw new Error(r.error || "量測電腦沒有回應");
+  return r.result;
+}
+function fmtDur(s) { if (s == null || !isFinite(s)) return "–"; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  return h ? `${h} 時 ${m} 分` : m ? `${m} 分 ${s % 60} 秒` : `${s} 秒`; }
+
+// ---- 量測電腦清單 -----------------------------------------------------------------
+async function loadState() {
+  try {
+    STATEJ = await api("/api/state");
+    $("upd").textContent = new Date().toTimeString().slice(0, 8);
+    renderNodes();
+    if (tab === "status") renderStatus();
+  } catch (e) { if (e.message !== "login") $("nodes").innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
+}
+function node() { return (STATEJ && STATEJ.nodes || []).find(n => n.name === cur) || null; }
+function renderNodes() {
+  const nodes = STATEJ.nodes || [];
+  if (!nodes.length) { $("nodes").innerHTML = `<div class="empty">還沒有量測電腦上線</div>`; return; }
+  if (!cur || !nodes.some(n => n.name === cur)) select((nodes.find(n => n.online) || nodes[0]).name, false);
+  $("nodes").innerHTML = nodes.map(n => {
+    const r = n.run || {}, st = n.online ? n.state : "offline";
+    const cls = !n.online ? "" : st === "running" ? "run" : st === "paused" ? "pause" : "on";
+    const pct = r.total ? Math.min(100, 100 * (r.index || 0) / r.total) : 0;
+    const inst = n.instruments || [];
+    return `<div class="node${n.name === cur ? " sel" : ""}" data-n="${esc(n.name)}">
+      <div class="nm"><span class="dot ${cls}"></span>${esc(n.name)}<span class="small muted" style="font-weight:400">${esc(STATE[st] || st)}</span></div>
+      <div class="mt">${esc(n.user || "")}@${esc(n.host || "")} · v${esc(n.version || "?")}${n.simulate ? " · 模擬" : ""}</div>
+      <div class="mt">儀器 ${inst.filter(i => i.connected).length} / ${inst.length} 已連線</div>
+      ${r.name && ["running", "paused", "preparing"].includes(st) ? `<div class="mt">「${esc(r.name)}」${r.index ?? 0} / ${r.total ?? "?"}（${esc(r.by || "")}）</div><div class="bar"><i style="width:${pct}%"></i></div>` : ""}
+    </div>`;
+  }).join("");
+}
+$("nodes").onclick = e => { const el = e.target.closest(".node"); if (el) select(el.dataset.n, true); };
+function select(name, render) {
+  if (name !== cur) { cur = name; scheme = null; checkRes = null; }
+  try { localStorage.setItem("qel-setup-node", name); } catch (e) {}
+  if (render) { renderNodes(); show(tab); }
+}
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => show(b.dataset.t));
+function show(t) {
+  tab = t; try { localStorage.setItem("qel-setup-tab", t); } catch (e) {}
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  if (!cur) { $("pane").innerHTML = `<div class="empty">選一台量測電腦</div>`; return; }
+  if (t === "status") renderStatus(); else if (t === "scheme") renderScheme(); else renderConfig(null);
+}
+
+// ---- 狀態與儀器 -------------------------------------------------------------------
+function renderStatus() {
+  const n = node(); if (!n) return;
+  const r = n.run || {}, st = n.online ? n.state : "offline", live = ["running", "paused", "preparing"].includes(st);
+  const inst = n.instruments || [];
+  $("pane").innerHTML = `<div class="card"><h2>${esc(n.name)} <span class="n">${esc(STATE[st] || st)} · ${n.seen_ago != null ? Math.round(n.seen_ago) + " 秒前回報" : ""}</span></h2>
+    ${live ? `<div>「<b>${esc(r.name)}</b>」由 ${esc(r.by || "")} 開始 · 第 ${r.index ?? 0} / ${r.total ?? "?"} 點 · 剩餘 ${fmtDur(r.eta)}</div>
+      <div class="row" style="margin-top:8px">
+        ${st === "paused" ? `<button class="btn" data-c="resume">▶ 繼續</button>` : `<button class="btn" data-c="pause">⏸ 暫停</button>`}
+        <button class="btn danger" data-c="stop">⏹ 停止</button><a class="btn" href="/live">看即時圖 ›</a></div>`
+      : `<div class="muted">${n.online ? "沒有量測在進行。到「量測方案」選範本、改參數後送出。" : "這台目前沒有回報（Lab Control 關了或連不到 Hub）。"}</div>`}
+    ${n.error ? `<div class="small err" style="margin-top:6px">${esc(n.error)}</div>` : ""}</div>
+    <div class="card"><h2>儀器 <span class="n">${inst.length} 台</span></h2>${inst.length ? `<div class="tw"><table><tr><th>名稱</th><th class="hide-sm">驅動</th><th class="hide-sm">位址</th><th>狀態</th><th>目前值</th></tr>
+      ${inst.map(i => `<tr><td><b>${esc(i.name)}</b>${i.label ? ` <span class="muted small">${esc(i.label)}</span>` : ""}</td><td class="small hide-sm">${esc(i.driver)}</td>
+        <td class="small hide-sm">${esc(i.address || (i.virtual ? "（虛擬）" : ""))}</td>
+        <td>${i.connected ? '<span class="ok">● 已連線</span>' : '<span class="muted">○ 未連線</span>'}${i.lease ? ` <span class="small warn">使用中：${esc(i.lease)}</span>` : ""}</td>
+        <td class="small">${i.level != null ? `${(+i.level * (i.unit === "A" ? 1e3 : 1)).toPrecision(6)} ${i.unit === "A" ? "mA" : esc(i.unit || "")}` : ""}${i.output != null ? (i.output ? " · 輸出 ON" : " · 輸出 OFF") : ""}</td></tr>`).join("")}</table></div>`
+      : `<div class="muted">這台沒有設定儀器</div>`}
+      <div class="row" style="margin-top:8px"><button class="btn" data-c="connect_all">全部連線</button><span class="small muted">（在量測電腦上連線 instruments.yaml 的所有儀器）</span></div></div>`;
+  $("pane").querySelectorAll("[data-c]").forEach(b => b.onclick = async () => {
+    const c = b.dataset.c;
+    if (c === "stop" && !confirm(`停止 ${cur} 上的量測？`)) return;
+    b.disabled = true;
+    try { await cmd(c, {}, c === "connect_all" ? 90 : 20); toast("已送出"); loadState(); } catch (e) { toast(e.message); } finally { b.disabled = false; }
+  });
+}
+
+// ---- 量測方案 ---------------------------------------------------------------------
+async function nodeData(key, fn) {
+  const k = cur + "|" + key;
+  if (!cache[k]) cache[k] = await fn();
+  return cache[k];
+}
+const KIND = { set:"設定", measure:"量測", save:"Data", wait:"等待", debg:"去背" };
+async function renderScheme() {
+  $("pane").innerHTML = `<div class="empty">向 ${esc(cur)} 讀取範本與儀器…</div>`;
+  let tmpls, cat;
+  try {
+    [tmpls, cat] = await Promise.all([nodeData("templates", () => cmd("templates")), nodeData("catalog", () => cmd("catalog"))]);
+  } catch (e) { $("pane").innerHTML = `<div class="empty err">${esc(e.message)}（量測電腦要 Lab Control 1.0.7 以上、在線上）</div>`; return; }
+  if (!scheme) {
+    let saved = null; try { saved = JSON.parse(localStorage.getItem("qel-setup-scheme|" + cur) || "null"); } catch (e) {}
+    const t = (saved && tmpls.find(x => x.key === saved.key)) || tmpls.find(x => x.scheme);
+    if (saved && saved.scheme) { scheme = saved.scheme; outline = saved.outline || []; tmplKey = saved.key || ""; }
+    else if (t) useTemplate(t);
+  }
+  drawScheme(tmpls, cat);
+}
+function useTemplate(t) {
+  scheme = JSON.parse(JSON.stringify(t.scheme)); outline = t.outline || []; tmplKey = t.key; checkRes = null;
+}
+function saveLocal() { try { localStorage.setItem("qel-setup-scheme|" + cur, JSON.stringify({ key:tmplKey, scheme, outline })); } catch (e) {} }
+function blocks() {
+  const g = scheme.graph, byId = {};
+  if (g) for (const b of g.nodes) byId[b.id] = b;
+  else (function walk(list) { for (const b of list || []) { byId[b.id] = b; walk(b.children); } })(scheme.blocks);
+  const order = outline.length ? outline : Object.keys(byId).map(id => ({ id, depth:0 }));
+  return order.filter(o => byId[o.id]).map(o => ({ b:byId[o.id], depth:o.depth }));
+}
+function targetOptions(cat, value, groups) {
+  const ts = cat.targets.filter(t => groups.includes(t.group) && (t.common || t.group !== "param" || t.ref === value));
+  const known = ts.some(t => t.ref === value);
+  return (known ? "" : `<option value="${esc(value)}" selected>${esc(value)}（這台沒有）</option>`) +
+    ts.map(t => `<option value="${esc(t.ref)}"${t.ref === value ? " selected" : ""}>${esc(t.label)}</option>`).join("");
+}
+function num(v) { return v == null ? "" : v; }
+function drawScheme(tmpls, cat) {
+  if (!scheme) { $("pane").innerHTML = `<div class="empty">這台沒有範本</div>`; return; }
+  const run = scheme.run || (scheme.run = {}), bg = scheme.background || {};
+  let h = `<div class="card"><div class="row">
+      <label><span>範本</span><select id="tmpl">${tmpls.map(t => `<option value="${esc(t.key)}"${t.key === tmplKey ? " selected" : ""}${t.error ? " disabled" : ""}>${esc(t.name)}${t.error ? "（壞掉）" : ""}</option>`).join("")}</select></label>
+      <button class="btn" id="reload">重新載入範本</button>
+      <label><span>方案名稱</span><input id="sname" value="${esc(scheme.name || "")}"></label></div>
+      <div class="small muted">從量測電腦的範本開始（LAB/templates），在這裡改數值；流程（迴圈、順序）要在 Lab Control 裡改。</div></div>`;
+  for (const { b, depth } of blocks()) {
+    h += `<div class="blk ${b.kind}" style="margin-left:${depth * 24}px" data-id="${esc(b.id)}"><div class="hd"><span class="k" style="background:${{ set:"#1971c2", measure:"#e8590c", save:"#2b8a3e", debg:"#2b8a3e" }[b.kind] || "#868e96"}">${KIND[b.kind] || b.kind}</span>${esc(b.title || "")}${b.kind === "set" && b.mode === "sweep" ? ' <span class="small muted">⟲ 掃描</span>' : ""}</div>`;
+    if (b.kind === "set") {
+      h += `<div class="row"><label><span>目標</span><select data-f="target">${targetOptions(cat, b.target, ["magnet", "source", "param"])}</select></label>`;
+      if (b.mode === "sweep") {
+        const usePts = b.points != null && b.step == null;
+        h += `<label><span>起</span><input type="number" step="any" data-f="start" value="${num(b.start)}"></label>
+              <label><span>迄</span><input type="number" step="any" data-f="stop" value="${num(b.stop)}"></label>
+              <label><select data-f="_by"><option value="step"${usePts ? "" : " selected"}>步進</option><option value="points"${usePts ? " selected" : ""}>點數</option></select>
+              <input type="number" step="any" data-f="${usePts ? "points" : "step"}" value="${num(usePts ? b.points : b.step)}"></label>`;
+      } else {
+        h += `<label><span>值</span><input type="number" step="any" data-f="value" value="${num(b.value)}"></label>`;
+      }
+      h += `<label><span>單位</span><input data-f="unit" value="${esc(b.unit || "")}" style="width:70px"></label>
+            <label><span>等待</span><input type="number" step="any" data-f="settle" value="${num(b.settle || 0)}" style="width:80px"> s</label></div>`;
+    } else if (b.kind === "measure") {
+      const m = cat.measurers.find(x => x.ref === b.instrument);
+      h += `<div class="row"><label><span>儀器</span><select data-f="instrument">${(m ? "" : `<option selected>${esc(b.instrument)}（這台沒有）</option>`) +
+        cat.measurers.map(x => `<option value="${esc(x.ref)}"${x.ref === b.instrument ? " selected" : ""}>${esc(x.label)}</option>`).join("")}</select></label>
+        <label><span>Trace</span>${(m ? m.traces : b.traces || []).map(t => `<label><input type="checkbox" data-trace="${esc(t)}"${(b.traces || []).includes(t) ? " checked" : ""}>${esc(t)}</label>`).join(" ")}</label></div><div class="row">`;
+      const fields = m ? m.fields : Object.keys(b.settings || {}).map(k => ({ key:k, label:k, unit:"" }));
+      for (const f of fields) {
+        const v = (b.settings || {})[f.key];
+        const ph = m && m.defaults[f.key] != null ? m.defaults[f.key] : "";
+        if (f.kind === "bool") h += `<label><input type="checkbox" data-s="${esc(f.key)}" data-k="bool"${v ? " checked" : ""}>${esc(f.label)}</label>`;
+        else if (f.choices && f.choices.length) h += `<label><span>${esc(f.label)}</span><select data-s="${esc(f.key)}"><option value=""></option>${f.choices.map(c => `<option${String(v) === String(c) ? " selected" : ""}>${esc(c)}</option>`).join("")}</select></label>`;
+        else h += `<label><span>${esc(f.label)}</span><input data-s="${esc(f.key)}" value="${esc(v ?? "")}" placeholder="${esc(ph)}${f.unit && !String(ph).includes(f.unit) ? " " + esc(f.unit) : ""}" style="width:120px"></label>`;
+      }
+      h += `</div><div class="small muted">數值可以帶單位（例如 5.0198 GHz、-10 dBm、10 kHz）；空白 = 儀器預設。</div>`;
+    } else if (b.kind === "save") {
+      const fm = (b.formats && b.formats.length ? b.formats : ["netcdf"]).map(f => f === "labber" ? "hdf5" : f);
+      h += `<div class="row"><label><span>檔名</span><input data-f="file_name" value="${esc(b.file_name || "")}" placeholder="（方案名稱）.nc"></label>
+        <label><input type="checkbox" data-fmt="netcdf"${fm.includes("netcdf") ? " checked" : ""}>NetCDF</label>
+        <label><input type="checkbox" data-fmt="hdf5"${fm.includes("hdf5") ? " checked" : ""}>HDF5</label></div>`;
+    } else if (b.kind === "wait") {
+      h += `<div class="row"><label><span>等待</span><input type="number" step="any" data-f="seconds" value="${num(b.seconds)}"> s</label></div>`;
+    } else if (b.kind === "debg") {
+      h += `<div class="row"><label><span>檔名後綴</span><input data-f="suffix" value="${esc(b.suffix || "_debg")}"></label></div>`;
+    }
+    h += `</div>`;
+  }
+  const sets = bg.sets || [];
+  h += `<div class="card"><h2>每點重複量測</h2><div class="row"><label><span>每點量</span><input type="number" min="1" max="400" id="repeat" value="${run.repeat_shots || 1}"> 次</label>
+      <span class="small muted">&gt; 1：每點量多次、全部保留（存 HDF5 時每一筆都在檔案裡）；從網頁開始的量測先用每點最後一筆，
+        要逐點挑選請在量測電腦的 Lab Control 開始量測（量完會開 QC 挑選視窗）</span></div></div>
+    <div class="card"><h2><label><input type="checkbox" id="bgOn"${bg.enabled ? " checked" : ""}> 背景＋去背</label></h2>
+      <div id="bgBox" style="${bg.enabled ? "" : "display:none"}"><table class="sets"><tr><th>電源</th><th>背景電流</th><th>單位</th><th></th></tr>
+      ${sets.map((s, i) => `<tr data-i="${i}"><td><select data-bg="target">${targetOptions(cat, s.target, ["magnet", "source"])}</select></td>
+        <td><input type="number" step="any" data-bg="value" value="${num(s.value)}"></td><td><input data-bg="unit" value="${esc(s.unit || "mA")}" style="width:60px"></td>
+        <td><button class="btn small danger" data-del="${i}">✕</button></td></tr>`).join("")}</table>
+      <div class="row"><button class="btn" id="bgAdd">＋ 加一台電源</button>
+        <label><span>設定後等待</span><input type="number" step="any" id="bgSettle" value="${num(bg.settle ?? 0.5)}"> s</label></div>
+      <div class="small muted">主量測完成後把這些電源設到背景電流、用相同的量測設定量一次背景、存背景檔，再把每個主數據檔除以背景（_debg）。</div></div></div>
+    <div class="card"><div class="row"><button class="btn" id="check">檢查方案</button>
+      <button class="btn go" id="run">▶ 在 ${esc(cur)} 開始量測</button><span class="small muted" id="checkMsg"></span></div>
+      <div class="issues" id="issues"></div></div>`;
+  $("pane").innerHTML = h;
+  bindScheme(tmpls, cat);
+  renderCheck();
+}
+function findBlock(id) { return blocks().map(x => x.b).find(b => b.id === id); }
+function bindScheme(tmpls, cat) {
+  $("tmpl").onchange = () => { const t = tmpls.find(x => x.key === $("tmpl").value); if (t && confirm("換範本會丟掉目前的修改，確定？")) { useTemplate(t); saveLocal(); drawScheme(tmpls, cat); } else $("tmpl").value = tmplKey; };
+  $("reload").onclick = () => {
+    if (!confirm("重新從量測電腦讀範本？目前的修改會丟掉。")) return;
+    delete cache[cur + "|templates"]; delete cache[cur + "|catalog"]; scheme = null; checkRes = null;
+    try { localStorage.removeItem("qel-setup-scheme|" + cur); } catch (e) {}
+    renderScheme();
+  };
+  $("sname").oninput = () => { scheme.name = $("sname").value; changed(); };
+  for (const el of $("pane").querySelectorAll(".blk [data-f], .blk [data-s], .blk [data-trace], .blk [data-fmt]")) {
+    el.onchange = () => {
+      const b = findBlock(el.closest(".blk").dataset.id); if (!b) return;
+      if (el.dataset.f === "_by") {
+        if (el.value === "points") { b.points = b.points || (b.step && b.start != null && b.stop != null ? Math.round(Math.abs(b.stop - b.start) / b.step) + 1 : 11); delete b.step; }
+        else { b.step = b.step || (b.points > 1 ? Math.abs(b.stop - b.start) / (b.points - 1) : 1); delete b.points; }
+        changed(); drawScheme(tmpls, cat); return;
+      }
+      if (el.dataset.f) {
+        const f = el.dataset.f;
+        if (el.type === "number") { if (el.value === "") delete b[f]; else b[f] = +el.value; } else b[f] = el.value;
+        if (f === "instrument") { b.settings = {}; const m = cat.measurers.find(x => x.ref === b.instrument); b.traces = m ? m.traces.slice(0, 1) : []; changed(); drawScheme(tmpls, cat); return; }
+      } else if (el.dataset.s) {
+        b.settings = b.settings || {};
+        const k = el.dataset.s;
+        if (el.dataset.k === "bool") b.settings[k] = el.checked; else if (el.value.trim() === "") delete b.settings[k];
+        else b.settings[k] = /^-?\d+(\.\d+)?(e-?\d+)?$/i.test(el.value.trim()) ? +el.value.trim() : el.value.trim();
+      } else if (el.dataset.trace) {
+        const t = el.dataset.trace; b.traces = (b.traces || []).filter(x => x !== t); if (el.checked) b.traces.push(t);
+      } else if (el.dataset.fmt) {
+        const f = el.dataset.fmt; b.formats = (b.formats && b.formats.length ? b.formats : ["netcdf"]).map(x => x === "labber" ? "hdf5" : x).filter(x => x !== f);
+        if (el.checked) b.formats.push(f);
+        if (!b.formats.length) { b.formats = ["netcdf"]; drawScheme(tmpls, cat); }
+      }
+      changed();
+    };
+  }
+  $("repeat").onchange = () => { const v = Math.max(1, Math.round(+$("repeat").value || 1)); if (v > 1) scheme.run.repeat_shots = v; else delete scheme.run.repeat_shots; changed(); };
+  $("bgOn").onchange = () => {
+    scheme.background = Object.assign({ settle:0.5, sets:[] }, scheme.background || {}, { enabled:$("bgOn").checked });
+    $("bgBox").style.display = $("bgOn").checked ? "" : "none"; changed();
+  };
+  $("bgAdd").onclick = () => { const bg = scheme.background = scheme.background || { enabled:true, sets:[] }; bg.sets = bg.sets || [];
+    const t = cat.targets.find(x => x.group === "magnet" || x.group === "source"); bg.sets.push({ target:t ? t.ref : "", value:0, unit:t ? t.unit : "mA" }); changed(); drawScheme(tmpls, cat); };
+  $("bgSettle").onchange = () => { scheme.background = scheme.background || {}; scheme.background.settle = +$("bgSettle").value || 0; changed(); };
+  for (const el of $("pane").querySelectorAll("[data-bg]")) el.onchange = () => {
+    const s = scheme.background.sets[+el.closest("tr").dataset.i]; const f = el.dataset.bg;
+    s[f] = f === "value" ? +el.value : el.value; changed();
+  };
+  for (const el of $("pane").querySelectorAll("[data-del]")) el.onclick = () => { scheme.background.sets.splice(+el.dataset.del, 1); changed(); drawScheme(tmpls, cat); };
+  $("check").onclick = check;
+  $("run").onclick = runIt;
+}
+function changed() { checkRes = null; saveLocal(); renderCheck(); }
+function renderCheck() {
+  const el = $("issues"); if (!el) return;
+  if (!checkRes) { $("checkMsg").textContent = "改完先「檢查方案」"; el.innerHTML = ""; return; }
+  $("checkMsg").innerHTML = checkRes.ok ? `<span class="ok">✔ 可以執行</span> · ${checkRes.points} 點 · 預估 ${fmtDur(checkRes.est_seconds)} · ${checkRes.files} 個檔`
+    : `<span class="err">✖ 有問題</span>`;
+  el.innerHTML = checkRes.issues.map(i => `<div class="${i.level === "error" ? "err" : "warn"}">${i.level === "error" ? "✖" : "⚠"} ${esc(i.message)}</div>`).join("");
+}
+async function check() {
+  $("checkMsg").textContent = "檢查中…";
+  try { checkRes = await cmd("check_scheme", { scheme }); if (checkRes.outline) outline = checkRes.outline; renderCheck(); }
+  catch (e) { $("checkMsg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+async function runIt() {
+  await check();
+  if (!checkRes || !checkRes.ok) { toast("方案有問題，先修正"); return; }
+  if (!confirm(`在 ${cur} 開始「${scheme.name}」？\n${checkRes.points} 點，預估 ${fmtDur(checkRes.est_seconds)}`)) return;
+  try {
+    const r = await cmd("run_scheme", { scheme }, 60);
+    toast(`已開始：存到 ${r.folder}`);
+    setTimeout(() => { loadState(); show("status"); }, 800);
+  } catch (e) { toast(e.message); }
+}
+
+// ---- 對應與設定檔 -----------------------------------------------------------------
+async function renderConfig(given) {
+  let f = given;
+  if (!f) $("pane").innerHTML = `<div class="empty">向 ${esc(cur)} 讀取設定檔…</div>`;
+  try { f = f || await cmd("instruments_file"); } catch (e) { $("pane").innerHTML = `<div class="empty err">${esc(e.message)}（量測電腦要 Lab Control 1.0.7 以上）</div>`; return; }
+  const owner = !!(window.QEL_OWNER);
+  const roles = f.roles || {}, ln = (f.lab_nodes || []).length ? f.lab_nodes : Object.entries(roles).filter(([k]) => k).map(([k, v]) => ({ node:k, magnet:v.magnet || [], vna:v.vna || [] }));
+  $("pane").innerHTML = `<div class="card"><h2>量測電腦對應 <span class="n">方案換到另一台時，依序把電磁鐵組 / VNA 換成那台的</span></h2>
+      <table id="ln"><tr><th>量測電腦</th><th>電磁鐵組（依序，逗號分隔）</th><th>VNA（依序）</th>${owner ? "<th></th>" : ""}</tr>
+      ${ln.map((e, i) => `<tr data-i="${i}"><td><input data-k="node" value="${esc(e.node)}"${owner ? "" : " disabled"}></td>
+        <td><input data-k="magnet" value="${esc((e.magnet || []).join(", "))}" style="width:100%"${owner ? "" : " disabled"}></td>
+        <td><input data-k="vna" value="${esc((e.vna || []).join(", "))}"${owner ? "" : " disabled"}></td>${owner ? `<td><button class="btn danger" data-del="${i}">✕</button></td>` : ""}</tr>`).join("")}</table>
+      ${owner ? `<div class="row"><button class="btn" id="lnAdd">＋ 加一台</button><button class="btn primary" id="lnSave">儲存到 ${esc(cur)}</button></div>` : `<div class="small muted">只有站長可以修改。</div>`}</div>
+    <div class="card"><h2>instruments.yaml <span class="n">${esc(f.path)}</span></h2>
+      <div class="small muted">這台載入的儀器：${esc((f.loaded || []).join("、") || "沒有")}</div>
+      <textarea id="yaml"${owner ? "" : " readonly"} spellcheck="false">${esc(f.text)}</textarea>
+      ${owner ? `<div class="row"><button class="btn primary" id="ySave">儲存到 ${esc(cur)}</button><span class="small muted">會先備份成 .bak；在那台按「設定 ▾ → 重新載入設定」或重新開啟 Lab Control 後生效。</span></div>` : ""}</div>`;
+  if (!owner) return;
+  const rows = () => [...$("ln").querySelectorAll("tr[data-i]")].map(tr => {
+    const v = k => tr.querySelector(`[data-k=${k}]`).value;
+    return { node:v("node").trim(), magnet:v("magnet").split(/[,，、\s]+/).filter(Boolean), vna:v("vna").split(/[,，、\s]+/).filter(Boolean) };
+  });
+  const keepYaml = () => { f.text = $("yaml").value; };
+  $("lnAdd").onclick = () => { const r = rows(); r.push({ node:"", magnet:[], vna:[] }); f.lab_nodes = r; keepYaml(); renderConfig(f); };
+  for (const b of $("ln").querySelectorAll("[data-del]")) b.onclick = () => { const r = rows(); r.splice(+b.dataset.del, 1); f.lab_nodes = r; keepYaml(); renderConfig(f); };
+  $("lnSave").onclick = async () => { try { await cmd("save_lab_nodes", { lab_nodes:rows() }); toast("量測電腦對應已儲存"); } catch (e) { toast(e.message); } };
+  $("ySave").onclick = async () => { if (!confirm(`覆蓋 ${cur} 的 instruments.yaml？`)) return;
+    try { const r = await cmd("save_instruments", { text:$("yaml").value }); toast(`已儲存（${r.instruments.length} 台儀器）`); } catch (e) { toast(e.message); } };
+}
+
+// ---- 開始 ---------------------------------------------------------------------------
+window.QEL_OWNER = !!document.querySelector(".qel-nav .own");
+show(tab);
+loadState().then(() => show(tab));
+setInterval(() => { if (!document.hidden && tab === "status") loadState(); else if (!document.hidden) api("/api/state").then(d => { STATEJ = d; renderNodes(); }).catch(() => {}); }, 4000);
+</script>
+</body>
+</html>

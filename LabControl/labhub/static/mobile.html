@@ -81,8 +81,9 @@
 </style>
 </head>
 <body>
+<!--QEL-NAV-->
 <header>
-  <div class="top"><h1>量測即時</h1><span class="sp"></span><span class="upd" id="upd"></span><a href="/m/data" style="color:var(--accent);text-decoration:none;font-size:14px;font-weight:600">數據 ›</a></div>
+  <div class="top"><h1>量測查看</h1><span class="sp"></span><span class="upd" id="upd"></span><a href="/data" style="color:var(--accent);text-decoration:none;font-size:14px;font-weight:600">數據查看 ›</a></div>
   <div class="tabs" id="tabs"></div>
 </header>
 <main>
@@ -146,7 +147,7 @@ function stateOf(run) { return run ? (run.state || "running") : "idle"; }
 
 async function api(path) {
   const r = await fetch(path, { credentials:"same-origin", cache:"no-store" });
-  if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent("/m"); throw new Error("login"); }
+  if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent(location.pathname); throw new Error("login"); }
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
   return r.json();
 }

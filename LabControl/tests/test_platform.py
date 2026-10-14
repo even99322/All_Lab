@@ -242,8 +242,8 @@ def test_module_releases(plat):
 def test_web_login_and_portal(plat):
     url, *_ = plat
     op = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor())
-    r = op.open(url + "/")                                   # 第一次來 → 下載頁（0.0.18）
-    assert r.geturl().endswith("/get") and "量子工程平台" in r.read().decode()
+    r = op.open(url + "/")                                   # 1.0.7：一律先登入
+    assert "/login" in r.geturl() and "論文庫" in r.read().decode()
     r = op.open(url + "/portal")
     assert "/login" in r.geturl() and "論文庫" in r.read().decode()
     try:

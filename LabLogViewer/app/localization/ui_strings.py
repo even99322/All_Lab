@@ -541,3 +541,35 @@ PATTERNS.extend([
     ("Copying from the network drive…\n{}", "正在從網路磁碟複製⋯\n{0}"),
     ("Copying from the network drive…\n{}\n{} / {} MB  ·  {} MB/s", "正在從網路磁碟複製⋯\n{0}\n{1} / {2} MB  ·  {3} MB/s"),
 ])
+
+# v1.0.5: colormap picker, Full Range, inline X / Y cuts and the Contrast popup; drop-down items that were
+# still English.
+UI.update({
+    "Reverse Current Colormap": "反轉目前色階", "Custom Colors...": "自訂顏色⋯", "Custom Colormap": "自訂色階",
+    "Low": "低值", "Middle": "中間", "High": "高值", "Use a middle color": "使用中間色", "Reverse": "反轉",
+    "Choose Color": "選擇顏色", "Auto Range": "自動範圍", "Full Range": "完整範圍", "◧ Contrast": "◧ 對比",
+    "Color range from the data, ignoring the few most extreme pixels": "由數據決定色彩範圍（忽略少數最極端的像素）",
+    "Color range = the data's full minimum to maximum": "色彩範圍 = 數據的最小值到最大值",
+    "Intensity histogram and color range (Max / Min / Auto / Full range)": "強度直方圖與色彩範圍（最大 / 最小 / 自動 / 完整範圍）",
+    "Around Selected Mark": "選取的標記附近", "Auto Nearby Feature": "自動找附近的特徵", "Between Two Marks": "兩個標記之間",
+    "Crosshair": "十字線", "Current Visible X Range": "目前看得到的 X 範圍", "Half-Peak": "半高", "Histogram": "直方圖",
+    "Histogram-2D": "2D 直方圖", "Horizontal Line": "水平線", "IQ Transform": "IQ 轉換", "Local Maximum": "局部最大值",
+    "Local Minimum": "局部最小值", "None": "無", "Normalize": "正規化", "Peak": "峰", "Physical": "物理量",
+    "Point Mark": "點標記", "Selected Range": "選取範圍", "Trough": "谷", "Vertical Line": "垂直線", "Traces": "曲線",
+    "3D Surface…": "3D 曲面⋯", "Raw (complex)": "原始（複數）", "Colormap": "色彩圖", "Minimum": "最小值",
+    "Maximum": "最大值", "Pane Layout:": "窗格配置：", "Sync Trace": "同步曲線", "Hide Controls": "隱藏控制項",
+    "Show Controls": "顯示控制項", "Plot Mode:": "繪圖模式：",
+})
+# v1.0.5: lablogviewer:// links from the Hub's web page
+UI.update({
+    "Cannot reach the lab data folder (數據集散地). Connect to the lab network or the VPN, then click the link again.":
+        "連不到數據集散地：請連上實驗室網路或 VPN 後，再按一次連結。",
+    "Cannot reach the lab data folder (數據集散地). Connect to the lab network or the VPN and mount "
+    "smb://100.114.33.20/ccuqel in Finder, then click the link again.":
+        "連不到數據集散地：請連上實驗室網路或 VPN，並在 Finder 連接 smb://100.114.33.20/ccuqel 後，再按一次連結。",
+})
+PATTERNS.extend([
+    ("File not found: {}", "找不到檔案：{0}"),
+    ("File not found in 數據集散地: {}", "數據集散地裡找不到：{0}"),
+    ("Not a LabLogViewer link: {}", "不是讀檔程式的連結：{0}"),
+])

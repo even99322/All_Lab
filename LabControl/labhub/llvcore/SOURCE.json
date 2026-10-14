@@ -1,7 +1,7 @@
 {
- "llv_version": "1.0.4",
+ "llv_version": "1.0.5",
  "files": {
-  "app/__init__.py": "9465ab3524d54b077c929ea403c0bea057799293412e5fc0bf3a147d7cee58b9",
+  "app/__init__.py": "5b719d2b72565600294b49e83b122cd76da21de097f2e1f84cc2e143547fc1b2",
   "app/core/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
   "app/core/data_identity.py": "a7538c79a68799b7233f0d128e8a35227ba8eafa2afc5bdecdd9dfc4c2a2a42c",
   "app/core/data_location.py": "85321d5c7e869a0152f8aa7c0c8c86ca54ae6d8dfbad290d438a677c5e65a2cd",
@@ -19,7 +19,7 @@
   "app/core/labcontrol_nc.py": "5e8cc1993566753cffebde03a64114c052e63955994f82479c3df7afdeb85c18",
   "app/core/net_cache.py": "fd7b72b1471b5ab2e05922c56153aca7566caccc469f8c8c4c2b3d987ec5ea18",
   "app/core/quick_metadata.py": "14480e7d255b0dbe4724d22461b9aa4518785b05da80030397eb5680f8501681",
-  "app/core/quick_preview.py": "f27f40c49160c5b49df04ab03088ebcef20ff60073d8c874331050f871c85aba",
+  "app/core/quick_preview.py": "c3c85ff459a0a740238bf3c8394517b4caa86b92549771ade14e225809a7fb9c",
   "app/core/safe_expr.py": "4f3c8487fe4ed041fa69e235d1faddb05a58cb6eb3fc3d8bee640c9662be6912",
   "app/core/win_paths.py": "63a44e1a6dc0d736b98a7e81514c6fe089f1ef3c0df56f104a05045bb575147c",
   "app/plotting/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",

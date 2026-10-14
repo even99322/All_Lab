@@ -91,8 +91,9 @@
 </style>
 </head>
 <body>
+<!--QEL-NAV-->
 <header>
-  <div class="top"><h1>實驗室數據</h1><span class="sp"></span><a href="/m">即時量測 ›</a></div>
+  <div class="top"><h1>數據查看</h1><span class="sp"></span><a href="/live">量測查看 ›</a></div>
   <div class="find">
     <input id="q" type="search" placeholder="搜尋檔名、路徑、標籤" enterkeyhint="search" autocomplete="off">
     <button class="btn" id="starBtn" title="只看加星號的">★</button>
@@ -110,6 +111,8 @@
       <div class="dsub" id="dSub"></div>
       <div id="dTags"></div>
       <div class="nav"><button class="btn" id="prevBtn">‹ 上一個</button><button class="btn" id="nextBtn">下一個 ›</button></div>
+      <div class="nav" id="llvRow" style="display:none"><a class="btn" id="llvBtn" href="#" style="text-align:center;text-decoration:none">📖 用讀檔程式開啟</a></div>
+      <div class="hint" id="llvHint" style="display:none">在這台電腦的讀檔程式（LabLogViewer 1.0.5 以上）打開這個檔；電腦要連得到數據集散地（實驗室網路或 VPN）。</div>
     </div>
     <div class="card" id="plotCard">
       <div id="plotMsg" class="empty" style="display:none"></div>
@@ -163,7 +166,7 @@ function when(t) {
 
 async function api(path) {
   const r = await fetch(path, { credentials:"same-origin", cache:"no-store" });
-  if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent("/m/data" + location.hash); throw new Error("login"); }
+  if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent(location.pathname + location.hash); throw new Error("login"); }
   const d = await r.json().catch(() => ({}));
   if (!r.ok || d.ok === false) throw new Error(d.error || r.statusText);
   return d;
@@ -278,6 +281,9 @@ async function openFile(rel) {
   const f = cur.files.find(x => x.rel === rel) || { rel, name:rel.split("/").pop() };
   file = f; pv = null; z = null; cutAt = null;
   $("dTitle").textContent = f.name;
+  const desktop = !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && !(navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+  $("llvRow").style.display = desktop ? "" : "none"; $("llvHint").style.display = desktop ? "" : "none";
+  $("llvBtn").href = "lablogviewer://open?share=" + encodeURIComponent(rel);
   $("dSub").textContent = ""; $("dTags").innerHTML = ""; $("probe").textContent = ""; $("acq").textContent = "";
   $("metaCard").style.display = "none"; $("cutCard").style.display = "none";
   plotMsg("讀取中…");
@@ -330,10 +336,20 @@ const MAPS = {
   viridis: [[68,1,84],[72,40,120],[62,74,137],[49,104,142],[38,130,142],[31,158,137],[53,183,121],[109,205,89],[180,222,44],[253,231,37]],
   magma: [[0,0,4],[28,16,68],[79,18,123],[129,37,129],[181,54,122],[229,80,100],[251,135,97],[254,194,135],[252,253,191]],
   gray: [[0,0,0],[255,255,255]],
+  lablog: [[125,0,0],[235,80,80],[255,255,255],[90,150,240],[0,35,130]],
 };
 function cmapName() {
-  const n = String((pv && pv.colormap) || "").toLowerCase();
-  return n.includes("viridis") ? "viridis" : n.includes("magma") || n.includes("inferno") ? "magma" : n.includes("gray") || n.includes("grey") ? "gray" : "bwr";
+  // 讀檔程式的色階名稱：LabLog BWR（預設）、viridis…、<名稱>_r（反轉）、Custom: #rrggbb · #rrggbb（自訂）
+  let raw = String((pv && pv.colormap) || "LabLog BWR"), rev = false;
+  if (raw.endsWith("_r")) { rev = true; raw = raw.slice(0, -2); }
+  const custom = raw.startsWith("Custom:") ? (raw.match(/#[0-9a-fA-F]{6}/g) || []) : [];
+  const n = raw.toLowerCase();
+  let base = custom.length >= 2 ? custom.map(c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)))
+    : MAPS[n.includes("viridis") || n.includes("cividis") ? "viridis" : n.includes("magma") || n.includes("inferno") || n.includes("plasma") ? "magma"
+      : n.includes("gray") || n.includes("grey") ? "gray" : n === "labLog bwr".toLowerCase() || n.startsWith("lablog") ? "lablog" : "bwr"];
+  const key = (rev ? "r:" : "") + raw;
+  MAPS[key] = rev ? base.slice().reverse() : base;
+  return key;
 }
 function cmap(t, name) {
   const M = MAPS[name]; t = Math.max(0, Math.min(1, t)) * (M.length - 1);

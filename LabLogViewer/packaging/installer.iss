@@ -41,6 +41,13 @@ Name: "{group}\LabLogViewer"; Filename: "{app}\LabLogViewer.exe"; IconFilename: 
 Name: "{group}\{cm:UninstallProgram,LabLogViewer}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\LabLogViewer"; Filename: "{app}\LabLogViewer.exe"; Tasks: desktopicon; IconFilename: "{app}\shortcut_icons\app_icon_{code:IconNumber}.ico"
 
+[Registry]
+; v1.0.5: lablogviewer:// links (the Hub web page "open in LabLogViewer" button)
+Root: HKCU; Subkey: "Software\Classes\lablogviewer"; ValueType: string; ValueName: ""; ValueData: "URL:LabLogViewer"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\lablogviewer"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\lablogviewer\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\LabLogViewer.exe"",0"
+Root: HKCU; Subkey: "Software\Classes\lablogviewer\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\LabLogViewer.exe"" ""%1"""
+
 [Run]
 Filename: "{app}\LabLogViewer.exe"; Description: "{cm:LaunchProgram,LabLogViewer}"; Flags: nowait postinstall skipifsilent
 
