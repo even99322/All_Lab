@@ -201,6 +201,29 @@ http://<NAS>:8765 ──(登入)── /portal 模塊下載 · /data 數據查�
 - `run.repeat_shots` > 1：每點量 N 次、全部保留（PointRecord.retained）；本機開始的量測量完開 QC 視窗（`qc_window.QCWindow`），
   選擇寫回 `PointRecord.selected`、星號在 `notes["qc_star"]`；HDF5 原生格式另存所有 shot。
 
+### 0k. 1.0.8：安裝成 App
+
+整個 `http://<NAS>:8765` 是一個可安裝的網頁 App「量子工程」（跟論文庫一樣用瀏覽器「安裝應用程式」）。導覽列「⬇ 安裝 App」→ `/install`：
+能一鍵安裝就直接跳出安裝視窗，不然依裝置顯示步驟（Windows / Mac 的 Chrome、Edge、Mac Safari「加入 Dock」、Android Chrome、
+iPhone / iPad Safari「加入主畫面」）。
+
+```
+每一頁 <head>（web_nav.with_head）── /manifest.webmanifest（id /portal、start_url /portal、scope /、standalone、圖示、捷徑）
+                                  ├─ /app-icon-{32,180,192,512,maskable-512}.png、/favicon.ico、/apple-touch-icon.png
+                                  └─ window.qelApp：beforeinstallprompt → 一鍵安裝；isSecureContext 時註冊 /sw.js
+/sw.js（qel-app-v2）── 頁面先走網路、留最後一份；/api/、/login、/get/ 不快取；離線顯示「連不到實驗室的 Hub」
+```
+
+- App 綁的是安裝時的網址（scheme＋主機＋埠）：實驗室網路 `192.168.50.2:8765` 和 VPN `100.114.33.20:8765` 是兩個不同的 App；
+  兩邊都會用的人裝 VPN 位址那個。
+- **http 也能裝**：電腦（Chrome / Edge「將網頁安裝為應用程式」、Safari「加入 Dock」）與 iPhone / iPad（加入主畫面）都會是獨立視窗；
+  Android 在 http 下可能只是主畫面捷徑。**要每台都是完整 App**（一鍵安裝按鈕、離線畫面、Android 真正的 App）需要 https 網址，例如：
+  - Tailscale：tailnet 開 MagicDNS＋HTTPS 憑證後，在 NAS 上 `tailscale serve --bg --https=443 http://127.0.0.1:8765`，
+    用 `https://<NAS 名稱>.<tailnet>.ts.net/` 安裝（有開 VPN 時實驗室裡外都能用）。
+  - DSM：控制台 → 登入入口 → 進階 → 反向代理伺服器，來源 `HTTPS <網域>:<埠>` → 目的地 `HTTP localhost:8765`，
+    搭配受信任的憑證（例如 Let's Encrypt）。自簽憑證不算安全網址。
+- iPhone / iPad 裝好的 App 有自己的登入（第一次開要登入，之後 30 天不用）。舊的 `/m` 捷徑仍可用。
+
 以下第 1–7 節是 0.0.13–0.0.25（有啟動器時）的說明，平台 API、數據目錄、標籤與論文仍然適用。
 
 ## 1. 組成

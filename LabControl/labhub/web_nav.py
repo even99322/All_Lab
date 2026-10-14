@@ -4,10 +4,15 @@
     控制台、帳號與權限（站長）                                            使用者 · 登出
 
 各頁的 HTML 放 ``<!--QEL-NAV-->``，送出前由 ``page()`` 換成導覽列（依登入者決定顯示哪些項目）。只用標準函式庫。
+
+1.0.8：整個網站是一個可安裝的 App（跟論文庫一樣，用瀏覽器「安裝應用程式」）。``page()`` 也在 ``</head>`` 前補上
+App 需要的標籤（manifest、圖示、iPhone/iPad 加入主畫面），導覽列有「⬇ 安裝 App」（已在 App 裡就不顯示），
+並註冊 ``/sw.js``（只有 https 或 localhost 才會生效，http 也能裝，只是沒有離線畫面）。
 """
 from __future__ import annotations
 
 import html
+import re
 from typing import List, Tuple
 
 from .server import STATIC, Handler
@@ -25,8 +30,53 @@ STYLE = """<style id="qel-nav-style">
 .qel-nav .sp{flex:1;min-width:8px}
 .qel-nav .u{flex:none;color:#aab1bb;font-size:13px;white-space:nowrap}
 .qel-nav .u a{color:#74c0fc;text-decoration:none;margin-left:8px}
+.qel-nav a.inst{color:#ffd43b}
+.qel-nav a.inst:hover{background:#2b2a1f;color:#ffe066}
+@media (display-mode:standalone),(display-mode:window-controls-overlay){.qel-nav a.inst{display:none}}
 .qel-nav .own{font-size:11px;padding:0 6px;border-radius:6px;background:#1971c2;color:#fff;margin-left:4px}
 </style>"""
+
+
+# 每一頁都一樣的 App 標籤（manifest、圖示、iOS 加入主畫面）
+HEAD = """<meta name="theme-color" content="#16181d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="量子工程">
+<meta name="application-name" content="量子工程平台">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/app-icon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/app-icon-180.png">
+"""
+
+# 導覽列的安裝按鈕：瀏覽器提供安裝視窗就直接跳出，不然到 /install 看各裝置的步驟。
+SCRIPT = """<script id="qel-app">(function(){
+ var w=window; if(w.qelApp) return;
+ var app=w.qelApp={prompt:null,standalone:!!(w.matchMedia&&(matchMedia('(display-mode: standalone)').matches||
+   matchMedia('(display-mode: window-controls-overlay)').matches))||navigator.standalone===true};
+ function upd(){var b=document.getElementById('nav-install');if(b)b.style.display=app.standalone?'none':'';
+   document.dispatchEvent(new Event('qel-app'));}
+ w.addEventListener('beforeinstallprompt',function(e){e.preventDefault();app.prompt=e;upd();});
+ w.addEventListener('appinstalled',function(){app.prompt=null;app.installed=true;upd();});
+ app.install=function(){if(!app.prompt)return Promise.resolve(false);var p=app.prompt;app.prompt=null;p.prompt();
+   return p.userChoice.then(function(c){upd();return c&&c.outcome==='accepted';});};
+ document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('#nav-install');
+   if(a&&app.prompt){e.preventDefault();app.install();}});
+ if('serviceWorker' in navigator&&w.isSecureContext)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(function(){});
+ document.addEventListener('DOMContentLoaded',upd);
+})();</script>"""
+
+_OLD_HEAD = re.compile(r'[ \t]*<(?:link rel="(?:manifest|icon|apple-touch-icon)"|meta name="(?:theme-color|mobile-web-app-capable|'
+                       r'apple-mobile-web-app-[a-z-]+|application-name)")[^>]*>\n?')
+
+
+def with_head(text: str) -> str:
+    """把頁面自己的 manifest／圖示標籤換成全站共用的 HEAD＋SCRIPT（每頁裝起來都是同一個 App）。"""
+    if 'id="qel-app"' in text or "</head>" not in text:
+        return text
+    text = _OLD_HEAD.sub("", text)
+    return text.replace("</head>", HEAD + SCRIPT + "\n</head>", 1)
 
 
 def items(h: Handler) -> List[Tuple[str, str, str, bool]]:
@@ -52,6 +102,8 @@ def nav_html(h: Handler, active: str) -> str:
         ident = f' id="nav-{key}"' if key in ("console", "admin") else ""
         links.append(f'<a class="i{" on" if key == active else ""}" data-v="{key}"{ident} href="{html.escape(url)}"'
                      f'{attrs}>{html.escape(text)}</a>')
+    links.append(f'<a class="i{" on" if active == "install" else " inst"}" id="nav-install" data-v="install" href="/install"'
+                 ' title="把這個網站裝成 App">⬇ 安裝 App</a>')
     owner = '<span class="own">站長</span>' if u.get("owner") else ""
     return (STYLE + '<div class="qel-nav" id="nav"><a class="b" href="/portal#/"><img src="/icon.svg" alt="">量子工程平台</a>'
             + "".join(links) + f'<span class="sp"></span><span class="u">{html.escape(str(name))}{owner}'
@@ -60,4 +112,4 @@ def nav_html(h: Handler, active: str) -> str:
 
 def page(h: Handler, file: str, active: str) -> None:
     text = (STATIC / file).read_text(encoding="utf-8")
-    h._html(text.replace("<!--QEL-NAV-->", nav_html(h, active), 1))
+    h._html(with_head(text.replace("<!--QEL-NAV-->", nav_html(h, active), 1)))

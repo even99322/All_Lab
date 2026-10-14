@@ -3,12 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#16181d">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="量子工程">
-<link rel="manifest" href="/manifest.webmanifest">
-<link rel="icon" href="/icon.svg">
-<link rel="apple-touch-icon" href="/icon.svg">
 <title>量子工程平台</title>
 <style>
   :root {
@@ -43,6 +37,10 @@
   .tiles { display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:12px; }
   .tile { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; display:flex; flex-direction:column; gap:6px; min-height:140px; }
   .tile.off { opacity:.5; }
+  .appbar { display:flex; align-items:center; gap:12px; background:var(--card); border:1px solid var(--accent); border-radius:14px; padding:10px 12px; margin:4px 0 14px; }
+  .appbar img { width:42px; height:42px; border-radius:10px; flex:none; }
+  .appbar > div { flex:1; min-width:0; } .appbar span { color:var(--muted); font-size:13px; }
+  .appbar .x { border:0; background:none; color:var(--muted); font-size:16px; cursor:pointer; padding:4px 6px; }
   .tile .t { font-size:16px; font-weight:700; }
   .tile .d { color:var(--muted); font-size:13px; flex:1; }
   .tile .k { font-size:11px; color:var(--muted); }
@@ -197,13 +195,23 @@ function viewHome() {
       <div class="d">${esc(m.description || "")}</div><div>${act}</div></div>`;
   };
   const shown = mods.filter(m => !m.hidden && !["catalog", "nodes"].includes(m.id));   // 1.0.7：換成「數據查看」「量測設置」
-  $("#main").innerHTML = `<h2>模塊下載 <span class="n">${shown.filter(m => m.allowed).length} 個可用</span></h2>
+  let hideBanner = false;
+  try { hideBanner = localStorage.getItem("qel.installBanner") === "off"; } catch (e) { /* 無痕視窗 */ }
+  const banner = (window.qelApp && window.qelApp.standalone) || hideBanner ? "" :
+    `<div class="appbar" id="appbar"><img src="/app-icon-192.png" alt=""><div><b>把平台裝成 App</b><br><span>跟論文庫一樣，從桌面或主畫面直接開。</span></div>
+     <a class="btn primary" href="/install" id="appbar-go">安裝</a><button class="x" id="appbar-x" title="不再顯示">✕</button></div>`;
+  $("#main").innerHTML = banner + `<h2>模塊下載 <span class="n">${shown.filter(m => m.allowed).length} 個可用</span></h2>
     <div class="tiles">${shown.map(tile).join("")}</div>
     <h2>網頁</h2><div class="tiles">
       <div class="tile"><div class="t">數據查看</div><div class="d">瀏覽數據集散地、看預覽與量測參數；電腦上可以直接用讀檔程式開啟。</div><div><a class="btn primary" href="/data">開啟</a></div></div>
       <div class="tile"><div class="t">量測查看</div><div class="d">每台量測電腦正在量什麼：進度、熱圖、最後一條 trace。</div><div><a class="btn primary" href="/live">開啟</a></div></div>
       <div class="tile"><div class="t">量測設置</div><div class="d">量測電腦與儀器狀態、用範本編輯方案並送到量測電腦、量測電腦對應與設定檔。</div><div><a class="btn primary" href="/setup">開啟</a></div></div>
+      ${window.qelApp && window.qelApp.standalone ? "" : `<div class="tile"><div class="t">⬇ 安裝 App</div><div class="d">跟論文庫一樣，把這個網站裝成 App：電腦（Chrome / Edge / Safari）、Android、iPhone / iPad 都可以，裝好後從桌面或主畫面直接開。</div><div><a class="btn primary" href="/install">安裝步驟</a></div></div>`}
     </div>`;
+  const x = document.getElementById("appbar-x");
+  if (x) x.onclick = () => { try { localStorage.setItem("qel.installBanner", "off"); } catch (e) { /* 無痕視窗 */ } $("#appbar").remove(); };
+  const go = document.getElementById("appbar-go");
+  if (go) go.onclick = ev => { if (window.qelApp && window.qelApp.prompt) { ev.preventDefault(); window.qelApp.install(); } };
 }
 
 // ---- 數據目錄 -----------------------------------------------------------------
@@ -645,7 +653,6 @@ async function route() {
   } catch (e) { $("#main").innerHTML = `<div class="empty err">${esc(e.message)}</div>`; return; }
   window.addEventListener("hashchange", route);
   route();
-  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("/sw.js").catch(() => {});
 })();
 </script>
 </body>

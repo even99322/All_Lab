@@ -471,7 +471,9 @@ def _get_page(h: Handler) -> None:
     if not h.authorized():
         h._redirect("/login?next=/get")
         return
-    h._html((STATIC / "get.html").read_text(encoding="utf-8"))
+    from .web_nav import with_head
+
+    h._html(with_head((STATIC / "get.html").read_text(encoding="utf-8")))
 
 
 @route("GET", r"/get/info", auth=False)

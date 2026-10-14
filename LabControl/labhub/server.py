@@ -987,7 +987,9 @@ def _login_page(h: Handler, error: str = "", need_code: bool = False, username: 
            "{{token_open}}": "" if plat.paperlib is not None else "open"}
     for k, v in rep.items():
         page = page.replace(k, v)
-    h._html(page, 401 if error else 200)
+    from .web_nav import with_head
+
+    h._html(with_head(page), 401 if error else 200)                 # 1.0.8：登入頁也是同一個 App
 
 
 @route("POST", r"/login", auth=False)

@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.8 — 2026-10-14
+
+平台網站裝成 App（跟論文庫一樣用瀏覽器「安裝應用程式」）：Windows / Mac（Chrome、Edge、Safari）、Android、iPhone / iPad；導覽列「⬇ 安裝 App」與 `/install` 安裝步驟頁、正式 App 圖示與捷徑、離線畫面。只需要更新 Hub。詳見 [docs/releases/v1.0.8.md](docs/releases/v1.0.8.md)。
+
+---
+
 ## 1.0.7 — 2026-10-14
 
 平台網頁改版：`http://<NAS>:8765` 一律先登入，導覽為模塊下載、數據查看（可用讀檔程式直接開檔）、量測查看、量測設置（量測電腦與儀器狀態、用範本編輯方案並送出、量測電腦對應與 instruments.yaml）；每點重複量測＋QC 挑選視窗（移植自電磁鐵異步量測工具 v3）；讀檔程式 1.0.5（色階預覽 / 反轉 / 自訂、完整範圍、X / Y 截面分開）。詳見 [docs/releases/v1.0.7.md](docs/releases/v1.0.7.md)。

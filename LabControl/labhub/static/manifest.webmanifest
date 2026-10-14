@@ -1,13 +1,27 @@
 {
+  "id": "/portal",
   "name": "量子工程平台",
   "short_name": "量子工程",
+  "description": "實驗室的模塊下載、數據查看、量測查看與量測設置（Hub :8765）",
   "start_url": "/portal",
   "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#111317",
   "theme_color": "#16181d",
   "lang": "zh-Hant",
+  "dir": "ltr",
+  "categories": ["productivity", "education", "utilities"],
   "icons": [
-    {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable"}
+    {"src": "/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/app-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+    {"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+  ],
+  "shortcuts": [
+    {"name": "數據查看", "url": "/data", "icons": [{"src": "/app-icon-192.png", "sizes": "192x192"}]},
+    {"name": "量測查看", "url": "/live", "icons": [{"src": "/app-icon-192.png", "sizes": "192x192"}]},
+    {"name": "量測設置", "url": "/setup", "icons": [{"src": "/app-icon-192.png", "sizes": "192x192"}]},
+    {"name": "模塊下載", "url": "/portal", "icons": [{"src": "/app-icon-192.png", "sizes": "192x192"}]}
   ]
 }

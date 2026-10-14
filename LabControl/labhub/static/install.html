@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>安裝 App</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --soft:#f0f2f5; --text:#1f2328; --muted:#6b7280; --border:#e1e4e8;
+          --accent:#1971c2; --accent-soft:#e7f1fb; --ok:#2b8a3e; --warn:#e67700; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111317; --card:#1b1e24; --soft:#23272e; --text:#e9ecef; --muted:#9097a0; --border:#2f333a;
+            --accent:#4dabf7; --accent-soft:#1d2d3d; --ok:#51cf66; --warn:#ffa94d; }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text);
+    font:15px/1.6 -apple-system,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; }
+  main { max-width:920px; margin:0 auto; padding:16px; padding-bottom:max(16px, env(safe-area-inset-bottom)); }
+  .hero { display:flex; gap:16px; align-items:center; background:var(--card); border:1px solid var(--border); border-radius:16px; padding:18px; }
+  .hero img { width:84px; height:84px; border-radius:20px; flex:none; }
+  .hero h1 { margin:0; font-size:22px; }
+  .hero p { margin:4px 0 10px; color:var(--muted); }
+  @media (max-width:560px) { .hero { flex-direction:column; align-items:flex-start; gap:10px; } .hero img { width:64px; height:64px; border-radius:15px; } }
+  .btn { display:inline-flex; align-items:center; gap:6px; padding:9px 18px; border-radius:10px; border:1px solid var(--border);
+         background:var(--soft); color:var(--text); font:inherit; font-weight:700; cursor:pointer; text-decoration:none; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn[disabled] { opacity:.6; cursor:default; }
+  .btn[hidden] { display:none; }
+  #go-hint { display:block; margin-top:2px; }
+  .state { margin-top:12px; padding:10px 14px; border-radius:10px; background:var(--accent-soft); }
+  .state.ok { background:color-mix(in srgb, var(--ok) 15%, transparent); }
+  .state.warn { background:color-mix(in srgb, var(--warn) 15%, transparent); }
+  h2 { font-size:16px; margin:22px 0 8px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px 16px; }
+  .card.me { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .card h3 { margin:0 0 6px; font-size:15px; display:flex; gap:8px; align-items:center; }
+  .card h3 .tag { font-size:11px; font-weight:700; padding:1px 7px; border-radius:6px; background:var(--accent); color:#fff; display:none; }
+  .card.me h3 .tag { display:inline; }
+  .card ol { margin:0; padding-left:20px; }
+  .card li { margin:3px 0; }
+  .muted { color:var(--muted); font-size:13px; }
+  code, kbd { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:13px; background:var(--soft); padding:1px 5px; border-radius:5px; }
+  b.k { white-space:nowrap; }
+</style>
+</head>
+<body>
+<!--QEL-NAV-->
+<main>
+  <div class="hero">
+    <img src="/app-icon-512.png" alt="">
+    <div>
+      <h1>量子工程平台 App</h1>
+      <p>跟論文庫一樣，把這個網站裝成 App：模塊下載、數據查看、量測查看、量測設置都在裡面，從桌面、Dock 或主畫面直接開，不用再打網址。</p>
+      <button class="btn primary" id="go" disabled>⬇ 安裝 App</button>
+      <span id="go-hint"></span>
+    </div>
+  </div>
+  <div class="state" id="state"></div>
+
+  <h2>各裝置的安裝步驟</h2>
+  <div class="grid">
+    <div class="card" data-os="win-chrome mac-chrome">
+      <h3>Windows / Mac · Chrome <span class="tag">這台</span></h3>
+      <ol>
+        <li>網址列右邊有 <b>安裝</b> 圖示（螢幕加箭頭）就按它；</li>
+        <li>沒有的話：右上 <b class="k">⋮</b> →「<b>投放、儲存及分享</b>」→「<b>將網頁安裝為應用程式…</b>」（舊版是「建立捷徑」，記得勾「<b>以視窗開啟</b>」）；</li>
+        <li>按「安裝」。之後在開始選單 / 啟動台、工作列 / Dock 都找得到「量子工程」。</li>
+      </ol>
+    </div>
+    <div class="card" data-os="win-edge mac-edge">
+      <h3>Windows / Mac · Edge <span class="tag">這台</span></h3>
+      <ol>
+        <li>網址列右邊的 <b>App 可用</b> 圖示，或</li>
+        <li>右上 <b class="k">…</b> →「<b>應用程式</b>」→「<b>將此網站安裝為應用程式</b>」；</li>
+        <li>按「安裝」，可勾選釘選到工作列 / 開始。</li>
+      </ol>
+    </div>
+    <div class="card" data-os="mac-safari">
+      <h3>Mac · Safari <span class="tag">這台</span></h3>
+      <ol>
+        <li>選單列「<b>檔案</b>」→「<b>加入 Dock…</b>」（或工具列的分享按鈕 →「加入 Dock」）；</li>
+        <li>按「加入」。需要 macOS Sonoma 14 以上；舊版請用 Chrome 或 Edge。</li>
+      </ol>
+    </div>
+    <div class="card" data-os="android">
+      <h3>Android 手機 / 平板 <span class="tag">這台</span></h3>
+      <ol>
+        <li>用 <b>Chrome</b> 開這一頁，上面的「⬇ 安裝 App」能按就直接按；</li>
+        <li>不然右上 <b class="k">⋮</b> →「<b>安裝應用程式</b>」或「<b>加到主畫面</b>」→「安裝」；</li>
+        <li>Samsung 網際網路：選單 →「新增頁面至」→「主螢幕」。</li>
+      </ol>
+    </div>
+    <div class="card" data-os="ios">
+      <h3>iPhone / iPad <span class="tag">這台</span></h3>
+      <ol>
+        <li>用 <b>Safari</b> 開這一頁（iOS 16.4 以上 Chrome、Edge 也可以）；</li>
+        <li>按 <b>分享</b> 按鈕（方框加向上箭頭；iPad 在網址列右邊，iPhone 在下方或「⋯」裡）；</li>
+        <li>往下找「<b>加入主畫面</b>」，「以網頁 App 開啟」保持打開 → 按「<b>加入</b>」。</li>
+      </ol>
+      <p class="muted">裝好的 App 有自己的登入，第一次開要再登入一次（之後 30 天內不用）。</p>
+    </div>
+  </div>
+
+  <h2>小提醒</h2>
+  <div class="card">
+    <ul style="margin:0;padding-left:20px">
+      <li>App 記住的是<b>現在這個網址</b>（<code id="here"></code>）。實驗室網路用 <code>192.168.50.2:8765</code>，在外面用 VPN 位址；常在兩邊跑的話，裝用 VPN 位址的那個（VPN 開著時實驗室裡也連得到）。</li>
+      <li>App 只是網站的另一個入口：內容一樣、權限一樣，Hub 更新後重開 App 就是新版，不用重裝。</li>
+      <li>連不到 Hub（沒連實驗室網路或 VPN）時，<span id="offline-note">App 會顯示上次看過的畫面或「連不到實驗室的 Hub」。</span></li>
+      <li id="http-note">這個網址是 <code>http</code>：電腦和 iPhone / iPad 照上面步驟一樣能裝成 App；Android 可能只會變成主畫面捷徑（用瀏覽器開）。要每台都是完整 App（含離線畫面），請站長替 Hub 開一個 <code>https</code> 網址（說明在平台文件「安裝成 App」）。</li>
+      <li>要移除：電腦在 App 視窗右上角選單 →「解除安裝」；手機長按圖示 → 移除。</li>
+    </ul>
+  </div>
+</main>
+<script>
+(function () {
+  const ua = navigator.userAgent, app = window.qelApp || {};
+  const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const android = /Android/i.test(ua), mac = !ios && /Macintosh/.test(ua);
+  const edge = /Edg\//.test(ua), chrome = !edge && /Chrome\//.test(ua), safari = !chrome && !edge && /Safari\//.test(ua);
+  const os = ios ? "ios" : android ? "android" : (mac ? "mac-" : "win-") + (edge ? "edge" : safari && mac ? "safari" : "chrome");
+  document.querySelectorAll(".card[data-os]").forEach(c => {
+    if (c.dataset.os.split(" ").includes(os)) { c.classList.add("me"); c.parentNode.prepend(c); }
+  });
+  document.getElementById("here").textContent = location.host;
+  if (window.isSecureContext && location.protocol === "https:") document.getElementById("http-note").remove();
+  if (!window.isSecureContext) document.getElementById("offline-note").textContent = "瀏覽器會顯示連不上（http 網址沒有離線畫面）。";
+  const go = document.getElementById("go"), hint = document.getElementById("go-hint"), st = document.getElementById("state");
+  function show() {
+    if (app.standalone) {
+      go.disabled = true; go.hidden = false; go.textContent = "✓ 已經在 App 裡";
+      st.className = "state ok"; st.textContent = "你現在就是在 App 裡開的。"; hint.textContent = "";
+    } else if (app.installed) {
+      go.disabled = true; go.hidden = false; go.textContent = "✓ 已安裝";
+      st.className = "state ok"; st.textContent = "裝好了！從桌面、Dock 或主畫面的「量子工程」開啟。";
+    } else if (app.prompt) {
+      go.disabled = false; go.hidden = false; go.textContent = "⬇ 安裝 App"; hint.textContent = "";
+      st.className = "state"; st.textContent = "這個瀏覽器可以直接安裝：按上面的按鈕。";
+    } else {
+      go.disabled = true; go.hidden = true;
+      hint.textContent = ios ? "iPhone / iPad 請照下面「加入主畫面」的步驟。" : "這個瀏覽器沒有提供一鍵安裝，請照下面標「這台」的步驟。";
+      st.className = "state warn";
+      st.textContent = ios ? "加入主畫面後，從主畫面的「量子工程」圖示開啟（不會出現瀏覽器的網址列）。"
+        : "如果已經裝過了，瀏覽器就不會再出現安裝按鈕；直接從桌面、Dock 或主畫面開「量子工程」即可。";
+    }
+  }
+  go.addEventListener("click", () => app.install && app.install().then(ok => { if (ok) app.installed = true; show(); }));
+  document.addEventListener("qel-app", show);
+  show();
+})();
+</script>
+</body>
+</html>
