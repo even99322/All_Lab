@@ -156,11 +156,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     Runner.stop_all()
     st.close()
     if selfupdate.EXITING:                 # 0.0.31：要換新版：不等背景執行緒（安裝程式在等這個程式結束）
-        sys.stdout.flush()
-        sys.stderr.flush()
+        flush_streams()
         logging.shutdown()
         os._exit(rc or 0)
     return rc
+
+
+def flush_streams() -> None:
+    """1.0.9：視窗版（PyInstaller --windowed）沒有主控台，sys.stdout / sys.stderr 是 None——更新重啟時不能因此當掉。"""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            if stream is not None:
+                stream.flush()
+        except (OSError, ValueError):
+            pass
 
 
 if __name__ == "__main__":

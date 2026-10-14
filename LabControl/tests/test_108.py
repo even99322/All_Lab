@@ -112,3 +112,14 @@ def test_static_files_ship_with_the_package():
     for name in ("manifest.webmanifest", "sw.js", "install.html", "app-icon-192.png", "app-icon-512.png",
                  "app-icon-maskable-512.png", "app-icon-180.png", "app-icon-32.png"):
         assert (static / name).is_file(), name
+
+
+def test_update_exit_without_console(monkeypatch):
+    """1.0.9：視窗版沒有主控台（sys.stdout is None），更新時結束不能 AttributeError。"""
+    import sys
+
+    from labcontrol.app import flush_streams
+
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    flush_streams()
