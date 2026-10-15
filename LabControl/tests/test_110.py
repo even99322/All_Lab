@@ -96,3 +96,20 @@ def test_monitor_uses_the_same_traces(window):
     assert np.allclose(mon._heat_fn()(z), np.degrees(np.angle(z)))
     mon.traces.retype("S11:phase", fmt="iq")                  # Polar 不能畫成影像 → dB
     assert np.allclose(mon._heat_fn()(z), 20 * np.log10(0.5))
+
+
+# ---- Hub：論文庫的子專案（parent_id）→ parent / path / 巢狀資料夾 -------------------------------
+from tests.test_platform_lc import gw  # noqa: E402,F401
+
+
+def test_hub_sub_projects_from_paperlib(gw):
+    _url, _state, s = gw
+    top = next(p for p in s.projects(refresh=True) if p["name"] == "YIG mirror coupling")
+    a = s.create_project("mirror v2", parent=top["id"])
+    b = s.create_project("2026 秋", parent=a["id"])
+    assert a["parent"] == top["id"] and b["parent"] == a["id"]
+    c = s.create_project("2026 秋", parent=top["id"])                   # 不同上層可以同名
+    ps = {p["id"]: p for p in s.projects(refresh=True)}
+    assert ps[b["id"]]["path"] == ["YIG mirror coupling", "mirror v2", "2026 秋"]
+    assert ps[b["id"]]["folder"] == "YIG mirror coupling/mirror v2/2026 秋"
+    assert ps[c["id"]]["folder"] == "YIG mirror coupling/2026 秋" and ps[top["id"]]["parent"] == ""
