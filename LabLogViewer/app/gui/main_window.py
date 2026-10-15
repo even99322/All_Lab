@@ -552,9 +552,10 @@ class MainWindow(QMainWindow):
         self.rect_zoom = RectZoom(self)                  # rectangle Zoom tool (1D / 2D)
         self.plot_interaction_controls.zoom_changed.connect(self.rect_zoom.set_enabled)
         self.rect_zoom.user_zoomed = self._note_data_operation
-        from app.gui.plot_gestures import PanTool
+        from app.gui.plot_gestures import PanTool, install_pointer_lock
 
         self.pan_tool = PanTool(self)                    # v1.0.7: Move tool (drag = move the plot)
+        install_pointer_lock()                           # v1.0.8: Pointer (F1) never drags the data
         self.plot_interaction_controls.pan_changed.connect(self.pan_tool.set_enabled)
         self.plot_interaction_controls.install_shortcuts(self)       # F1–F4
         toolbar.addWidget(self.plot_interaction_controls)

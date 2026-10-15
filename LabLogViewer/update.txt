@@ -1865,3 +1865,12 @@ Date: 2026-10-15
   - Fix: the 2D colour-bar title (pyqtgraph puts it on the bar's left axis; 1.0.5 hid that axis' label).
   - help: convert-files (en / zh), shortcuts, getting-started, new-cross-section; whats_new 1.0.7.
   - tests/test_v1_0_7_tools.py, tests/test_v1_0_7_convert.py.
+
+v1.0.8 - POINTER NEVER DRAGS THE DATA
+Date: 2026-10-15
+
+  - plot_gestures.install_pointer_lock(): pg.ViewBox.mouseDragEvent ignores a left-button drag (no axis) when
+    the ViewBox sits in the Viewer and its Pointer tool (F1) is selected; the Move tool (F2) pans. Items that
+    take the drag themselves (cut lines, Marks, colour-bar handles) and axis drags are unchanged; the
+    cross-section histogram (_HistViewBox.allow_pan) still pans.
+  - help: viewer-zoom, shortcuts; whats_new 1.0.8. tests/test_v1_0_7_tools.py::test_pointer_tool_does_not_drag_the_data.

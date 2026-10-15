@@ -469,6 +469,8 @@ HIST_VIEW_MARGIN = 0.5
 class _HistViewBox(pg.ViewBox):
     """Histogram view: wheel zooms X, middle/left drag on empty space pans, double-click refits."""
 
+    allow_pan = True          # v1.0.8: also with the Viewer's Pointer tool (see plot_gestures.install_pointer_lock)
+
     def __init__(self, on_reset):
         super().__init__(enableMenu=False)
         self._on_reset = on_reset

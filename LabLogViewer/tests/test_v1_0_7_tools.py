@@ -120,3 +120,36 @@ def test_colorbar_title_shows_once(win, qapp):
         _pump(qapp, 5)
         win.mode_combo.setCurrentIndex(1)
         _pump(qapp, 20)
+
+
+def test_pointer_tool_does_not_drag_the_data(win, qapp):
+    """v1.0.8: with the Pointer (F1) a left-drag on the plot leaves the view where it is; Move (F2) still moves it."""
+    import numpy as np
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+
+    win.open_file(str(NC))
+    win.mode_combo.setCurrentIndex(1)
+    _pump(qapp, 20)
+    plot = win.plot_2d_widget
+    view = plot.graphics_widget
+    box = plot.plot_item.getViewBox()
+
+    def drag():
+        rect = box.sceneBoundingRect()
+        start = view.mapFromScene(rect.center() + rect.topLeft() * 0 + (rect.bottomRight() - rect.center()) * 0.3)
+        QTest.mousePress(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, start)
+        for k in range(1, 6):
+            QTest.mouseMove(view.viewport(), start + QPoint(16 * k, 8 * k))
+        QTest.mouseRelease(view.viewport(), Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+                           start + QPoint(80, 40))
+        _pump(qapp)
+
+    win.plot_interaction_controls.select_tool("pointer")
+    before = np.array(box.viewRange())
+    drag()
+    assert np.allclose(np.array(box.viewRange()), before)
+    win.plot_interaction_controls.select_tool("pan")
+    drag()
+    assert not np.allclose(np.array(box.viewRange()), before)
+    win.plot_interaction_controls.select_tool("pointer")

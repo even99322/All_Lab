@@ -24,7 +24,7 @@
 ## Mouse and trackpad
 | Where | Action |
 |---|---|
-| 1D / 2D plot (pointer mode) | left-drag pans, wheel zooms |
+| 1D / 2D plot (pointer mode, F1) | wheel zooms; left-drag does not move the plot |
 | Move tool (cross arrows, F2) | left-drag moves the plot |
 | Zoom mode | left-drag a rectangle; right-click steps back |
 | Log Entries table | click one; Shift-click a block; ⌘/Ctrl-click to add or remove |

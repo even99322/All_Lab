@@ -214,6 +214,37 @@ class PanTool(QObject):
         return False
 
 
+def _pointer_tool_active(box: pg.ViewBox) -> bool:
+    """True when ``box`` is a Viewer plot and the Viewer's Pointer tool (F1) is selected."""
+    try:
+        view = box.getViewWidget()
+    except RuntimeError:
+        return False
+    if view is None:
+        return False
+    controls = getattr(view.window(), "plot_interaction_controls", None)
+    return controls is not None and getattr(controls, "tool", "") == "pointer"
+
+
+def install_pointer_lock() -> None:
+    """v1.0.8: in the Viewer the Pointer tool (F1) never moves the data — a left-button drag on a plot
+    no longer pans it (use the Move tool, F2). Dragging cut lines, Marks, colour-bar handles, axes and the
+    wheel / trackpad zoom keep working; a ViewBox with ``allow_pan = True`` (cross-section histogram) still pans."""
+    original = pg.ViewBox.mouseDragEvent
+    if getattr(original, "_llv_pointer_lock", False):
+        return
+
+    def mouseDragEvent(self, ev, axis=None):  # noqa: N802 - pyqtgraph API spelling
+        if (axis is None and ev.button() == Qt.MouseButton.LeftButton and not getattr(self, "allow_pan", False)
+                and _pointer_tool_active(self)):
+            ev.ignore()
+            return
+        return original(self, ev, axis=axis)
+
+    mouseDragEvent._llv_pointer_lock = True
+    pg.ViewBox.mouseDragEvent = mouseDragEvent
+
+
 class TrackpadGestures(QObject):
     """Pinch = zoom, two-finger scroll = pan, for every pyqtgraph view."""
 

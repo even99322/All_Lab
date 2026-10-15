@@ -4,7 +4,7 @@
 ## Shortest procedure
 1. **Zoom.** The third of the Viewer's interaction buttons, **Zoom** (magnifier). Hold the left button and drag a rectangle; release to zoom to it. You can zoom several levels. ![](zoom_draw.png)
 2. **Step back.** **Right-click** the plot or press **Esc** to go back one level, down to the view before zooming. ![](zoom_back.png)
-3. **Back to normal.** The first button, **Pointer / Normal**: left-drag pans, the wheel zooms, the context menu has **View All**.
+3. **Back to normal.** The first button, **Pointer / Normal** (F1): dragging does not move the plot (use the **Move** tool, F2), the wheel zooms, the context menu has **View All**.
 4. **Drag-to-Share.** Click **Drag-to-Share** (the middle button), then drag the plot from the Viewer into PowerPoint, Keynote, Word or Finder; releasing inserts a PNG. With several panes, **Drag Target** chooses **Active Pane** or **All Panes**. ![](zoom_share.png)
 
 ## Mac trackpad
