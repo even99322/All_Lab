@@ -338,15 +338,18 @@ class Plot2DWidget(QWidget):
                 self.color_bar.setColorMap(cmap)
                 self.color_bar.setLevels((z_min, z_max))
                 try:
-                    # v1.0.5: the label lives on the bar's own value axis; setLabels(right=…) added a second,
-                    # duplicate label on the far right after every re-plot
-                    self.color_bar.axis.setLabel(z_label)
+                    self._label_axis().setLabel(z_label)
                 except Exception:
                     pass  # non-critical - colorbar label just won't update
-            for side in ("left", "right"):          # only the bar's value axis carries the label
-                other = self.color_bar.getAxis(side)
-                if other is not self.color_bar.axis:
-                    other.showLabel(False)
+            # v1.0.7: pyqtgraph puts the label on the bar's *left* axis (the value axis is on the right).
+            # v1.0.5 hid that one, so the colour-bar title disappeared; keep exactly one label.
+            label_axis = self._label_axis()
+            for side in ("left", "right"):
+                ax = self.color_bar.getAxis(side)
+                if ax is label_axis:
+                    ax.showLabel(True)
+                else:
+                    ax.showLabel(False)
         finally:
             self._setting_color_levels = False
 
@@ -402,6 +405,11 @@ class Plot2DWidget(QWidget):
         finally:
             self._setting_color_levels = False
         self.color_range_changed.emit(low, high)
+
+    def _label_axis(self):
+        """The colour-bar axis pyqtgraph draws the bar's title on (left for a vertical bar)."""
+        cb = self.color_bar
+        return cb.getAxis("bottom" if getattr(cb, "horizontal", False) else "left")
 
     def _on_colorbar_levels_changed(self, color_bar) -> None:
         """Publish a user-driven ColorBarItem level change without replotting."""

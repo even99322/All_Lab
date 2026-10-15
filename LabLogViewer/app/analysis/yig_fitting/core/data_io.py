@@ -17,7 +17,8 @@ def _entry_coordinates(experiment, n_entries: int) -> dict[str, np.ndarray]:
             shape = [1] * len(axes)
             shape[index] = sizes[index]
             values = np.asarray(axis.values, dtype=float).reshape(shape)
-            coordinates[axis.channel.name] = np.broadcast_to(values, sizes).reshape(-1).copy()
+            coordinates[axis.channel.name] = np.broadcast_to(values, sizes).reshape(
+                -1, order=getattr(experiment, "entry_order", "C")).copy()
     elif len(axes) == 1 and 0 < n_entries < nominal:
         coordinates[axes[0].channel.name] = np.asarray(axes[0].values, dtype=float)[:n_entries].copy()
     return coordinates

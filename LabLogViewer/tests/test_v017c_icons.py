@@ -159,8 +159,9 @@ def test_viewer_toolbar_icons_keep_text_and_mode_state(qapp, theme):
         assert controls.btn_pointer.icon().name() == "lablog-pointer"
         assert controls.btn_share.icon().name() == "lablog-drag_share"
         assert controls.btn_pointer.toolButtonStyle() == Qt.ToolButtonIconOnly
-        assert controls.btn_pointer.toolTip() == controls.btn_pointer.text()
-        assert controls.btn_share.toolTip() == controls.btn_share.text()
+        # v1.0.7: the tooltip also names the F-key (F1 pointer … F4 zoom)
+        assert controls.btn_pointer.toolTip() in (controls.btn_pointer.text(), controls.btn_pointer.text() + " (F1)")
+        assert controls.btn_share.toolTip() in (controls.btn_share.text(), controls.btn_share.text() + " (F3)")
         assert controls.btn_pointer.isChecked() and not controls.btn_share.isChecked()
         controls.btn_share.click()
         assert controls.share_mode and not controls.btn_pointer.isChecked()

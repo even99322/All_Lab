@@ -536,6 +536,14 @@ async function upload(files) {
 async function loadItems() {
   try { CON.items = (await api("/api/platform/console/items")).items; } catch (e) { $("#pubs").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
   renderItems();
+  // 1.0.11：重新整理頁面後，還在跑的更新工作繼續顯示進度，直到結束
+  const run = CON.items.filter(x => x.running && !x.done && !x.failed);
+  if (run.length && !CON.busy) {
+    CON.busy = true; renderItems();
+    for (const x of run) { await followJob(x); renderItems(); }
+    CON.busy = false;
+    await loadItems(); loadStatus();
+  }
 }
 function renderItems() {
   const el = $("#pubs"); if (!el) return;

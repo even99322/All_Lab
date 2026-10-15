@@ -555,6 +555,20 @@
           "icon": "shield",
           "tint": "#32D74B",
           "keywords": "safety read only backup"
+        },
+        {
+          "id": "convert-files",
+          "title": {
+            "en": "Convert .nc ⇄ Labber .hdf5",
+            "zh": ".nc 與 Labber .hdf5 互轉"
+          },
+          "subtitle": {
+            "en": "Lab Control .nc to Labber .hdf5 and back, many files at once.",
+            "zh": "量測檔 .nc 轉 Labber .hdf5、反過來也可以，一次多個。"
+          },
+          "icon": "share",
+          "tint": "#30B0C7",
+          "keywords": "convert labber hdf5 nc netcdf lab control export 轉檔"
         }
       ]
     },

@@ -4,6 +4,8 @@
 numpy==2.5.3
 scipy==1.18.1
 h5py==3.16.0
+h5netcdf==1.8.1          # v1.0.7: Labber .hdf5 -> Lab Control .nc conversion
+packaging==26.1
 PySide6==6.11.2
 PySide6_Addons==6.11.2
 PySide6_Essentials==6.11.2

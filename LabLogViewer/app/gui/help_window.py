@@ -1112,6 +1112,9 @@ def open_help(parent=None, article_id: str | None = None) -> HelpWindow:
 
 
 def install_f1(window) -> None:
-    shortcut = QShortcut(QKeySequence(Qt.Key.Key_F1), window)
+    """F1 opens this window's help page; a window that uses F1 itself (the Viewer's plot tools, v1.0.7)
+    sets ``window.help_key`` (e.g. "Shift+F1")."""
+    key = getattr(window, "help_key", None)
+    shortcut = QShortcut(QKeySequence(key) if key else QKeySequence(Qt.Key.Key_F1), window)
     shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
     shortcut.activated.connect(lambda: open_help(window))

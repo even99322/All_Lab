@@ -250,8 +250,13 @@ def test_agent_applies_partial_paperlib_update(plenv):
     # 基底檔案都在 → 只覆蓋包裡的檔案
     ok = zbytes({"app/config.py": cfgtxt, "app/main.py": "from . import taxonomy\napp = None\n",
                  "app/static/new.js": "1", "UPDATE_NOTES_1.7.0.md": "# 1.7.0"})
+    nb = len(fd.builds)
     v, lines = _run(ac, "paperlib_update", data=ok)
     assert v["ok"], (v, lines)
+    # 1.0.11：只改程式檔 → 不重新建置映像，直接放進容器（幾秒鐘）
+    assert len(fd.builds) == nb and fd.copies and "沒有重新建置" in v["result"]
+    st = {s["key"]: s["status"] for s in v["steps"]}
+    assert st["build"] == "skip" and st["rebuild"] == "skip" and st["copy"] == "ok" and st["dbbackup"] == "ok"
     assert ac.status()["paperlib"]["version"] == "1.7.0"
     assert (pl / "app" / "taxonomy.py").exists() and (pl / "Dockerfile").exists()      # 其他檔案保留
     assert (pl / "app" / "static" / "new.js").exists()
@@ -263,6 +268,13 @@ def test_agent_applies_partial_paperlib_update(plenv):
     v, _ = _run(ac, "paperlib_update", data=bad)
     assert not v["ok"] and ac.status()["paperlib"]["version"] == "1.7.0"
     assert sqlite3.connect(pl / "data" / "library.db").execute("SELECT COUNT(*) FROM papers").fetchone()[0] == before
+    assert agent.paperlib_code_version() == "1.7.0"
+    # 包裡有 requirements.txt（套件可能變）→ 照舊重新建置映像
+    full = zbytes({"app/config.py": cfgtxt.replace("1.7.0", "1.7.2"), "requirements.txt": "fastapi\n"})
+    nb = len(fd.builds)
+    v, lines = _run(ac, "paperlib_update", data=full)
+    assert v["ok"], (v, lines)
+    assert len(fd.builds) == nb + 1 and ac.status()["paperlib"]["version"] == "1.7.2"
 
 
 def test_identify_launcher_installers():

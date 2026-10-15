@@ -57,6 +57,8 @@ ICON_FILES: dict[str, str] = {
     "laser": "laser.svg",
     "clear": "clear.svg",
     "zoom": "zoom.svg",
+    "pan": "pan.svg",                      # v1.0.7: Move tool (drag = move the plot)
+    "cross_section": "cross_section.svg",  # v1.0.7: X + Y cut of the 2D map
     "delete": "delete.svg",
     "remove": "remove.svg",
     "rename": "rename.svg",

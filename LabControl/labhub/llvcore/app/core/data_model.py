@@ -278,6 +278,12 @@ def extract_scalar_channel_row(full: np.ndarray, row_idx: int, n_channels: int) 
     channel_axis = channel_axes[0]
 
     other_axes = [i for i in range(3) if i != channel_axis]
+    if shape[other_axes[0]] > 1 and shape[other_axes[1]] > 1:
+        # v1.0.7: Labber stores (n_first_step, n_channels, n_other_entries) - the first Step-list
+        # channel forms each "trace". Entries run with the first axis fastest.
+        index = [slice(None)] * 3
+        index[channel_axis] = row_idx
+        return np.asarray(full[tuple(index)]).reshape(-1, order="F")
     if shape[other_axes[0]] >= shape[other_axes[1]]:
         entries_axis, singleton_axis = other_axes[0], other_axes[1]
     else:
@@ -584,6 +590,13 @@ class Experiment:
             "entry count does not unambiguously map to the nominal multi-step sweep",
         )
 
+    @property
+    def entry_order(self) -> str:
+        """How sweep entries flatten the active step axes (Step-list order): "C" = first axis slowest
+        (Lab Control .nc), "F" = first axis fastest (real Labber files, where the first Step-list
+        channel is the inner loop). Detected at parse time from the recorded values."""
+        return str((self.metadata_tree.get("sweep") or {}).get("entry_order") or "C")
+
     def _effective_step_values(self, channel_name: str, axis: StepAxis) -> np.ndarray:
         """Return only recorded coordinates for a safely recoverable trace."""
         status = self.acquisition_status(channel_name)
@@ -640,8 +653,8 @@ class Experiment:
             vt = self.vector_traces[channel_name]
             if entry_slice is None:
                 full_slice = None
-            elif vt.complex:
-                # raw dataset shape: (n_points, 2[real/imag], n_entries)
+            elif vt.complex or len(getattr(vt.channel, "shape", ()) or ()) == 3:
+                # raw dataset shape: (n_points, 2[real/imag] or 1, n_entries)
                 full_slice = (slice(None), slice(None), entry_slice)
             else:
                 # raw dataset shape: (n_points, n_entries)
@@ -667,6 +680,8 @@ class Experiment:
                     real = raw[:, 0, ...]
                     imag = raw[:, 1, ...]
                     complex_arr = real + 1j * imag
+                elif raw.ndim == 3:
+                    complex_arr = raw[:, 0, ...]      # Labber real traces: (n_points, 1, n_entries)
                 else:
                     complex_arr = raw
                 if whole and complex_arr.nbytes <= 300 * 1024 * 1024:
@@ -811,7 +826,10 @@ class Experiment:
         # original Step list (dim_index) rather than assuming an order —
         # the axis that appears earlier in Step list is conventionally
         # the outer (slower-varying) loop in a Labber measurement.
-        if y_axis.dim_index < x_axis.dim_index:
+        y_outer = y_axis.dim_index < x_axis.dim_index
+        if self.entry_order == "F":            # v1.0.7: real Labber - the earlier Step-list axis is the INNER loop
+            y_outer = not y_outer
+        if y_outer:
             z_grid = flat.reshape(ny, nx)
         else:
             z_grid = flat.reshape(nx, ny).T
@@ -899,7 +917,10 @@ class Experiment:
                         f"not match the product of active step dimensions {active_sizes} "
                         f"= {expected_entries}. Cannot build the N-D array."
                     )
-                arr = flat.reshape((dims[0].size,) + active_sizes)
+                if self.entry_order == "F":
+                    arr = flat.reshape((dims[0].size,) + active_sizes, order="F")
+                else:
+                    arr = flat.reshape((dims[0].size,) + active_sizes)
             return dims, arr
 
         flat = np.asarray(self.get_data(z_channel, transform=transform)).reshape(-1)
@@ -916,7 +937,7 @@ class Experiment:
                 f"match the product of active step dimensions {active_sizes} = "
                 f"{expected}. Cannot build the N-D array."
             )
-        arr = flat.reshape(active_sizes)
+        arr = flat.reshape(active_sizes, order="F" if self.entry_order == "F" else "C")
         return dims, arr
 
     def get_nd_slice(self, z_channel: str, x_dim: str, y_dim: str | None = None,

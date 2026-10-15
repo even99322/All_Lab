@@ -35,6 +35,9 @@ for path in sorted((SRC / "app").rglob("*")):
         continue
     datas.append((str(path), str(path.parent.relative_to(SRC))))
 
+# v1.0.7: run as a file by the lab's Labber Python (not imported), so it ships as a .py next to the code
+datas.append((str(SRC / "app" / "core" / "labber_api_script.py"), "app/core"))
+
 for package in ("imageio", "imageio-ffmpeg", "pyqtgraph", "matplotlib", "h5py", "ezdxf", "python-pptx"):
     try:
         datas += copy_metadata(package)                    # imageio reads its own version at import

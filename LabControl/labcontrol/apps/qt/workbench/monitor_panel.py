@@ -24,6 +24,7 @@ from .. import theme
 from ..bridge import QtEventBridge
 from ..live.traces import FORMATS, FormatBar, TracePlots, is_polar, key_fmt, key_src, normalize_groups, tkey, view_data
 from ..worker import start_thread
+from .heat_cuts import HeatView
 
 STATE_TEXT = {"idle": ("待機", "#868e96"), "preparing": ("準備中", "#1971c2"), "running": ("量測中", "#2b8a3e"),
               "paused": ("已暫停", "#f08c00"), "finished": ("完成", "#2b8a3e"), "aborted": ("已中斷", "#e8590c"),
@@ -152,6 +153,13 @@ class MonitorPanel(QtWidgets.QWidget):
             b.setCheckable(True)
             b.setChecked(True)
             tb.addWidget(b)
+        self.b_cut = QtWidgets.QToolButton()            # 1.0.11：影像的 X / Y 截面
+        self.b_cut.setText("截面")
+        self.b_cut.setObjectName("monitorCutsButton")
+        self.b_cut.setCheckable(True)
+        self.b_cut.setToolTip("影像上方顯示 X 截面（藍色橫線那一點的曲線）、左邊顯示 Y 截面（紅色直線那個頻率在各掃描點的值）；"
+                              "拖十字線換位置，橫線預設跟著最新量到的那一點")
+        tb.addWidget(self.b_cut)
         # 1.0.10：跟即時數據一樣的 trace / diagram
         self.traces = TracePlots()
         fmt0 = {"real": "re", "imag": "im"}.get(str(setting("monitor.trace_display", "db")), "db")
@@ -171,13 +179,16 @@ class MonitorPanel(QtWidgets.QWidget):
         self.traces.active_changed.connect(self._active_trace)
         self.traces.groups_changed.connect(self._save_traces)
         self.traces.message.connect(self._log)
-        self.heat_plot = theme.style_plot(pg.PlotWidget())
-        self.img = pg.ImageItem()
+        # 1.0.11：影像 + X / Y 截面（heat_cuts.HeatView；heat_plot 保留原本的 setTitle / setLabel 介面）
+        self.heat_plot = HeatView()
+        self.img = self.heat_plot.img
         try:
             self.img.setColorMap(pg.colormap.get(setting("monitor.colormap", "viridis")))
         except Exception:  # noqa: BLE001
             self.img.setColorMap(pg.colormap.get("viridis"))
-        self.heat_plot.addItem(self.img)
+        self.heat_plot.set_cuts(bool(setting("monitor.cuts", True)))
+        self.b_cut.setChecked(self.heat_plot.cuts_on)
+        self.b_cut.toggled.connect(self.heat_plot.set_cuts)
         vs = QtWidgets.QSplitter(Qt.Orientation.Vertical)
         vs.addWidget(self.traces)
         vs.addWidget(self.heat_plot)
@@ -193,6 +204,7 @@ class MonitorPanel(QtWidgets.QWidget):
         lay.addWidget(self.log)
         self.b_line.toggled.connect(self.traces.setVisible)
         self.b_img.toggled.connect(self.heat_plot.setVisible)
+        self.b_img.toggled.connect(self.b_cut.setEnabled)
         self.b_img.toggled.connect(lambda on: on and self.refill_heat())   # 1.0.2：再打開時補回已量的內容
         self.b_log.toggled.connect(self.log.setVisible)
         self._set_state("idle")
@@ -312,9 +324,8 @@ class MonitorPanel(QtWidgets.QWidget):
             return
         self.x = np.asarray(vec.x_values)
         self.heat = np.full((len(self.x), len(self.inner_vals)), np.nan)
-        span_y = (self.inner_vals[-1] - self.inner_vals[0]) or 1e-9
-        self.img.setImage(np.zeros(self.heat.shape))
-        self.img.setRect(QtCore.QRectF(self.x[0], self.inner_vals[0], (self.x[-1] - self.x[0]) or 1e-9, span_y))
+        self.heat_plot.reset(self.x, self.inner_vals, self.heat.shape)
+        self.heat_plot.set_value_label(self._heat_label())
         self.x_unit = vec.x_unit or "Hz"
         self.heat_plot.setTitle(self.show_ch)
         self.heat_plot.setLabel("bottom", vec.x_name, vec.x_unit)
@@ -391,9 +402,7 @@ class MonitorPanel(QtWidgets.QWidget):
             self.heat_plot.setTitle(title)
         if j < self.heat.shape[1] and len(y) == self.heat.shape[0]:
             self.heat[:, j] = y
-            finite = self.heat[np.isfinite(self.heat)]
-            self.img.setImage(np.nan_to_num(self.heat, nan=float(finite.min()) if finite.size else 0.0),
-                              autoLevels=True)
+            self.heat_plot.show_heat(self.heat, latest=j)
 
     def _redraw_last(self) -> None:
         if self.last_shot and self.heat is not None and self.show_ch in self.last_shot:
@@ -427,10 +436,8 @@ class MonitorPanel(QtWidgets.QWidget):
                 if mi[-1] < heat.shape[1] and len(y) == heat.shape[0]:
                     heat[:, mi[-1]] = y
             self.outer_key = cur
-            finite = heat[np.isfinite(heat)]
-            if finite.size:
-                self.img.setImage(np.nan_to_num(heat, nan=float(finite.min())), autoLevels=True)
-                self.heat_plot.getPlotItem().getViewBox().autoRange()
+            if np.isfinite(heat).any():
+                self.heat_plot.show_heat(heat, auto_range=True)
         except Exception:  # noqa: BLE001 — 只是畫面
             pass
 
@@ -450,6 +457,14 @@ class MonitorPanel(QtWidgets.QWidget):
         def fn(z):
             return view_data(fmt, x if x is not None and len(x) == np.size(z) else np.arange(np.size(z)), z)[1]
         return fn
+
+    def _heat_label(self) -> str:
+        """截面的數值軸：目前 trace 的格式（影像畫的那個）。"""
+        k = self.traces.active
+        fmt = key_fmt(k) if k and not is_polar(k) else "db"
+        info = FORMATS.get(fmt)
+        name = info[1] if isinstance(info, (tuple, list)) and len(info) > 1 else fmt
+        return f"{self.show_ch or ''} {name}".strip()
 
     def _ui(self):
         from ..live.vna_panel import _UIState
@@ -484,6 +499,7 @@ class MonitorPanel(QtWidgets.QWidget):
             self.show_ch = src
             self._setup_axes(self.for_ds)
         if self.heat is not None:
+            self.heat_plot.set_value_label(self._heat_label())
             self._redraw_last()
 
     def _on_table_click(self, it: QtWidgets.QTreeWidgetItem, _col: int) -> None:
@@ -504,6 +520,7 @@ class MonitorPanel(QtWidgets.QWidget):
             mi = self.runner.plan.multi_index(p["index"])
             if tuple(mi[:-1]) == self.outer_key:
                 self.heat[:, mi[-1]:] = np.nan
+                self.heat_plot.show_heat(self.heat)
 
     def _on_finished(self, p: Dict[str, Any]) -> None:
         ds = p.get("dataset")

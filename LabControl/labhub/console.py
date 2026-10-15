@@ -127,6 +127,9 @@ class Console:
         from .server import parse_version
 
         # 論文庫 → 模塊（同一個模塊：完整 zip 先、更新包後，版本小的先）→ 安裝檔 → Hub
+        for it in out:                                  # 1.0.11：頁面重新整理後也看得到更新進度 / 結果
+            if it.get("job") and not it.get("done") and not it.get("failed"):
+                self._refresh(it)
         out.sort(key=lambda x: (x.get("done", False), ORDER.get(x["target"], 5), 1 if x.get("platform") else 0,
                                 1 if x.get("partial") else 0, parse_version(x.get("version") or "0"),
                                 x.get("time", 0)))
@@ -248,6 +251,30 @@ class Console:
         final = out.with_name(f"{stem}.zip")
         out.replace(final)
         return final
+
+    def _refresh(self, it: Dict[str, Any]) -> None:
+        """還沒結束的更新工作：問控制代理現在做到哪一步（不等待）；結束了就記下結果。"""
+        try:
+            v = self.agent.job(it["job"], 0, 0)
+        except ConsoleError as e:
+            if "回應 404" in str(e):                      # 控制代理重新啟動過：工作紀錄不見了
+                it.update(status="❓ 查不到這次更新的結果（控制代理重新啟動過）；請看「線上」版本", failed=True)
+                self._save(it)
+            return
+        except Exception:  # noqa: BLE001 — 控制代理暫時連不到：照舊
+            return
+        if v.get("done"):
+            ok = bool(v.get("ok"))
+            it.update(status=("✔ " if ok else "❌ ") + (v.get("result") or ("完成" if ok else "失敗")), done=ok,
+                      failed=not ok)
+            self._save(it)
+            return
+        cur = next((s for s in v.get("steps") or [] if s.get("status") == "running"), None)
+        if cur:
+            el = time.time() - float(cur.get("t0") or time.time())
+            it["status"] = f"更新中：{cur.get('title')}…（{int(el // 60)} 分 {int(el % 60)} 秒）" + \
+                (f" {cur.get('msg')}" if cur.get("msg") else "")
+        it["running"] = True
 
     def job(self, sid: str, after: int = 0, wait: float = 10) -> Dict[str, Any]:
         """控制代理的工作進度；結束時把結果記到上傳項目。"""

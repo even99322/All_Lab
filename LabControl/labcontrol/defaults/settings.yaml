@@ -80,6 +80,7 @@ monitor:
   poll_interval_s: 2
   trace_display: db            # 即時曲線預設顯示：db | phase | real | imag
   colormap: viridis            # 2D 影像色表（pyqtgraph colormap 名稱）
+  cuts: true                   # 影像旁顯示 X / Y 截面（量測監控的「截面」按鈕）
 
 # ---- 儀器伺服器 -------------------------------------------------------------------
 server:

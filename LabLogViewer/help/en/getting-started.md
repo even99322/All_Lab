@@ -12,7 +12,7 @@
 - 2D sweeps: set **Plot Mode** to 2D; see *2D heatmaps and line cuts*.
 - Finding data: see *Stars and Tags*.
 - Fitting resonances: see *Fit one trace*.
-- Press **F1** in any window to open its help page.
+- Press **F1** in any window to open its help page (**Shift+F1** in a Viewer, where F1–F4 pick the plot tools).
 
 ## Reading this Help
 - **Folders** (the default look): every topic is a folder; click one and its guides come out as a stack of cards. Scroll (or press ↓ / Space) and each card stops at the top while the next one slides over it; the covered cards shrink a little, so the pile and the bar on the right show how far you are. Click a picture to see it full size; **Esc** returns to the folders.

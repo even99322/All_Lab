@@ -31,6 +31,7 @@ class FakeDocker:
         self.extra = {}                       # 其他容器（論文庫）：name → {c, port, proc}
         self.images = {}                      # tag → 解開的建置內容資料夾
         self.builds = []
+        self.copies = []                      # docker cp（PUT archive）
         srv = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         srv.daemon_threads = True
         self.srv = srv
@@ -131,6 +132,21 @@ class FakeDocker:
                 if e is not None:
                     return self._send(200, e["c"])
                 self._send(404, {"message": "No such container"})
+
+            def do_PUT(self):
+                """docker cp：tar 解開到「容器」裡（論文庫容器的檔案 = 映像資料夾，WorkingDir /app）。"""
+                fd.calls.append(("PUT", self.path))
+                m = re.match(r"/containers/([^/]+)/archive", self.path)
+                e = fd._x_find(m.group(1)) if m else None
+                if e is None:
+                    return self._send(404, {"message": "No such container"})
+                n = int(self.headers.get("Content-Length") or 0)
+                raw = self.rfile.read(n)
+                d = fd.images[e["c"]["Config"]["Image"]]
+                with tarfile.open(fileobj=io.BytesIO(raw)) as t:
+                    t.extractall(d)
+                fd.copies.append(t.getnames() if False else len(raw))
+                self._send(200)
 
             def do_DELETE(self):
                 fd.calls.append(("DELETE", self.path))

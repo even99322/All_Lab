@@ -113,3 +113,74 @@ def test_hub_sub_projects_from_paperlib(gw):
     assert ps[b["id"]]["path"] == ["YIG mirror coupling", "mirror v2", "2026 秋"]
     assert ps[b["id"]]["folder"] == "YIG mirror coupling/mirror v2/2026 秋"
     assert ps[c["id"]]["folder"] == "YIG mirror coupling/2026 秋" and ps[top["id"]]["parent"] == ""
+
+
+def test_console_shows_job_progress_after_reload(tmp_path):
+    """1.0.11：控制台重新整理後，更新工作的進度 / 結果還是看得到（不再一直「更新中…」）。"""
+    import json as _json
+    import time as _time
+    from types import SimpleNamespace
+
+    from labhub.console import Console, ConsoleError
+
+    hub = SimpleNamespace(cfg=SimpleNamespace(data_dir=tmp_path, token="t", agent_url="http://agent"))
+    c = Console(hub)
+    c.decorate = lambda items: items
+    d = c.dir / "abc"
+    d.mkdir(parents=True)
+    item = {"id": "abc", "file": "p.zip", "target": "paperlib", "version": "1.8.0", "kind": "web", "status": "更新中…",
+            "job": "j1", "time": 1}
+    (d / "item.json").write_text(_json.dumps(item), encoding="utf-8")
+    views = {"j1": {"done": False, "steps": [{"title": "建置映像", "status": "running", "t0": _time.time() - 75,
+                                               "msg": "Step 3/9"}]}}
+    c.agent = SimpleNamespace(job=lambda jid, after, wait: views[jid])
+    it = c.items()[0]
+    assert it["running"] and it["status"].startswith("更新中：建置映像…（1 分") and "Step 3/9" in it["status"]
+    views["j1"] = {"done": True, "ok": True, "result": "論文庫已更新到 v1.8.0", "steps": []}
+    it = c.items()[0]
+    assert it["done"] and it["status"] == "✔ 論文庫已更新到 v1.8.0"
+
+    def gone(jid, after, wait):
+        raise ConsoleError(502, "控制代理回應 404：沒有這個工作")
+    item2 = dict(item, id="def", job="j2")
+    (c.dir / "def").mkdir()
+    (c.dir / "def" / "item.json").write_text(_json.dumps(item2), encoding="utf-8")
+    c.agent = SimpleNamespace(job=gone)
+    it = next(x for x in c.items() if x["id"] == "def")
+    assert it["failed"] and "查不到" in it["status"]
+
+
+def test_monitor_heat_map_has_x_y_cuts(window):
+    """1.0.11：量測監控的影像有 X / Y 截面；橫線跟著最新那一點，拖過就停住；「截面」按鈕可以關掉。"""
+    import numpy as np
+
+    mon = window.monitor
+    hv = mon.heat_plot
+    assert hv.cuts_on and mon.b_cut.isChecked() and hv.xcut in hv.ci.items and hv.ycut in hv.ci.items
+    x = np.linspace(5e9, 5.01e9, 11)
+    y = np.array([1.0, 2.0, 3.0, 4.0])
+    heat = np.full((11, 4), np.nan)
+    hv.reset(x, y, heat.shape)
+    hv.set_value_label("S21 振幅 (dB)")
+    heat[:, 0] = np.arange(11)
+    heat[:, 1] = np.arange(11) * 10
+    hv.show_heat(heat, latest=1)
+    assert hv.hline.value() == 2.0                          # 跟著最新量到的那一點
+    xs, ys = hv.xcurve.getData()
+    assert np.allclose(xs, x) and np.allclose(ys, np.arange(11) * 10)
+    hv.vline.setValue(x[5])
+    cx, cy = hv.ycurve.getData()                              # Y 截面：x[5] 在各掃描點（NaN 不畫）
+    assert np.allclose(cy, [1.0, 2.0]) and np.allclose(cx, [5.0, 50.0])
+    hv.hline.sigDragged.emit(hv.hline)                        # 使用者拖過橫線 → 不再跟著走
+    hv.hline.setValue(1.0)
+    heat[:, 2] = 7.0
+    hv.show_heat(heat, latest=2)
+    assert hv.hline.value() == 1.0 and np.allclose(hv.xcurve.getData()[1], np.arange(11))
+    assert "S21 振幅 (dB)" in hv.readout.text
+    mon.b_cut.setChecked(False)
+    assert not hv.cuts_on and hv.xcut not in hv.ci.items and hv.main in hv.ci.items
+    mon.b_cut.setChecked(True)
+    assert hv.cuts_on and hv.ycut in hv.ci.items
+    hv.setTitle("pair 電流 = 1 mA")
+    assert hv.main.titleLabel.text in ("", None) or not hv.main.titleLabel.isVisible()
+    assert "pair 電流 = 1 mA" in hv.readout.text

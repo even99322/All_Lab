@@ -19,7 +19,7 @@ NOT_INTERFACE_TEXT = {
     "abs", "analysis", "annotate", "bell", "arctan", "back", "cauchy", "clear", "copy", "debackground", "dogbox", "export",
     "f_ref", "filter", "huber", "laser", "load", "max nfev", "maximize", "mean_pos", "nfev = {}   cost = {}   {} s", "open",
     "pen", "raw", "phase_unwrapped_deg", "phase_unwrapped_rad", "reload", "save", "show_trace", "soft_l1", "star",
-    "star_filled", "tag", "trf", "view_all", "zoom", "{} px", "|φ − nP| <", "κm (Hz)", "φ_ref",
+    "star_filled", "tag", "trf", "view_all", "zoom", "pan", "cross_section", "{} px", "|φ − nP| <", "κm (Hz)", "φ_ref",
     "LabLogViewer 3D scene (raster image)", "LabLogViewer figure", "LabLogViewer scientific plot",
     "LabLogViewer v{}", "LabLogViewer v{} — {}",
 }

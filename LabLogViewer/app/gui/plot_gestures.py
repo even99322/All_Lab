@@ -1,5 +1,7 @@
 """Rectangle zoom tool and Mac trackpad gestures for pyqtgraph plots (1D / 2D).
 
+PanTool       v1.0.7: with the Viewer's Move tool active, a left-button drag moves the
+              plot (and only that: no Marks, crosshair or Drag-to-Share).
 RectZoom      With the Viewer's Zoom tool active, a left-button drag draws a
               rectangle and zooms to it. Right-click or Esc steps back one
               level (all the way to the view before the first zoom).
@@ -146,6 +148,70 @@ class RectZoom(QObject):
             self._band.deleteLater()
         self._band = None
         self._drag = None
+
+
+class PanTool(QObject):
+    """Move tool: left-button drag pans the pyqtgraph view under the mouse inside ``host``."""
+
+    def __init__(self, host: QWidget):
+        super().__init__(host)
+        self.host = host
+        self.enabled = False
+        self._drag: tuple[pg.GraphicsView, pg.ViewBox, QPoint] | None = None
+
+    def _views(self):
+        return self.host.findChildren(pg.GraphicsView)
+
+    def set_enabled(self, enabled: bool) -> None:
+        self.enabled = bool(enabled)
+        app = QApplication.instance()
+        if self.enabled:
+            app.installEventFilter(self)
+        else:
+            app.removeEventFilter(self)
+            self._drag = None
+        for view in self._views():
+            view.viewport().setCursor(Qt.CursorShape.OpenHandCursor if self.enabled else Qt.CursorShape.ArrowCursor)
+
+    def _view_for(self, watched) -> pg.GraphicsView | None:
+        if not isinstance(watched, QWidget):
+            return None
+        parent = watched.parentWidget()
+        if isinstance(parent, pg.GraphicsView) and watched is parent.viewport() and self.host.isAncestorOf(parent):
+            return parent
+        return None
+
+    def eventFilter(self, watched, event):  # noqa: N802 - Qt API spelling
+        view = self._view_for(watched)
+        if view is None:
+            return False
+        kind = event.type()
+        if kind == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+            position = event.position().toPoint()
+            box = _view_box_at(view, position)
+            if box is None:
+                return False
+            self._drag = (view, box, position)
+            view.viewport().setCursor(Qt.CursorShape.ClosedHandCursor)
+            return True
+        if kind == QEvent.Type.MouseMove and self._drag is not None:
+            view, box, last = self._drag
+            now = event.position().toPoint()
+            a = box.mapSceneToView(view.mapToScene(last))
+            b = box.mapSceneToView(view.mapToScene(now))
+            box.translateBy(x=a.x() - b.x(), y=a.y() - b.y())
+            self._drag = (view, box, now)
+            return True
+        if kind == QEvent.Type.MouseButtonRelease and self._drag is not None:
+            view = self._drag[0]
+            self._drag = None
+            view.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+            return True
+        if kind == QEvent.Type.MouseButtonDblClick and event.button() == Qt.MouseButton.LeftButton:
+            return True
+        if kind == QEvent.Type.Enter:
+            view.viewport().setCursor(Qt.CursorShape.OpenHandCursor)
+        return False
 
 
 class TrackpadGestures(QObject):

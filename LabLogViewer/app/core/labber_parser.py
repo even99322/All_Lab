@@ -577,6 +577,17 @@ class AutoDetector:
 
         full = None
         n_channels = len(scalar_info.get("channel_names", []))
+        order = "C"
+        if len(active_axes) >= 2 and all(getattr(a, "_pending_row_idx", None) is not None for a in active_axes):
+            # v1.0.7: real Labber files sweep the FIRST Step-list channel fastest (it is the inner loop);
+            # Lab Control .nc views and older synthetic files list the outer loop first. Tell them apart
+            # from the recorded values themselves: whichever end changes between entry 0 and entry 1.
+            full = reader.read(scalar_info["path"])
+            first = extract_scalar_channel_row(full, active_axes[0]._pending_row_idx, n_channels=n_channels)
+            last = extract_scalar_channel_row(full, active_axes[-1]._pending_row_idx, n_channels=n_channels)
+            if first.size > 1 and last.size > 1 and first[1] != first[0] and last[1] == last[0]:
+                order = "F"
+        sweep_meta["entry_order"] = order
         for position, axis in enumerate(active_axes):
             row_idx = getattr(axis, "_pending_row_idx", None)
             if row_idx is None:
@@ -585,7 +596,7 @@ class AutoDetector:
                 full = reader.read(scalar_info["path"])  # small, safe
             row = extract_scalar_channel_row(full, row_idx, n_channels=n_channels)
             if row.size == int(np.prod(active_sizes)) and active_sizes:
-                reshaped = row.reshape(active_sizes)
+                reshaped = row.reshape(active_sizes, order=order)
                 idx: list[Any] = [0] * len(active_sizes)
                 idx[position] = slice(None)
                 axis.values = reshaped[tuple(idx)]

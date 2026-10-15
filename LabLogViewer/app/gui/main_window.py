@@ -364,6 +364,15 @@ class MainWindow(QMainWindow):
         if app is not None:
             app.installEventFilter(self)
 
+    def open_convert(self, to: str, files=None):
+        """File ▸ Convert: the open file when it has the right type, otherwise ask for files."""
+        from app.gui.convert_dialog import open_convert
+
+        if files is None:
+            source = getattr(self.experiment, "source_path", "") if getattr(self, "experiment", None) else ""
+            files = [source] if source else []
+        return open_convert(self, to, files)
+
     # ---- UI construction --------------------------------------------------
 
     def _build_menu(self) -> None:
@@ -432,6 +441,16 @@ class MainWindow(QMainWindow):
         self.export_menu.addAction(self.export_animation_action)
         self.export_menu.aboutToShow.connect(self._update_export_action_labels)
         file_menu.addMenu(self.export_menu)
+        # v1.0.7: Lab Control .nc <-> Labber .hdf5
+        self.convert_menu = QMenu("&Convert", file_menu)
+        self.convert_menu.setObjectName("viewerConvertMenu")
+        self.convert_to_labber_action = QAction("Lab Control .nc → Labber .hdf5...", self)
+        self.convert_to_labber_action.triggered.connect(lambda _checked=False: self.open_convert("hdf5"))
+        self.convert_to_nc_action = QAction("Labber .hdf5 → Lab Control .nc...", self)
+        self.convert_to_nc_action.triggered.connect(lambda _checked=False: self.open_convert("nc"))
+        self.convert_menu.addAction(self.convert_to_labber_action)
+        self.convert_menu.addAction(self.convert_to_nc_action)
+        file_menu.addMenu(self.convert_menu)
 
         file_menu.addSeparator()
 
@@ -494,6 +513,7 @@ class MainWindow(QMainWindow):
         analysis_menu.addAction(self.compare_action)
         self.analysis_menu = analysis_menu
         from app.settings.dialog import install_settings_menu
+        self.help_key = "Shift+F1"          # v1.0.7: F1–F4 select the plot tools in the Viewer
         self.settings_menu = install_settings_menu(self)
 
     def _build_application_toolbar(self) -> None:
@@ -532,7 +552,21 @@ class MainWindow(QMainWindow):
         self.rect_zoom = RectZoom(self)                  # rectangle Zoom tool (1D / 2D)
         self.plot_interaction_controls.zoom_changed.connect(self.rect_zoom.set_enabled)
         self.rect_zoom.user_zoomed = self._note_data_operation
+        from app.gui.plot_gestures import PanTool
+
+        self.pan_tool = PanTool(self)                    # v1.0.7: Move tool (drag = move the plot)
+        self.plot_interaction_controls.pan_changed.connect(self.pan_tool.set_enabled)
+        self.plot_interaction_controls.install_shortcuts(self)       # F1–F4
         toolbar.addWidget(self.plot_interaction_controls)
+        # v1.0.7: one click for the X + Y cut of the 2D map
+        self.cuts_button = QToolButton(toolbar)
+        self.cuts_button.setObjectName("viewerCutsButton")
+        make_icon_only(self.cuts_button, "cross_section", self.localizer.text("interaction.cuts")
+                       if hasattr(self, "localizer") else "X / Y Cut", TOOLBAR_ICON_SIZE, flat=True)
+        self.cuts_button.setToolTip(self.localizer.text("interaction.cuts_tip"))
+        self.cuts_button.setCheckable(True)
+        self.cuts_button.clicked.connect(self._toggle_both_cuts)
+        toolbar.addWidget(self.cuts_button)
         # Annotation sits at the top right in every window.
         from app.gui.annotation import make_annotation_button, toolbar_stretch
         toolbar.addWidget(toolbar_stretch())
@@ -2748,6 +2782,11 @@ class MainWindow(QMainWindow):
         for axis, action in (("x", self.show_x_cut_action), ("y", self.show_y_cut_action)):
             with QSignalBlocker(action):
                 action.setChecked(parts[axis])
+        button = getattr(self, "cuts_button", None)
+        if button is not None:
+            with QSignalBlocker(button):
+                button.setChecked(parts["x"] or parts["y"])
+            button.setEnabled(source is not None)
 
     def _toggle_cut_part(self, axis: str, on: bool) -> None:
         """v1.0.5: X / Y cut inside the 2D plot of a single pane; several panes → the cut's own window."""
@@ -2768,6 +2807,29 @@ class MainWindow(QMainWindow):
                     source._cross.parts = dict(parts)
                 source.set_cross_section_enabled(True)
             source._cross.set_parts(parts["x"], parts["y"])
+        else:
+            source.set_cross_section_enabled(False)
+        self._sync_cut_actions()
+        self.workspace_state_changed.emit()
+
+    def _toggle_both_cuts(self, on: bool) -> None:
+        """v1.0.7 toolbar button: X and Y cut together (each still has its own item in View → Show)."""
+        source, _name, pane_id = self._cut_source_context()
+        if source is None:
+            self._sync_cut_actions()
+            self.statusBar().showMessage("Open a 2D map first to use the X/Y cross-section.")
+            return
+        if pane_id is not None:
+            self._sync_cut_actions()
+            self._show_cut_window("x")
+            self._show_cut_window("y")
+            return
+        if on:
+            if not source.cross_section_enabled:
+                if source._cross is not None:
+                    source._cross.parts = {"x": True, "y": True}
+                source.set_cross_section_enabled(True)
+            source._cross.set_parts(True, True)
         else:
             source.set_cross_section_enabled(False)
         self._sync_cut_actions()

@@ -573,3 +573,31 @@ PATTERNS.extend([
     ("File not found in 數據集散地: {}", "數據集散地裡找不到：{0}"),
     ("Not a LabLogViewer link: {}", "不是讀檔程式的連結：{0}"),
 ])
+# v1.0.7: File ▸ Convert (Lab Control .nc ⇄ Labber .hdf5), move tool, F1–F4
+UI.update({
+    "&Convert": "轉檔(&C)", "Convert": "轉檔", "Convert Files": "轉檔",
+    "Lab Control .nc → Labber .hdf5...": "量測檔 .nc → Labber .hdf5⋯",
+    "Labber .hdf5 → Lab Control .nc...": "Labber .hdf5 → 量測檔 .nc⋯",
+    "Lab Control .nc  →  Labber .hdf5": "量測檔 .nc  →  Labber .hdf5",
+    "Labber .hdf5  →  Lab Control .nc": "Labber .hdf5  →  量測檔 .nc",
+    "Convert to Labber .hdf5...": "轉成 Labber .hdf5⋯", "Convert to Lab Control .nc...": "轉成量測檔 .nc⋯",
+    "Add Files...": "加入檔案⋯", "Same folder as each file": "存在原檔所在的資料夾", "This folder:": "這個資料夾：",
+    "Save to:": "存到：", "Writer:": "寫檔方式：", "Automatic (Labber API when available)": "自動（有 Labber 就用 Labber API）",
+    "Built-in": "內建", "built-in": "內建", "Labber Python:": "Labber Python：",
+    "The Labber API needs the lab's Labber Python (3.8) environment; without it the built-in writer makes the "
+    "same file layout.": "Labber API 要用實驗室的 Labber Python（3.8）環境；沒有的話，用內建的寫法做出同樣結構的檔案。",
+    "Choose Files to Convert": "選擇要轉檔的檔案", "Save Converted Files To": "轉好的檔案存到",
+    "Choose the folder to save to.": "請先選擇要存到哪個資料夾。",
+    "Stopping after the current file…": "目前這個檔案轉完就停止…",
+    "Partial measurement: only the recorded points were converted.": "量測沒有跑完：只轉了有量到的點。",
+    "No measured (log) channels to convert.": "沒有可轉的量測通道。",
+    "Labber Python not found (it must be able to import Labber).": "找不到 Labber Python（要能 import Labber）。",
+})
+PATTERNS.extend([
+    ("Convert {} Files to Labber .hdf5...", "把 {0} 個檔案轉成 Labber .hdf5⋯"),
+    ("Convert {} Files to Lab Control .nc...", "把 {0} 個檔案轉成量測檔 .nc⋯"),
+    ("Done: {} converted, {} failed.", "完成：{0} 個轉好、{1} 個失敗。"),
+    ("Converted {} file(s).", "已轉好 {0} 個檔案。"),
+    ("'{}': {} is not evenly spaced — Labber only keeps start + step.", "「{0}」的 {1} 間距不固定：Labber 只記起點和間距。"),
+    ("Cannot open: {}", "打不開：{0}"),
+])

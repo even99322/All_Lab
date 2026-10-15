@@ -190,6 +190,12 @@ class Docker:
         if st != 200 or errors:
             raise DockerError(f"建置映像 {tag} 失敗（{st}）：{'; '.join(errors)[-500:]}")
 
+    def put_archive(self, cid: str, path: str, tar: bytes) -> None:
+        """PUT /containers/<id>/archive：把 tar 解開到容器裡的 path（docker cp；停止的容器也可以）。"""
+        st, data = self.req("PUT", f"/containers/{urllib.parse.quote(cid)}/archive?path={urllib.parse.quote(path)}",
+                            raw=tar, ctype="application/x-tar", timeout=120)
+        self._ok(st, data, "把檔案放進容器")
+
     def recreate(self, name: str, info: Dict[str, Any]) -> str:
         """以原本的設定（inspect）刪除並重新建立容器，回傳新 id。compose 標籤一併保留。"""
         cfg = dict(info.get("Config") or {})
@@ -986,6 +992,87 @@ class Agent:
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
+    #: 1.0.11：只改這些資料夾的部分更新包不必重新建置映像（套件沒變）
+    PL_CODE_DIRS = ("app", "seed")
+
+    @classmethod
+    def _pl_code_files(cls, pkg: Path) -> Optional[List[Path]]:
+        """部分更新包裡的程式檔（app/、seed/）；包裡有其他會影響映像的檔（Dockerfile、requirements.txt…）→ None。
+        最上層的說明檔（*.txt、*.md）不算。"""
+        out: List[Path] = []
+        for p in sorted(pkg.rglob("*")):
+            if not p.is_file() or "__pycache__" in p.parts:
+                continue
+            rel = p.relative_to(pkg)
+            if rel.parts[0] in cls.PL_CODE_DIRS:
+                out.append(rel)
+            elif len(rel.parts) == 1 and (p.suffix.lower() == ".md" or (
+                    p.suffix.lower() == ".txt" and not p.name.lower().startswith(("requirements", "constraints")))):
+                continue
+            else:
+                return None
+        return out
+
+    def _pl_copy_in(self, job: Job, base: Path, files: List[Path], key: str = "copy") -> None:
+        """把程式檔放進論文庫容器（容器裡的程式在 WORKDIR/app，映像不用重建）。"""
+        import tarfile
+
+        info = self._pl_info()
+        wd = (info.get("Config") or {}).get("WorkingDir") or "/app"
+        job.begin(key, f"{len(files)} 個檔案 → 容器 {wd}")
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tar:
+            for rel in files:
+                tar.add(str(base / rel), rel.as_posix(), recursive=False)
+        self.docker.put_archive(info["Id"], wd, buf.getvalue())
+        job.end(key, f"已放進容器（{len(files)} 個檔案；映像沒有重建，下次完整更新時一起建置）")
+
+    def _do_paperlib_quick(self, job: Job, pkg: Path, new: str, old: Optional[str],
+                           files: List[Path]) -> Tuple[bool, str]:
+        """只改程式檔的部分更新包：換程式 → 停止 → 備份資料庫 → 檔案放進容器 → 啟動 → 確認（幾秒鐘）。"""
+        with job.cond:
+            for s in job.steps:
+                if s["key"] in ("build", "rebuild"):
+                    s.update(status="skip", msg="只改程式檔，不用重新建置")
+            keys = [s["key"] for s in job.steps]
+            if "copy" not in keys:
+                job.steps.insert(keys.index("start") if "start" in keys else len(keys),
+                                 {"key": "copy", "title": "放進容器", "status": "pending", "msg": "", "t0": None,
+                                  "t1": None})
+        bk = self._pl_backup(job)
+        self._pl_replace(job, pkg, overlay=True)
+        db_bk: Optional[Path] = None
+        try:
+            self._pl_stop(job)
+            db_bk = self._pl_db_backup(job)
+            self._pl_copy_in(job, pkg, files)
+            self._pl_start(job)
+            if not self._pl_verify(job, new):
+                raise RuntimeError("新版沒有正常啟動")
+        except Exception as e:  # noqa: BLE001
+            job.say(f"⚠ {e}：自動換回 v{old}…")
+            try:
+                info = self._pl_info()
+                if (info.get("State") or {}).get("Running"):
+                    self.docker.stop(info["Id"], t=30)
+            except DockerError:
+                pass
+            self._pl_db_restore(job, db_bk)
+            tmp = self.cfg.hub_dir / ".update" / f"pl-quick-{job.id}"
+            try:
+                oldpkg, ov, _ = self.extract_paperlib(bk.read_bytes(), tmp)
+                self._pl_replace(job, oldpkg, key="restore")
+                back = [p.relative_to(self.cfg.paperlib_dir) for d in self.PL_CODE_DIRS
+                        for p in sorted((self.cfg.paperlib_dir / d).rglob("*"))
+                        if p.is_file() and "__pycache__" not in p.parts]
+                self._pl_copy_in(job, self.cfg.paperlib_dir, back, key="restore_copy")
+                self._pl_start(job, key="restore_start")
+                self._pl_verify(job, ov, key="restore_verify")
+            finally:
+                shutil.rmtree(tmp, ignore_errors=True)
+            return False, f"論文庫更新失敗，已換回 v{old}（{e}）"
+        return True, f"論文庫已更新到 v{new}（只換程式檔，沒有重新建置映像）"
+
     def _do_paperlib_update(self, job: Job, data: Optional[bytes], backup: str) -> Tuple[bool, str]:
         """先換程式、建置好新映像（舊版照常服務）→ 停止 → 備份資料庫 → 重建容器 → 啟動 → 確認；失敗換回程式與資料庫。"""
         work = self.cfg.hub_dir / ".update" / job.id
@@ -1003,6 +1090,9 @@ class Agent:
                                      f"{'、'.join(miss[:5])}。請先更新到它要求的基底版本（完整包），再套用這個更新包")
             job.end("check", f"{'部分更新包' if overlay else '完整包'} v{new}（目前 v{old}）"
                     + ("；舊版本" if old and parse_version(new) < parse_version(old) else ""))
+            files = self._pl_code_files(pkg) if overlay else None
+            if files:
+                return self._do_paperlib_quick(job, pkg, new, old, files)
             bk = self._pl_backup(job)
             self._pl_replace(job, pkg, overlay=overlay)
             db_bk: Optional[Path] = None

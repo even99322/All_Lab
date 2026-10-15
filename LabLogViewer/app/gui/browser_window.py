@@ -15,7 +15,7 @@ from time import perf_counter
 from PySide6.QtCore import QObject, QSize, QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup, QColor, QGuiApplication
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QInputDialog, QMainWindow, QMenu,
+    QAbstractItemView, QApplication, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel, QInputDialog, QMainWindow, QMenu,
     QMessageBox, QProgressDialog, QPushButton, QSplitter, QStackedWidget,
     QLineEdit, QProgressBar, QSpinBox, QStatusBar, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout,
     QPlainTextEdit, QTextBrowser, QWidget,
@@ -261,6 +261,13 @@ class BrowserWindow(QMainWindow):
         self.new_folder_action.setEnabled(False)
         self.new_folder_action.triggered.connect(lambda _checked=False: self.new_folder())
         file_menu.addAction(self.new_folder_action)
+        # v1.0.7: Lab Control .nc <-> Labber .hdf5 (the selected Data, or files chosen in the dialog)
+        self.convert_menu = file_menu.addMenu("&Convert")
+        self.convert_menu.setObjectName("browserConvertMenu")
+        self.convert_to_labber_action = self.convert_menu.addAction("Lab Control .nc → Labber .hdf5...")
+        self.convert_to_labber_action.triggered.connect(lambda _checked=False: self.convert_selected("hdf5"))
+        self.convert_to_nc_action = self.convert_menu.addAction("Labber .hdf5 → Lab Control .nc...")
+        self.convert_to_nc_action.triggered.connect(lambda _checked=False: self.convert_selected("nc"))
         file_menu.addSeparator()
         exit_action = QAction("E&xit", self)
         exit_action.triggered.connect(self.close)
@@ -673,6 +680,7 @@ class BrowserWindow(QMainWindow):
         self.query_status_label.hide()
         data_layout.addWidget(self.query_status_label)
         self.data_list = MeasurementList()
+        self.data_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)   # v1.0.7: convert several
         self.data_list.verticalScrollBar().valueChanged.connect(self._on_list_scrolled)   # v2.1.6: more rows
         self.data_list.setColumnCount(5)
         self.data_list.setHeaderLabels(["Star", "Log name", "Date created", "Sweep dimension", "Tags"])
@@ -2074,11 +2082,19 @@ class BrowserWindow(QMainWindow):
         item = self.data_list.itemAt(pos)
         if item is None:
             return
-        self.data_list.setCurrentItem(item)
+        if item.isSelected() and len(self.data_list.selectedItems()) > 1:      # keep a multi-selection
+            from PySide6.QtCore import QItemSelectionModel
+
+            self.data_list.setCurrentItem(item, 0, QItemSelectionModel.SelectionFlag.NoUpdate)
+        else:
+            self.data_list.setCurrentItem(item)
         entry = item.data(0, Qt.UserRole)
         if entry is None or self.scan_result is None:
             return
         menu = QMenu(self)
+        selected = self._selected_entries()
+        if entry not in selected:
+            selected = [entry]
         starred = self.star_store.is_starred(self._entry_database(entry), entry.relative_path)
         action = menu.addAction("Unstar" if starred else "Star")
         action.triggered.connect(lambda: self._toggle_star(item, entry))
@@ -2090,7 +2106,58 @@ class BrowserWindow(QMainWindow):
         if entry.status == "ok":
             open_action = menu.addAction("Open")
             open_action.triggered.connect(lambda: self._open_viewer_for(entry))
-        menu.exec(self.data_list.viewport().mapToGlobal(pos))
+        # v1.0.7: convert the selected Data (several with Ctrl / Shift)
+        from app.core.labber_convert import kind_of
+
+        paths = [str(e.absolute_path) for e in selected]
+        to_labber = [p for p in paths if kind_of(p) == "nc"]
+        to_nc = [p for p in paths if kind_of(p) == "hdf5"]
+        if to_labber or to_nc:
+            menu.addSeparator()
+        if to_labber:
+            act = menu.addAction("Convert to Labber .hdf5..." if len(to_labber) == 1
+                                 else f"Convert {len(to_labber)} Files to Labber .hdf5...")
+            act.setObjectName("browserConvertToLabber")
+            act.triggered.connect(lambda _c=False, f=to_labber: self.convert_selected("hdf5", f))
+        if to_nc:
+            act = menu.addAction("Convert to Lab Control .nc..." if len(to_nc) == 1
+                                 else f"Convert {len(to_nc)} Files to Lab Control .nc...")
+            act.setObjectName("browserConvertToNc")
+            act.triggered.connect(lambda _c=False, f=to_nc: self.convert_selected("nc", f))
+        self._exec_menu(menu, self.data_list.viewport().mapToGlobal(pos))
+
+    def _exec_menu(self, menu, global_pos) -> None:
+        menu.exec(global_pos)
+
+    def _selected_entries(self) -> list:
+        out = []
+        for item in self.data_list.selectedItems():
+            entry = item.data(0, Qt.UserRole)
+            if entry is not None and entry not in out:
+                out.append(entry)
+        return out
+
+    def convert_selected(self, to: str, files=None):
+        """Convert the given (or selected) Data; with none of the right type, the dialog asks for files."""
+        from app.gui.convert_dialog import open_convert
+
+        if files is None:
+            files = [str(e.absolute_path) for e in self._selected_entries()]
+        dialog = open_convert(self, to, files)
+        if dialog is not None:
+            dialog.converted.connect(self._after_convert)
+        return dialog
+
+    def _after_convert(self, outputs: list) -> None:
+        from app.localization.manager import translate_text
+
+        self.statusBar().showMessage(translate_text(f"Converted {len(outputs)} file(s).", self.localizer.language), 6000)
+        root = Path(self.scan_result.root_path) if self.scan_result is not None else None
+        if root is not None and any(Path(o).resolve().is_relative_to(root.resolve()) for o in outputs):
+            try:
+                self._reconcile_timer.start(200)          # pick the new files up like auto refresh does
+            except Exception:  # noqa: BLE001
+                pass
 
     def _rename_entry(self, entry: LogEntry, new_stem: str | None = None) -> bool:
         if self.scan_result is None or self.scanner_root is None:

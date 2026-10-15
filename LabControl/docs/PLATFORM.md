@@ -245,6 +245,18 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 - 手動步進：`run_defaults.manual_loop: true` → 每一點自動循環量測，直到「記錄並下一點」。
 - 子專案需要論文庫 1.8.0（`projects.parent_id`、schema 8；專案專區「新增子專案」、編輯專案改「上層專案」、同一層名稱不重複、刪除時子專案移到上一層）；舊版論文庫一切照舊（都是最上層）。
 
+### 0m. 1.0.11：量測監控截面、讀檔程式轉檔、控制台更新論文庫
+
+- 量測監控影像 = `HeatView`：heat[ix, j]（ix = 曲線 x、j = 最內圈掃描點）；X 截面 = heat[:, 橫線]、Y 截面 = heat[直線, :]；
+  橫線跟著最新量到的 j，拖過（sigDragged）就停住，`reset()`（新的量測 / 換通道）再跟著走。
+- 讀檔程式 1.0.7 轉檔：.nc → Labber 時 Step list =［Step index API, 最內圈軸 … 最外圈軸］、entries 最內圈最快、
+  Data/Data (1, 通道數, 點數)、Traces (點數, 2 或 1, entries)；Labber API（`labber.python38` 同一個 Python）或內建 h5py。
+  Labber → .nc：labcontrol-nc/1 grid（h5netcdf，複數照存）。讀取 Labber 檔時第一個掃描軸是最內圈（`Experiment.entry_order`）。
+
+- 控制台的上傳項目記著控制代理的工作編號；`/api/platform/console/items` 會問控制代理目前的步驟（不等待），網頁重新整理後繼續跟著。
+- 論文庫部分更新包只有 `app/`、`seed/`（與最上層的說明 .md / .txt）→ 不重建映像：檔案用 Docker `PUT /containers/<id>/archive`
+  放進容器的 WORKDIR（/app），重啟後生效；磁碟上的程式也換新，下次完整更新時一起建置。有 Dockerfile、requirements.txt 等 → 完整建置。
+
 以下第 1–7 節是 0.0.13–0.0.25（有啟動器時）的說明，平台 API、數據目錄、標籤與論文仍然適用。
 
 ## 1. 組成

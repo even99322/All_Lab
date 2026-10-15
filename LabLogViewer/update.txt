@@ -1841,3 +1841,27 @@ Date: 2026-10-15
     panel is narrow; AdjustToContents so names are not cut. Opening a folder inside a project (e.g. …/2026/10)
     keeps the chain selected.
   - tests/test_v1_0_6_subprojects.py.
+
+v1.0.7 - CONVERSION, MOVE TOOL, F1-F4
+Date: 2026-10-15
+
+  - app/core/labber_convert.py: Lab Control .nc (and raw .lm.h5) <-> Labber .hdf5 through a neutral Sweep built
+    from the Experiment model. To Labber: engine "api" (Labber.createLogFile_ForData in the lab's Labber Python,
+    app/core/labber_api_script.py, Python 3.8 compatible, bundled as a data file), "builtin" (h5py, the layout of
+    sample_reports/0828_RSMEP_1: Channels / Instruments / Step list / Step config / Log list / Data with
+    "Step index API" first / Traces (n_points, 2|1, n) / Tags / Instrument config), "auto". Step list = inner axis
+    first, entries inner-fastest. To .nc: h5netcdf (new dependency, h5netcdf + packaging pinned for builds),
+    schema labcontrol-nc/1 grid layout, complex kept (invalid_netcdf). Outputs never overwrite (_2, _3 ...).
+  - app/gui/convert_dialog.py: file list, output folder, writer + Labber Python, per-file results in a worker
+    thread. Viewer File > Convert (starts with the open file); Browser File > Convert and right-click on one or
+    several Data (the Data list now allows Ctrl / Shift multi-selection; right-click keeps it).
+  - Reader: Labber's first Step-list channel is the inner loop. Experiment.entry_order ("F" for such files,
+    detected from the recorded step values; "C" for Lab Control .nc views and older synthetic files) is used by
+    get_full_nd_array, the scalar 2D grid, step-axis values and the YIG coordinates; Data/Data
+    (n_first, n_channels, n_rest) with both > 1 is read inner-fastest; real-valued traces (n_points, 1, n).
+  - Plot toolbar: Move tool (cross arrows, PanTool, right of the pointer); F1 pointer, F2 move, F3 share, F4 zoom
+    (QShortcuts, tooltips show the key); Viewer help on Shift+F1 (window.help_key); X / Y Cut toolbar button
+    (both cuts on / off; the View > Show items still switch one).
+  - Fix: the 2D colour-bar title (pyqtgraph puts it on the bar's left axis; 1.0.5 hid that axis' label).
+  - help: convert-files (en / zh), shortcuts, getting-started, new-cross-section; whats_new 1.0.7.
+  - tests/test_v1_0_7_tools.py, tests/test_v1_0_7_convert.py.
