@@ -77,6 +77,7 @@ class RunOptions:
     max_shots: int = 400                    # 手動模式每點最多暫存幾筆
     repeat_shots: int = 1                   # 1.0.7：自動模式每點量幾次（> 1 → 全部保留，量完在 QC 視窗挑）
     loop_interval: float = 0.01
+    manual_loop: bool = True                # 1.0.10：手動步進時每一點一進來就循環量測（按「循環量測」可以停）
 
     @classmethod
     def from_config(cls, d: Optional[Dict[str, Any]]) -> "RunOptions":
@@ -409,9 +410,9 @@ class Runner:
 
     def _acquire_manual(self, i: int, ctx: RunContext) -> Optional[PointRecord]:
         shots: List[Dict[str, Any]] = []
-        looping = False
-        self.bus.publish("manual.waiting", run_id=self.run_id, index=i, setpoints=dict(ctx.setpoints))
-        self.bus.log(f"🖐️ [手動模式] 第 {i + 1} 點等待指令…")
+        looping = bool(self.options.manual_loop)
+        self.bus.publish("manual.waiting", run_id=self.run_id, index=i, setpoints=dict(ctx.setpoints), loop=looping)
+        self.bus.log(f"🖐️ [手動模式] 第 {i + 1} 點" + ("循環量測中，按「記錄並下一點」繼續…" if looping else "等待指令…"))
 
         def take() -> bool:
             s = self._shot(i, ctx)
@@ -441,11 +442,15 @@ class Runner:
 
             if cmd in _MANUAL_CMDS:
                 if cmd == Cmd.LOOP_START:
+                    if not looping:
+                        self.bus.log("🔁 開始循環量測")
                     looping = True
-                    self.bus.log("🔁 開始循環量測")
+                    self.bus.publish("manual.loop", run_id=self.run_id, index=i, loop=True)
                 elif cmd == Cmd.LOOP_STOP:
+                    if looping:
+                        self.bus.log("⏹ 循環量測已停止")
                     looping = False
-                    self.bus.log("⏹ 循環量測已停止")
+                    self.bus.publish("manual.loop", run_id=self.run_id, index=i, loop=False)
                 elif cmd == Cmd.MEASURE_ONCE and self.state == State.RUNNING:
                     if not take():
                         return None
@@ -461,9 +466,7 @@ class Runner:
                                        selected=len(kept) - 1, retained=retain)
                 continue
 
-            self._handle_global(cmd, arg)
-            if cmd == Cmd.PAUSE:
-                looping = False
+            self._handle_global(cmd, arg)        # 暫停時不量（fast 只在 RUNNING），繼續後照原本的循環狀態
             if not self.manual:   # 中途切回自動：用最後一筆，沒有就量一次
                 if not shots and not take():
                     return None

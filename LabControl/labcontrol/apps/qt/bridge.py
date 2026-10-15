@@ -20,8 +20,16 @@ class QtEventBridge(QObject):
         super().__init__(parent)
         self.bus = bus
         self._handlers: Dict[str, list] = {}
-        self._token = bus.subscribe(pattern, lambda topic, payload: self.event.emit(topic, payload))
+        self._token = bus.subscribe(pattern, self._forward)
         self.event.connect(self._dispatch)
+        token = self._token
+        self.destroyed.connect(lambda *_a: bus.unsubscribe(token))     # 1.0.10：元件刪掉後不再轉送（避免當機）
+
+    def _forward(self, topic: str, payload: Dict[str, Any]) -> None:
+        try:
+            self.event.emit(topic, payload)
+        except RuntimeError:                       # Qt 物件已經刪除
+            self.bus.unsubscribe(self._token)
 
     def on(self, topic: str, fn: Callable[[Dict[str, Any]], None]) -> None:
         self._handlers.setdefault(topic, []).append(fn)

@@ -16,7 +16,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtCore import Qt
 
 from ....core.units import parse_quantity
-from ....data.naming import (DEFAULT_PATTERN, data_root, day_folder, folder_pattern, list_project_folders,
+from ....data.naming import (DEFAULT_PATTERN, project_folder_path, data_root, day_folder, folder_pattern, list_project_folders,
                              project_folder, project_folder_name, remember_folder, remembered_folder,
                              stale_date_in_filename)
 from ....scheme.compile import file_settings, format_duration
@@ -74,14 +74,28 @@ class FilePanel(QtWidgets.QTabWidget):
         self.lab_project = QtWidgets.QComboBox()
         self.lab_project.setToolTip("論文庫裡的專案：數據上傳後歸到這個專案（讀檔模塊可以直接開整個專案），\n"
                                     "標籤會記到專案的數據標籤；資料夾規則可以用 {project}")
-        self.lab_project.setMinimumContentsLength(16)
+        self.lab_project.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.lab_project.setMinimumContentsLength(10)
         proj_refresh = QtWidgets.QToolButton()
         proj_refresh.setText("⟳")
         proj_refresh.setToolTip("重新讀取論文庫的專案")
         proj_refresh.clicked.connect(lambda: self.reload_projects(force=True))
+        # 1.0.10：子專案——選的專案底下還有子專案 → 右邊多一個選單（放不下就換到下一行），可以一層一層選下去
+        from ..flow_layout import FlowLayout
+
+        self.proj_flow = QtWidgets.QWidget()
+        self.proj_flow_layout = FlowLayout(self.proj_flow)
+        self.proj_flow_layout.addWidget(self.lab_project)
+        self.sub_projects: list = []                  # 子專案的下拉選單（第 2 層以後）
+        self._proj_items: list = []
+        self.b_subproject = QtWidgets.QToolButton()
+        self.b_subproject.setText("＋子")
+        self.b_subproject.setToolTip("在目前選的專案底下建立子專案（建在論文庫；也可以在論文庫的專案專區建立）")
+        self.b_subproject.clicked.connect(self._new_subproject)
         proj_row = QtWidgets.QHBoxLayout()
-        proj_row.addWidget(self.lab_project, 1)
-        proj_row.addWidget(proj_refresh)
+        proj_row.addWidget(self.proj_flow, 1)
+        proj_row.addWidget(self.b_subproject, 0, Qt.AlignmentFlag.AlignTop)
+        proj_row.addWidget(proj_refresh, 0, Qt.AlignmentFlag.AlignTop)
         # 0.0.30：專案資料夾（資料根目錄底下，每個專案一個）：自動用專案名稱建立，或選已經有的資料夾
         self.proj_folder = QtWidgets.QComboBox()
         self.proj_folder.setObjectName("projectFolder")
@@ -312,31 +326,107 @@ class FilePanel(QtWidgets.QTabWidget):
     def current_project(self) -> dict:
         return dict(self.doc.scheme.output.get("lab_project") or {})
 
+    @staticmethod
+    def _project_label(p: dict) -> str:
+        label = p["name"] + (f"（{p['short_name']}）" if p.get("short_name") and p["short_name"] != p["name"] else "")
+        if p.get("data"):
+            label += f" · {p['data']} 筆數據"
+        return label
+
+    def _children(self) -> dict:
+        """上層 id → 子專案（依原本的順序）；上層不存在 → 當成最上層。"""
+        ids = {str(p["id"]) for p in self._proj_items}
+        kids: dict = {}
+        for p in self._proj_items:
+            par = str(p.get("parent") or "")
+            kids.setdefault(par if par in ids and par != str(p["id"]) else "", []).append(p)
+        return kids
+
+    def _chain(self, pid: str) -> list:
+        """[最上層, …, 這個專案] 的 id。"""
+        by = {str(p["id"]): p for p in self._proj_items}
+        out, cur, seen = [], str(pid or ""), set()
+        while cur and cur in by and cur not in seen:
+            seen.add(cur)
+            out.insert(0, cur)
+            par = str(by[cur].get("parent") or "")
+            cur = par if par in by else ""
+        if not out and pid:
+            cur = self.current_project()
+            ids = [str(x) for x in (cur.get("path_ids") or [])] if str(cur.get("id")) == str(pid) else []
+            out = ids or [str(pid)]
+        return out
+
+    def _ref(self, p: dict) -> dict:
+        return {"id": str(p["id"]), "name": p["name"]}
+
     def _fill_projects(self, items: list) -> None:
+        self._proj_items = [dict(p, id=str(p["id"])) for p in (items or [])]
+        kids = self._children()
         cur = self.current_project()
+        chain = self._chain(cur.get("id", "")) if cur.get("id") else []
         cb = self.lab_project
         cb.blockSignals(True)
         cb.clear()
         cb.addItem("（不指定專案）", None)
         seen = False
-        for p in items:
-            label = p["name"] + (f"（{p['short_name']}）" if p.get("short_name") and p["short_name"] != p["name"] else "")
-            if p.get("data"):
-                label += f" · {p['data']} 筆數據"
-            cb.addItem(label, {"id": str(p["id"]), "name": p["name"]})
+        for p in kids.get("", []):
+            n = len(kids.get(p["id"], []))
+            cb.addItem(self._project_label(p) + (f"　▸ {n} 個子專案" if n else ""), self._ref(p))
             if p.get("color"):
                 cb.setItemData(cb.count() - 1, QtGui.QColor(p["color"]), Qt.ItemDataRole.DecorationRole)
-            seen |= str(p["id"]) == str(cur.get("id", ""))
+            seen |= bool(chain) and p["id"] == chain[0]
         if cur.get("id") and not seen:   # 沒登入或專案讀不到：保留方案裡記的
-            cb.addItem(f"{cur.get('name') or cur['id']}（方案裡記的）", {"id": str(cur["id"]), "name": cur.get("name", "")})
+            top = {"id": str(cur["id"]), "name": cur.get("name", "")}
+            cb.addItem(f"{' / '.join(cur.get('path') or [cur.get('name') or cur['id']])}（方案裡記的）", top)
+            chain = [str(cur["id"])]
         cb.addItem("＋ 新專案…", NEW_PROJECT)
         idx = 0
         for i in range(cb.count()):
             d = cb.itemData(i)
-            if isinstance(d, dict) and d["id"] == str(cur.get("id", "")):
+            if isinstance(d, dict) and chain and d["id"] == chain[0]:
                 idx = i
         cb.setCurrentIndex(idx)
         cb.blockSignals(False)
+        self._build_sub_combos(chain if idx else [])
+
+    def _build_sub_combos(self, chain: list) -> None:
+        """第 2 層以後的選單：選到的專案有子專案 → 右邊加一個（第一項 =「只選上層」）。"""
+        for c in self.sub_projects:
+            self.proj_flow_layout.removeWidget(c)
+            c.hide()
+            c.deleteLater()
+        self.sub_projects = []
+        kids = self._children()
+        by = {p["id"]: p for p in self._proj_items}
+        for level, pid in enumerate(chain):
+            children = kids.get(pid, [])
+            if pid not in by or not children:          # 沒有子專案：不多一個選單
+                break
+            c = QtWidgets.QComboBox()
+            c.setObjectName(f"subProject{level + 1}")
+            c.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToContents)
+            c.setToolTip(f"「{by[pid]['name']}」底下的子專案（第 {level + 2} 層）")
+            c.addItem(f"（只選「{by[pid]['name']}」）", self._ref(by[pid]))
+            for ch in children:
+                n = len(kids.get(ch["id"], []))
+                c.addItem(self._project_label(ch) + (f"　▸ {n}" if n else ""), self._ref(ch))
+                if ch.get("color"):
+                    c.setItemData(c.count() - 1, QtGui.QColor(ch["color"]), Qt.ItemDataRole.DecorationRole)
+            c.addItem("＋ 新子專案…", ("new", pid))
+            nxt = chain[level + 1] if level + 1 < len(chain) else ""
+            c.setCurrentIndex(0)
+            for i in range(c.count()):
+                d = c.itemData(i)
+                if isinstance(d, dict) and nxt and d["id"] == nxt:
+                    c.setCurrentIndex(i)
+            c.activated.connect(lambda _i, c=c: self._sub_chosen(c))
+            self.proj_flow_layout.addWidget(c)
+            c.show()
+            self.sub_projects.append(c)
+            if not nxt:
+                break
+        self.proj_flow.updateGeometry()
 
     def reload_projects(self, force: bool = False) -> None:
         from ....integrations import platform as plat
@@ -358,11 +448,46 @@ class FilePanel(QtWidgets.QTabWidget):
                 self._fill_projects(self._project_items())
                 return
             d = {"id": str(p["id"]), "name": p["name"]}
+        self._select_project(d if isinstance(d, dict) else None)
+
+    def _sub_chosen(self, c: QtWidgets.QComboBox) -> None:
+        d = c.currentData()
+        if isinstance(d, tuple) and d and d[0] == "new":
+            p = self._new_project_dialog(parent=d[1])
+            if p is None:
+                self._fill_projects(self._project_items())
+                return
+            d = {"id": str(p["id"]), "name": p["name"]}
+        if isinstance(d, dict):
+            self._select_project(d)
+
+    def _new_subproject(self) -> None:
+        cur = self.current_project()
+        if not cur.get("id"):
+            QtWidgets.QMessageBox.information(self, "子專案", "先選一個專案，子專案會建在它底下。")
+            return
+        p = self._new_project_dialog(parent=str(cur["id"]))
+        if p is not None:
+            self._select_project({"id": str(p["id"]), "name": p["name"]})
+
+    def _project_value(self, d: dict) -> dict:
+        """方案裡記的專案：{"id", "name"}；子專案再加上層的名稱與 id（path / path_ids）。"""
+        chain = self._chain(d["id"])
+        by = {p["id"]: p for p in self._proj_items}
+        out = {"id": str(d["id"]), "name": d["name"]}
+        if len(chain) > 1 and all(x in by for x in chain):
+            out["path"] = [by[x]["name"] for x in chain]
+            out["path_ids"] = list(chain)
+        return out
+
+    def _select_project(self, d: Optional[dict]) -> None:
+        d = self._project_value(d) if d else None
         old = self.current_project() or None
-        if (old or {}).get("id") == ((d or {}).get("id") if isinstance(d, dict) else None):
+        if (old or {}).get("id") == ((d or {}).get("id")) and (old or {}).get("path") == (d or {}).get("path"):
+            self._build_sub_combos(self._chain(d["id"]) if d else [])
             return                                      # 選了同一個專案
         self.project_changing.emit(old)
-        folder = remembered_folder(d["id"]) if isinstance(d, dict) else ""
+        folder = remembered_folder(d["id"]) if d else ""
 
         def fn(s):
             if d:
@@ -376,7 +501,7 @@ class FilePanel(QtWidgets.QTabWidget):
         self._mutate(fn)
         self._fill_projects(self._project_items())
         self._fill_folders()
-        self.project_changed.emit(d if isinstance(d, dict) else None)
+        self.project_changed.emit(d)
 
     # ---- 在量測電腦上執行（0.0.31）------------------------------------------------
     def set_remote(self, name: Optional[str], info: Optional[dict] = None) -> None:
@@ -435,7 +560,7 @@ class FilePanel(QtWidgets.QTabWidget):
 
     def _folder_chosen(self) -> None:
         text = self.proj_folder.currentText().strip()
-        name = project_folder_name(text) if text else ""
+        name = project_folder_path(text) if text else ""         # 1.0.10：可以用 / 分層（子專案）
         if name != text:
             self.proj_folder.setEditText(name)
         if name == (self.doc.scheme.output.get("project_folder") or ""):
@@ -456,25 +581,26 @@ class FilePanel(QtWidgets.QTabWidget):
             folder = folder.parent
         QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(folder)))
 
-    @staticmethod
-    def _project_items() -> list:
+    def _project_items(self) -> list:
         from ....integrations import platform as plat
 
-        return plat.PROJECTS.items
+        return plat.PROJECTS.items or list(getattr(self, "_proj_items", []))
 
-    def _new_project_dialog(self):
-        """在論文庫建立新專案（需要登入，且論文庫允許你建立專案）。"""
+    def _new_project_dialog(self, parent: str = ""):
+        """在論文庫建立新專案（需要登入，且論文庫允許你建立專案）；parent = 上層專案 id → 子專案。"""
         from ....integrations import platform as plat
 
         s = plat.current_session()
         if s is None:
             QtWidgets.QMessageBox.information(self, "新專案", "請先登入量子工程平台（選單「平台」→ 登入）。")
             return None
-        dlg = NewProjectDialog(self)
+        by = {p["id"]: p for p in self._proj_items}
+        dlg = NewProjectDialog(self, parent_name=" / ".join(by[x]["name"] for x in self._chain(parent) if x in by)
+                               if parent else "")
         if not dlg.exec():
             return None
         try:
-            p = s.create_project(**dlg.values())
+            p = s.create_project(**dlg.values(), **({"parent": parent} if parent else {}))
         except Exception as e:  # noqa: BLE001
             QtWidgets.QMessageBox.warning(self, "新專案", f"建立失敗：{e}")
             return None
@@ -616,11 +742,13 @@ class NewProjectDialog(QtWidgets.QDialog):
 
     COLORS = ["#4f7cff", "#16a34a", "#d97706", "#dc2626", "#9333ea", "#0891b2", "#64748b"]
 
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, parent_name: str = "") -> None:
         super().__init__(parent)
-        self.setWindowTitle("在論文庫新增專案")
+        self.setWindowTitle(f"在「{parent_name}」底下新增子專案" if parent_name else "在論文庫新增專案")
         self.setMinimumWidth(380)
         f = QtWidgets.QFormLayout(self)
+        if parent_name:
+            f.addRow("上層專案", QtWidgets.QLabel(parent_name))
         self.name = QtWidgets.QLineEdit()
         self.name.setPlaceholderText("例如 YIG mirror coupling")
         self.short = QtWidgets.QLineEdit()

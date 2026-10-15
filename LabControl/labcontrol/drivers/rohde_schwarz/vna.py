@@ -257,36 +257,73 @@ class RohdeSchwarzZNA(Instrument, TraceAcquirer):
             self._w("FORM ASC")
             return np.array(self.transport.query(cmd).split(","), dtype=float)
 
-    def acquire(self, name: Optional[str] = None) -> np.ndarray:
-        name = name or self.trace_list()[0]
+    def _sweep_once(self) -> None:
+        """單次掃描並等完成（呼叫端要拿著 transport.lock）。"""
         t = self.transport
-        with t.lock:   # 整個量測序列不可被其他執行緒插入指令
-            trace = self._trace_name(name)
-            self._w("INIT{ch}:CONT OFF")
-            if self.clear_average and (self._averages or 0) >= 1:
-                self._w(":SENS{ch}:AVER:CLE")
-            t.write("*CLS")
-            self._w("INIT{ch}:IMM")
-            t.write("*OPC")
-            t0 = time.monotonic()
-            while True:
-                try:
-                    esr = t.query("*ESR?").strip()
-                    if esr.lstrip("+").isdigit() and (int(esr) & 1):
-                        break
-                except Exception:  # noqa: BLE001 - 掃描中查詢可能暫時逾時
-                    pass
-                if time.monotonic() - t0 > self.opc_timeout_s:
-                    if self.restore_continuous:
-                        self._w("INIT{ch}:CONT ON")
-                    raise InstrumentTimeout(f"[{self.name}] 等待掃描完成超過 {self.opc_timeout_s:.0f} s")
-                time.sleep(self.poll_s)
-            arr = self._read_numbers("CALC:DATA:TRAC? '{t}', SDAT", t=trace)
-            if self.restore_continuous:
-                self._w("INIT{ch}:CONT ON")
+        self._w("INIT{ch}:CONT OFF")
+        if self.clear_average and (self._averages or 0) >= 1:
+            self._w(":SENS{ch}:AVER:CLE")
+        t.write("*CLS")
+        self._w("INIT{ch}:IMM")
+        t.write("*OPC")
+        t0 = time.monotonic()
+        while True:
+            try:
+                esr = t.query("*ESR?").strip()
+                if esr.lstrip("+").isdigit() and (int(esr) & 1):
+                    break
+            except Exception:  # noqa: BLE001 - 掃描中查詢可能暫時逾時
+                pass
+            if time.monotonic() - t0 > self.opc_timeout_s:
+                if self.restore_continuous:
+                    self._w("INIT{ch}:CONT ON")
+                raise InstrumentTimeout(f"[{self.name}] 等待掃描完成超過 {self.opc_timeout_s:.0f} s")
+            time.sleep(self.poll_s)
+
+    def _read_sdata(self, trace: str) -> np.ndarray:
+        arr = self._read_numbers("CALC:DATA:TRAC? '{t}', SDAT", t=trace)
         if arr.size % 2:
             raise InstrumentError(f"[{self.name}] SDATa 資料長度 {arr.size} 不是偶數")
         return arr[0::2] + 1j * arr[1::2]
+
+    def acquire(self, name: Optional[str] = None) -> np.ndarray:
+        name = name or self.trace_list()[0]
+        with self.transport.lock:   # 整個量測序列不可被其他執行緒插入指令
+            trace = self._trace_name(name)
+            self._sweep_once()
+            z = self._read_sdata(trace)
+            if self.restore_continuous:
+                self._w("INIT{ch}:CONT ON")
+        return z
+
+    def acquire_many(self, names: List[str], temporary: bool = False) -> Dict[str, np.ndarray]:
+        """1.0.10：一次掃描讀好幾個 S 參數（即時數據多條 trace、連線時掃 n×n 個 port 組合）。
+        temporary=True：為了這次建立的 trace（LC_Sxx）讀完就刪掉，不留在 ZNA 畫面上。"""
+        names = list(dict.fromkeys(names))
+        with self.transport.lock:
+            before = set(self.trace_catalog()) if temporary else set()
+            old = self.options.get("auto_create_trace")
+            if temporary:
+                self.options["auto_create_trace"] = True
+            try:
+                traces = {n: self._trace_name(n) for n in names}
+            finally:
+                if temporary:
+                    self.options["auto_create_trace"] = old
+            try:
+                self._sweep_once()
+                out = {n: self._read_sdata(t) for n, t in traces.items()}
+            finally:
+                if temporary:
+                    for n, t in traces.items():
+                        if n.upper() not in before and t.startswith("LC_"):
+                            try:
+                                self._w("CALC{ch}:PAR:DEL '{t}'", t=t)
+                            except Exception:  # noqa: BLE001
+                                pass
+                if self.restore_continuous:
+                    self._w("INIT{ch}:CONT ON")
+        return out
 
     #: Labber 匯出的儀器設定名稱（與舊 save_labber.py 相同）；instruments.yaml labber_setting_names 可覆寫
     LABBER_NAMES = {"enabled": "{trace} - Enabled", "output": "Output enabled", "power": "Output power",

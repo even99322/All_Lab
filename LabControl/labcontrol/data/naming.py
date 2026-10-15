@@ -56,9 +56,17 @@ def project_folder(output: dict) -> str:
     output = output or {}
     chosen = str(output.get("project_folder") or "").strip()
     if chosen:
-        return project_folder_name(chosen)
+        return project_folder_path(chosen)
     p = output.get("lab_project") or {}
+    if isinstance(p, dict) and isinstance(p.get("path"), list) and len(p["path"]) > 1:
+        return "/".join(project_folder_name(str(x)) for x in p["path"])        # 1.0.10：子專案 → 主/子/孫
     return project_folder_name(str(p.get("name") or "") if isinstance(p, dict) else "")
+
+
+def project_folder_path(text: str) -> str:
+    """選的資料夾（子專案用 / 分層，例如「YIG/mirror」）→ 每一層各自轉成合法的資料夾名稱。"""
+    parts = [x for x in re.split(r"[\\/]+", str(text or "")) if x.strip(" .")]
+    return "/".join(project_folder_name(x) for x in parts) or project_folder_name("")
 
 
 def list_project_folders(root: str | Path | None = None) -> list:
@@ -113,7 +121,7 @@ def day_folder(root: str | Path, pattern: str = DEFAULT_PATTERN,
                now: Optional[_dt.datetime] = None, project: str = "") -> Path:
     """<root>/<pattern>：預設 <root>/<專案>/YYYY/MM/Data_MMDD。{project} = 專案資料夾名稱。"""
     now = now or _dt.datetime.now()
-    return data_root(root) / pattern.format(**_fmt_tokens(now), project=project_folder_name(project))
+    return data_root(root) / pattern.format(**_fmt_tokens(now), project=project_folder_path(project))
 
 
 def stale_date_in_filename(name: str, now: Optional[_dt.datetime] = None) -> Optional[Tuple[str, str, str]]:
@@ -152,3 +160,37 @@ def unique_filename(folder: str | Path, original: str, mode: str = "underscore")
     if max_num == 0:
         return f"{base}{fmt.format(1)}{ext}" if (folder / original).exists() else original
     return f"{base}{fmt.format(max_num + 1)}{ext}"
+
+
+#: 1.0.10：專案 / 子專案資料夾裡的標記檔（讀檔程式靠它分辨「子專案」和日期資料夾）
+MARKER = ".qel-project.json"
+
+
+def project_markers(root, project: dict) -> list:
+    """[(資料夾, 標記內容)]：數據集散地/主專案、…/主專案/子專案…（每一層一個）。"""
+    path = [str(x) for x in (project.get("path") or [project.get("name") or ""])]
+    ids = [str(x) for x in (project.get("path_ids") or [])]
+    if len(ids) != len(path):
+        ids = [""] * (len(path) - 1) + [str(project.get("id") or "")]
+    out = []
+    base = Path(root)
+    for i, name in enumerate(path):
+        if not name:
+            break
+        base = base / project_folder_name(name)
+        out.append((base, {"id": ids[i], "name": name, "path": path[:i + 1]}))
+    return out
+
+
+def write_markers(markers) -> None:
+    import json
+
+    for folder, info in markers or []:
+        f = Path(folder) / MARKER
+        try:
+            if f.is_file():
+                continue
+            Path(folder).mkdir(parents=True, exist_ok=True)
+            f.write_text(json.dumps(info, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass                          # 只是標記：寫不進去不影響存檔

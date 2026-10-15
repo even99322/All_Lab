@@ -2,7 +2,9 @@
 
   * 控制：開始、暫停 / 繼續、退回上一點、停止；手動步進模式（單次 / 循環 / 記錄並下一點）。
   * 左側通道表：掃描通道的目前值與進度、量測通道的最新結果；點量測通道切換圖上顯示的通道。
-  * 右側：最新曲線（dB / 相位 / 實部 / 虛部）與 2D 影像（最內圈 × 頻率；外圈每換一個值重畫）。
+  * 右側：最新曲線與 2D 影像（最內圈 × 頻率；外圈每換一個值重畫）。1.0.10：曲線跟即時數據一樣是 VNA 式的
+    trace / diagram——每條 trace = 通道 ＋ 格式（dB Mag、Phase、Smith、Polar、Delay…），拖 trace 名稱疊圖或放旁邊；
+    影像畫「目前的 trace」（點 trace 名稱或左邊的通道換）。
   * 量測在背景執行緒；畫面只透過 EventBus 事件更新。
 """
 from __future__ import annotations
@@ -20,6 +22,7 @@ from ....measure.runner import Runner
 from ....settings import setting
 from .. import theme
 from ..bridge import QtEventBridge
+from ..live.traces import FORMATS, FormatBar, TracePlots, is_polar, key_fmt, key_src, normalize_groups, tkey, view_data
 from ..worker import start_thread
 
 STATE_TEXT = {"idle": ("待機", "#868e96"), "preparing": ("準備中", "#1971c2"), "running": ("量測中", "#2b8a3e"),
@@ -62,6 +65,8 @@ class MonitorPanel(QtWidgets.QWidget):
         self.bridge.on("point.committed", lambda p: self.lbl_shots.setText("暫存 0 筆"))
         self.bridge.on("point.rollback", self._on_rollback)
         self.bridge.on("manual.shots", lambda p: self.lbl_shots.setText(f"暫存 {p['count']} 筆"))
+        self.bridge.on("manual.waiting", lambda p: self._show_loop(bool(p.get("loop"))))      # 1.0.10：預設循環
+        self.bridge.on("manual.loop", lambda p: self._show_loop(bool(p.get("loop"))))
         self.bridge.on("run.finished", self._on_finished)
         self.bridge.on("run.ramp", self._on_ramp)
 
@@ -95,8 +100,9 @@ class MonitorPanel(QtWidgets.QWidget):
         mr = QtWidgets.QHBoxLayout(self.manual_row)
         mr.setContentsMargins(0, 0, 0, 0)
         self.b_once = QtWidgets.QPushButton("單次量測")
-        self.b_loop = QtWidgets.QPushButton("循環量測")
+        self.b_loop = QtWidgets.QPushButton("🔁 循環量測")
         self.b_loop.setCheckable(True)
+        self.b_loop.setToolTip("手動步進時每一點預設一直重複量測（settings.yaml run_defaults.manual_loop）；按這裡停止 / 再開始")
         self.chk_retain = QtWidgets.QCheckBox("保留此點所有暫存")
         self.b_accept = QtWidgets.QPushButton("✅ 記錄並下一點")
         self.lbl_shots = QtWidgets.QLabel("暫存 0 筆")
@@ -146,11 +152,14 @@ class MonitorPanel(QtWidgets.QWidget):
             b.setCheckable(True)
             b.setChecked(True)
             tb.addWidget(b)
-        self.disp = QtWidgets.QComboBox()
-        for k, (lab, _f) in DISPLAY.items():
-            self.disp.addItem(lab, k)
-        self.disp.setCurrentIndex(max(0, self.disp.findData(setting("monitor.trace_display", "db"))))
-        tb.addWidget(self.disp)
+        # 1.0.10：跟即時數據一樣的 trace / diagram
+        self.traces = TracePlots()
+        fmt0 = {"real": "re", "imag": "im"}.get(str(setting("monitor.trace_display", "db")), "db")
+        self.traces.set_groups([[fmt0 if fmt0 in FORMATS else "db"]])
+        self.fmtbar = FormatBar(self.traces, lambda: self.show_ch or "")
+        self.fmtbar.setToolTip("點圖上的 trace 名稱選一條，這排按鈕改它的格式；＋ Trace 加一條（可以拖到別張圖）")
+        self.disp = self.fmtbar                       # 相容
+        tb.addWidget(self.fmtbar)
         tb.addStretch()
         self.b_log = QtWidgets.QToolButton()
         self.b_log.setText("訊息")
@@ -159,10 +168,9 @@ class MonitorPanel(QtWidgets.QWidget):
         tb.addWidget(self.b_log)
         pv.addLayout(tb)
         pg.setConfigOptions(antialias=True)
-        self.plot = pg.PlotWidget()
-        self.plot.showGrid(True, True, 0.25)
-        self.curve = self.plot.plot(pen=pg.mkPen(theme.c("curve"), width=1.5))
-        theme.style_plot(self.plot, (self.curve, "curve"))
+        self.traces.active_changed.connect(self._active_trace)
+        self.traces.groups_changed.connect(self._save_traces)
+        self.traces.message.connect(self._log)
         self.heat_plot = theme.style_plot(pg.PlotWidget())
         self.img = pg.ImageItem()
         try:
@@ -171,7 +179,7 @@ class MonitorPanel(QtWidgets.QWidget):
             self.img.setColorMap(pg.colormap.get("viridis"))
         self.heat_plot.addItem(self.img)
         vs = QtWidgets.QSplitter(Qt.Orientation.Vertical)
-        vs.addWidget(self.plot)
+        vs.addWidget(self.traces)
         vs.addWidget(self.heat_plot)
         pv.addWidget(vs, 1)
         split.addWidget(plots)
@@ -183,11 +191,10 @@ class MonitorPanel(QtWidgets.QWidget):
         self.log.setMaximumHeight(78)
         self.log.setStyleSheet("font-size:11px;")
         lay.addWidget(self.log)
-        self.b_line.toggled.connect(self.plot.setVisible)
+        self.b_line.toggled.connect(self.traces.setVisible)
         self.b_img.toggled.connect(self.heat_plot.setVisible)
         self.b_img.toggled.connect(lambda on: on and self.refill_heat())   # 1.0.2：再打開時補回已量的內容
         self.b_log.toggled.connect(self.log.setVisible)
-        self.disp.currentIndexChanged.connect(lambda _i: self._redraw_last())
         self._set_state("idle")
 
     # ---- 預覽（尚未開始）--------------------------------------------------------
@@ -228,6 +235,18 @@ class MonitorPanel(QtWidgets.QWidget):
         self.manual_row.setVisible(on)
         if self.runner is not None:
             self.runner.set_manual(on)
+
+    def _show_loop(self, on: bool) -> None:
+        """按鈕跟著量測端的循環狀態（每一點一進來預設就在循環）。"""
+        if not self.manual_row.isVisible() and self.runner is not None and getattr(self.runner, "manual", False):
+            self.chk_manual.blockSignals(True)
+            self.chk_manual.setChecked(True)
+            self.chk_manual.blockSignals(False)
+            self.manual_row.setVisible(True)
+        self.b_loop.blockSignals(True)
+        self.b_loop.setChecked(on)
+        self.b_loop.setText("⏹ 停止循環" if on else "🔁 循環量測")
+        self.b_loop.blockSignals(False)
 
     def _accept(self) -> None:
         if self.runner:
@@ -282,6 +301,7 @@ class MonitorPanel(QtWidgets.QWidget):
         self.progress.setValue(0)
         vec = next((c for c in ds.channels if c.vector), None)
         self.show_ch = vec.name if vec else None
+        self._restore_traces()
         self._setup_axes(ds)
 
     def _setup_axes(self, ds) -> None:
@@ -295,8 +315,8 @@ class MonitorPanel(QtWidgets.QWidget):
         span_y = (self.inner_vals[-1] - self.inner_vals[0]) or 1e-9
         self.img.setImage(np.zeros(self.heat.shape))
         self.img.setRect(QtCore.QRectF(self.x[0], self.inner_vals[0], (self.x[-1] - self.x[0]) or 1e-9, span_y))
-        self.plot.setLabel("bottom", vec.x_name, vec.x_unit)
-        self.plot.setTitle(self.show_ch)
+        self.x_unit = vec.x_unit or "Hz"
+        self.heat_plot.setTitle(self.show_ch)
         self.heat_plot.setLabel("bottom", vec.x_name, vec.x_unit)
         self.heat_plot.setLabel("left", self.inner.name, self.inner.display_unit)
         self.for_ds = ds
@@ -354,12 +374,11 @@ class MonitorPanel(QtWidgets.QWidget):
     def _draw(self, shot: Dict[str, Any], index: int, setpoints: Dict[str, float]) -> None:
         if self.show_ch is None or self.show_ch not in shot or self.x is None:
             return
-        z = np.asarray(shot[self.show_ch])
-        key = self.disp.currentData() or "db"
-        label, fn = DISPLAY[key]
-        y = fn(z)
-        self.plot.setLabel("left", label)
-        self.curve.setData(self.x, y)
+        data = {n: np.asarray(shot[n]) for n in self.vec_names if n in shot}
+        title = "　".join(f"{k} = {v * a.display_scale:.6g} {a.display_unit}"
+                         for a in getattr(self, "axes", []) for k, v in setpoints.items() if k == a.name)
+        self.traces.update_data(title, self.x, data, getattr(self, "x_unit", "Hz"))
+        y = self._heat_fn()(np.asarray(shot[self.show_ch]))
         if self.heat is None or self.runner is None:
             return
         mi = self.runner.plan.multi_index(index)
@@ -377,7 +396,7 @@ class MonitorPanel(QtWidgets.QWidget):
                               autoLevels=True)
 
     def _redraw_last(self) -> None:
-        if self.last_shot and self.heat is not None:
+        if self.last_shot and self.heat is not None and self.show_ch in self.last_shot:
             self.heat[:] = np.nan
             self.outer_key = None
             self._draw(self.last_shot, getattr(self, "last_index", 0), {})
@@ -395,7 +414,7 @@ class MonitorPanel(QtWidgets.QWidget):
             return
         try:
             plan = runner.plan
-            fn = DISPLAY[self.disp.currentData() or "db"][1]
+            fn = self._heat_fn()
             cur = self.outer_key
             if cur is None:
                 cur = tuple(plan.multi_index(ds.records[-1].index)[:-1])
@@ -415,9 +434,67 @@ class MonitorPanel(QtWidgets.QWidget):
         except Exception:  # noqa: BLE001 — 只是畫面
             pass
 
+    # ---- 1.0.10：trace（跟即時數據一樣）-------------------------------------------------
+    @property
+    def plot(self):
+        """相容：第一張圖的 PlotWidget。"""
+        cells = self.traces.canvases()
+        return cells[0].pw if cells else None
+
+    def _heat_fn(self):
+        """影像畫目前的 trace 的格式（Polar / Smith 沒辦法畫成影像 → dB）。"""
+        k = self.traces.active
+        fmt = key_fmt(k) if k and not is_polar(k) else "db"
+        x = self.x
+
+        def fn(z):
+            return view_data(fmt, x if x is not None and len(x) == np.size(z) else np.arange(np.size(z)), z)[1]
+        return fn
+
+    def _ui(self):
+        from ..live.vna_panel import _UIState
+
+        return _UIState()
+
+    def _restore_traces(self) -> None:
+        """量測開始：trace 的來源是這次的量測通道；上次的排法（同名通道）照用。"""
+        names = list(self.vec_names)
+        self.traces.set_sources(names)
+        saved = self._ui().load().get("monitor_tgroups") or []
+        groups = [[k for k in g if isinstance(k, str) and key_src(k) in names] for g in saved if isinstance(g, list)]
+        groups = normalize_groups([g for g in groups if g])
+        if not groups and self.show_ch:
+            cur = self.traces.views
+            fmts = [key_fmt(k) for k in cur] or ["db"]
+            groups = [[tkey(self.show_ch, fmts[0])]] + [[tkey(self.show_ch, f)] for f in fmts[1:]]
+        if groups:
+            self.traces.set_groups(groups)
+            src = key_src(self.traces.active)
+            if src in names:
+                self.show_ch = src
+
+    def _save_traces(self, groups) -> None:
+        if all(key_src(k) for g in groups for k in g):
+            self._ui().save(monitor_tgroups=[list(g) for g in groups])
+
+    def _active_trace(self, k: str) -> None:
+        """換了目前的 trace：影像跟著畫它的通道與格式。"""
+        src = key_src(k) if k else ""
+        if src and src in self.vec_names and src != self.show_ch and hasattr(self, "for_ds"):
+            self.show_ch = src
+            self._setup_axes(self.for_ds)
+        if self.heat is not None:
+            self._redraw_last()
+
     def _on_table_click(self, it: QtWidgets.QTreeWidgetItem, _col: int) -> None:
+        """點左邊的量測通道 = 目前的 trace 改畫這個通道（像 VNA 的 Meas 鍵）。"""
         name = it.data(0, Qt.ItemDataRole.UserRole)
-        if name and name in self.vec_names and name != self.show_ch and hasattr(self, "for_ds"):
+        if not name or name not in self.vec_names or not hasattr(self, "for_ds"):
+            return
+        k = self.traces.active
+        if k and key_src(k) != name:
+            self.traces.retype(k, src=name)
+        elif name != self.show_ch:
             self.show_ch = name
             self._setup_axes(self.for_ds)
             self._redraw_last()

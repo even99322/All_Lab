@@ -115,8 +115,10 @@ class LocalBackend:
     def vnas(self) -> List[Dict[str, Any]]:
         from ..core.capabilities import TraceAcquirer
 
+        from ..core import vna_ports
+
         return [{"name": n, "label": i.options.get("label", n), "traces": list(i.trace_list()),
-                 "ports": getattr(i, "ports", None)}
+                 "ports": vna_ports.merge(n, i.ports) if getattr(i, "ports", None) else None}
                 for n, i in self.station.instruments.items() if i.connected and isinstance(i, TraceAcquirer)]
 
     def vna_ports(self, name: str) -> Dict[str, Any]:
@@ -128,7 +130,38 @@ class LocalBackend:
             raise RuntimeError(f"{name} 正在量測中使用，稍後再偵測")
         if not inst.connected:
             self.station.connect([name])
-        return inst.detect_ports()
+        from ..core import vna_ports
+
+        info = inst.detect_ports()
+        if not vna_ports.stored(name).get("levels"):          # 1.0.10：還沒掃過哪些 port 有接線 → 掃一次
+            try:
+                return vna_ports.scan(inst)
+            except Exception:  # noqa: BLE001 — 掃不到照樣顯示全部
+                pass
+        return vna_ports.merge(name, info)
+
+    def vna_scan(self, name: str) -> Dict[str, Any]:
+        """1.0.10：用目前設定掃 n×n 個 S 參數，找出有接線的 port 組合。"""
+        inst = self.station.instruments[name]
+        if self.station.lease_holder(name):
+            raise RuntimeError(f"{name} 正在量測中使用，稍後再掃描")
+        if not inst.connected:
+            self.station.connect([name])
+        from ..core import vna_ports
+
+        info = vna_ports.scan(inst)
+        self.station.bus.publish("vna.ports", name=name, info=info)
+        return info
+
+    def vna_set_visible(self, name: str, params: Optional[List[str]]) -> Dict[str, Any]:
+        """1.0.10：儀器伺服器選即時數據要顯示的 S 參數（None = 用掃描結果）。"""
+        from ..core import vna_ports
+
+        vna_ports.set_visible(name, params)
+        inst = self.station.instruments[name]
+        info = vna_ports.merge(name, getattr(inst, "ports", None) or {})
+        self.station.bus.publish("vna.ports", name=name, info=info)
+        return info
 
     def vna_catalog(self, name: str) -> Dict[str, List[str]]:
         inst = self.station.instruments[name]
@@ -152,6 +185,34 @@ class LocalBackend:
             if create:
                 inst.options["auto_create_trace"] = old
         return np.asarray(x.values, float), z, x.unit
+
+    def vna_traces(self, name: str, traces: List[str], create: bool = False
+                   ) -> Tuple[np.ndarray, Dict[str, np.ndarray], str]:
+        """1.0.10：一次掃描讀好幾個 S 參數（即時數據有多條 trace 時）。"""
+        traces = list(dict.fromkeys(traces))
+        inst = self.station.instruments[name]
+        if len(traces) == 1 or not hasattr(inst, "acquire_many"):
+            out: Dict[str, np.ndarray] = {}
+            x = None
+            unit = "Hz"
+            for tr in traces:
+                x, out[tr], unit = self.vna_trace(name, tr, create)
+            return x, out, unit
+        old = inst.options.get("auto_create_trace")
+        if create:
+            inst.options["auto_create_trace"] = True
+        if self.station.lease_holder(name):
+            raise RuntimeError(f"{name} 正在量測中使用，即時監控暫停讀取")
+        stim = getattr(inst, "_stimulus", None)
+        if isinstance(stim, dict):
+            stim.clear()
+        try:
+            x = inst.x_axis(traces[0])
+            zs = {k: np.asarray(v) for k, v in inst.acquire_many(traces).items()}
+        finally:
+            if create:
+                inst.options["auto_create_trace"] = old
+        return np.asarray(x.values, float), zs, x.unit
 
 
 class RemoteBackend:
@@ -242,3 +303,27 @@ class RemoteBackend:
 
         r = self.node.call("vna_trace", name=name, trace=trace, create=create, timeout=180)
         return np.asarray(dec_array(r["x"]), float), np.asarray(dec_array(r["z"])), r.get("unit", "Hz")
+
+    def vna_traces(self, name: str, traces: List[str], create: bool = False
+                   ) -> Tuple[np.ndarray, Dict[str, np.ndarray], str]:
+        from .codec import dec_array
+
+        traces = list(dict.fromkeys(traces))
+        try:
+            r = self.node.call("vna_traces", name=name, traces=traces, create=create, timeout=180)
+        except Exception as e:  # noqa: BLE001 — 舊版節點沒有 vna_traces：一條一條讀
+            if "vna_traces" not in str(e) and "unknown" not in str(e).lower() and "不認得" not in str(e):
+                raise
+            out = {}
+            x, unit = None, "Hz"
+            for tr in traces:
+                x, out[tr], unit = self.vna_trace(name, tr, create)
+            return x, out, unit
+        return (np.asarray(dec_array(r["x"]), float), {k: np.asarray(dec_array(v)) for k, v in r["z"].items()},
+                r.get("unit", "Hz"))
+
+    def vna_scan(self, name: str) -> Dict[str, Any]:
+        return self.node.call("vna_scan", name=name, timeout=180)
+
+    def vna_set_visible(self, name: str, params: Optional[List[str]]) -> Dict[str, Any]:
+        return self.node.call("vna_set_visible", name=name, params=params)

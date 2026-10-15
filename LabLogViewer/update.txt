@@ -1829,3 +1829,15 @@ Date: 2026-10-14
     file; Windows: installer [Registry] HKCU\Software\Classes\lablogviewer and re-registration at start; macOS:
     CFBundleURLTypes + QFileOpenEvent(url). Resolved off the GUI thread with time limits (lab_share.find).
   - tests/test_v1_0_5_viewer.py, tests/test_v1_0_5_link.py.
+
+v1.0.6 - SUB-PROJECTS
+Date: 2026-10-15
+
+  - lab_share: sub_projects(folder) (sub-folders that are not date folders yyyy / mm / Data_mmdd, not . or _;
+    listed in a worker thread with a time limit), project_chain(root, path), is_date_folder; MARKER name of the
+    .qel-project.json that Lab Control 1.0.10 writes into project folders.
+  - Browser: the project folder combo sits in a FlowLayout (app/gui/flow_layout.py); below a chosen project with
+    sub-projects one more combo per level ("(only <name>)" + sub-projects), wrapping to the next line when the
+    panel is narrow; AdjustToContents so names are not cut. Opening a folder inside a project (e.g. …/2026/10)
+    keeps the chain selected.
+  - tests/test_v1_0_6_subprojects.py.

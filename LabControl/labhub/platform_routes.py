@@ -297,7 +297,8 @@ def _projects(h: Handler) -> None:
 def _create_project(h: Handler) -> None:
     b = h._json_body()
     h._json(dict(_plat(h).create_project(h.session(), str(b.get("name") or ""), str(b.get("short_name") or ""),
-                                         str(b.get("description") or ""), str(b.get("color") or "")), ok=True))
+                                         str(b.get("description") or ""), str(b.get("color") or ""),
+                                         str(b.get("parent") or b.get("parent_id") or "")), ok=True))
 
 
 @route("GET", P + r"/projects/([^/]+)", auth="any")
@@ -319,7 +320,7 @@ def _project_tags(h: Handler, pid: str) -> None:
 def _project_files(h: Handler, pid: str) -> None:
     plat = _plat(h)
     name = plat.project_name(pid)
-    h._json({"project": pid, "folder": plat.folder_name(name, pid), "files": plat.project_files(pid)})
+    h._json({"project": pid, "folder": plat.folder_path(pid, name), "files": plat.project_files(pid)})
 
 
 # ---- 專案的量測範本（0.0.31）：每個論文庫專案一組，所有量測電腦共用 ----------------------------------

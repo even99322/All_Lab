@@ -88,10 +88,15 @@ class TraceCanvas(QtWidgets.QWidget):
     markers_changed = pyqtSignal()
 
     def __init__(self, view_fn: Callable, label_fn: Callable[[str], str], unit_fn: Callable[[str], str],
-                 short_fn: Optional[Callable[[str], str]] = None, parent=None) -> None:
+                 short_fn: Optional[Callable[[str], str]] = None, parent=None,
+                 polar_fn: Optional[Callable[[str], bool]] = None, smith_fn: Optional[Callable[[str], bool]] = None
+                 ) -> None:
         super().__init__(parent)
         self.view_fn, self.label_fn, self.unit_fn = view_fn, label_fn, unit_fn
         self.short_fn = short_fn or label_fn
+        self.polar_fn = polar_fn or (lambda k: k == "iq")          # 1.0.10：Polar / Smith（Re–Im 平面）
+        self.smith_fn = smith_fn or (lambda k: False)
+        self.smith_items: List[Any] = []
         v = QtWidgets.QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(2)
@@ -145,7 +150,39 @@ class TraceCanvas(QtWidgets.QWidget):
         return self.vb2 if side == "R" and self.vb2 is not None else self.vb
 
     def is_iq(self) -> bool:
-        return any(k == "iq" for k, _s in self.series)
+        return any(self.polar_fn(k) for k, _s in self.series)
+
+    def is_smith(self) -> bool:
+        return any(self.smith_fn(k) for k, _s in self.series)
+
+    def _smith_grid(self, on: bool) -> None:
+        """Smith 圖的格線：等電阻圓 r = 0, 0.2, 0.5, 1, 2, 5 與等電抗弧 x = ±0.2 … ±5。"""
+        if bool(self.smith_items) == on:
+            return
+        for it in self.smith_items:
+            self.vb.removeItem(it)
+        self.smith_items = []
+        self.pw.showGrid(x=not on, y=not on, alpha=0.25)
+        if not on:
+            return
+        pen = pg.mkPen(theme.c("plot_fg"), width=0.6)
+        pen.setColor(pg.mkColor(theme.c("plot_fg")))
+        col = pen.color()
+        col.setAlpha(90)
+        pen.setColor(col)
+        t = np.concatenate([-np.logspace(2, -3, 200), np.logspace(-3, 2, 200)])
+        for r in (0.0, 0.2, 0.5, 1.0, 2.0, 5.0):
+            g = (r + 1j * t - 1) / (r + 1j * t + 1)
+            self.smith_items.append(pg.PlotDataItem(g.real, g.imag, pen=pen))
+        s = np.concatenate([[0.0], np.logspace(-3, 3, 300)])
+        for x in (0.2, 0.5, 1.0, 2.0, 5.0):
+            for sign in (1, -1):
+                g = (s + 1j * sign * x - 1) / (s + 1j * sign * x + 1)
+                self.smith_items.append(pg.PlotDataItem(g.real, g.imag, pen=pen))
+        self.smith_items.append(pg.PlotDataItem([-1, 1], [0, 0], pen=pen))
+        for it in self.smith_items:
+            it.setZValue(-10)
+            self.vb.addItem(it)
 
     def set_series(self, series: List[Tuple[str, str]]) -> None:
         series = list(series)
@@ -174,10 +211,12 @@ class TraceCanvas(QtWidgets.QWidget):
             self.curves[k] = c
             self.offsets.setdefault(k, 0.0)
         left = [k for k, s in series if s == "L"]
-        self.plot.setLabel("left", " / ".join(self.label_fn(k) for k in left))      # 標題已含單位
+        self.plot.setLabel("left", " / ".join(dict.fromkeys(self.label_fn(k) for k in left)))      # 標題已含單位
         if right:
-            self.plot.setLabel("right", " / ".join(self.label_fn(k) for k in right))
+            self.plot.setLabel("right", " / ".join(dict.fromkeys(self.label_fn(k) for k in right)))
         self.legend.setVisible(len(series) > 1)
+        self.vb.setAspectLocked(self.is_iq())
+        self._smith_grid(self.is_smith())
         self._style()
         if self.last is not None:
             self.update_data(*self.last)
@@ -185,7 +224,7 @@ class TraceCanvas(QtWidgets.QWidget):
 
     def _legend_name(self, k: str) -> str:
         off = self.offsets.get(k, 0.0)
-        return self.label_fn(k) + (f"（偏移 {off:+.4g}）" if off else "")
+        return self.short_fn(k) + (f"（偏移 {off:+.4g}）" if off else "")
 
     def _style(self) -> None:
         self.pw.setBackground(theme.c("plot_bg"))
@@ -221,8 +260,10 @@ class TraceCanvas(QtWidgets.QWidget):
         if self.is_iq():
             self.plot.setLabel("bottom", "Real")
             self.vb.setAspectLocked(True)
+            self._smith_grid(self.is_smith())
         else:
             self.vb.setAspectLocked(False)
+            self._smith_grid(False)
             self.plot.setLabel("bottom", "頻率", units=unit or "Hz")
         self._update_markers()
 
@@ -281,10 +322,11 @@ class TraceCanvas(QtWidgets.QWidget):
 
     # ---- markers ------------------------------------------------------------------------
     def add_marker_at(self, x: float, y: float = 0.0) -> None:
-        if self.is_iq():                                 # IQ 圖：最近的量測點 → 它的頻率
-            if "iq" not in self.data or not len(getattr(self, "freq", [])):
+        if self.is_iq():                                 # Polar / Smith：最近的量測點 → 它的頻率
+            k = next((k for k in self.data if self.polar_fn(k) and len(self.data[k][0])), None)
+            if k is None or not len(getattr(self, "freq", [])):
                 return
-            xx, yy = self.data["iq"]
+            xx, yy = self.data[k]
             i = int(np.nanargmin(np.hypot(xx - x, yy - y)))
             x = float(self.freq[i])
         self.add_marker(x)
@@ -326,8 +368,8 @@ class TraceCanvas(QtWidgets.QWidget):
             fx = float(m.value())
             vals = {}
             for k, (xx, yy) in self.data.items():
-                if k == "iq":
-                    if f is not None and len(f):
+                if self.polar_fn(k):
+                    if f is not None and len(f) and len(xx) == len(f):
                         j = int(np.argmin(np.abs(f - fx)))
                         vals[k] = complex(xx[j], yy[j])
                 elif len(xx):
@@ -345,7 +387,7 @@ class TraceCanvas(QtWidgets.QWidget):
             parts = []
             for k, v in mv["values"].items():
                 if isinstance(v, complex):
-                    parts.append(f"IQ {v.real:.4g}{v.imag:+.4g}j")
+                    parts.append(f"{self.short_fn(k)} {v.real:.4g}{v.imag:+.4g}j")
                     dot = pg.ScatterPlotItem([v.real], [v.imag], size=9, brush=pg.mkBrush(mv["color"]), pen=None)
                     txt = pg.TextItem(mv["name"], color=mv["color"], anchor=(0, 1))
                     txt.setPos(v.real, v.imag)

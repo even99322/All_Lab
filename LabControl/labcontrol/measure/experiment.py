@@ -24,7 +24,8 @@ from ..core.errors import ConfigError
 from ..core.registry import PROCEDURES, WRITERS
 from ..core.station import Station
 from ..data.dataset import Dataset
-from ..data.naming import data_root, day_folder, folder_pattern, project_folder, stale_date_in_filename, unique_filename
+from ..data.naming import (data_root, day_folder, folder_pattern, project_folder, project_markers,  # noqa: F401
+                           stale_date_in_filename, unique_filename, write_markers)
 from ..data.writers.hdf5_native import HDF5Writer
 from ..settings import setting
 from .hooks import build_hook
@@ -48,6 +49,7 @@ class OutputPlan:
     split_by: List[str] = field(default_factory=list)                 # 這個輸出的分檔軸（最外面幾層）
     extras: List["OutputPlan"] = field(default_factory=list)          # 其他 Data 方塊（output.extra）
     main_files: List[Path] = field(default_factory=list)              # 不分檔時存好的檔（去背用）
+    project_dirs: List[Tuple[Path, Dict[str, Any]]] = field(default_factory=list)   # 1.0.10：專案 / 子專案資料夾標記
 
 
 def split_name(pattern: str, stem: str, index: int, label: str) -> str:
@@ -97,8 +99,8 @@ class Experiment:
         o = self.output_cfg
         # 優先順序：呼叫參數 > 實驗 output: > settings.yaml data:
         root = data_root(root or o.get("root"))
-        folder = day_folder(root, folder_pattern(o.get("folder_pattern")), now,
-                            project_folder({**o, "lab_project": self.output_project()}))
+        proj = self.output_project()
+        folder = day_folder(root, folder_pattern(o.get("folder_pattern")), now, project_folder({**o, "lab_project": proj}))
         fname = file_name or o.get("file_name") or f"{self.name}.hdf5"
         raw = None
         if o.get("raw", raw_backup()):
@@ -110,6 +112,8 @@ class Experiment:
                           collision=o.get("collision") or setting("data.collision", "underscore"),
                           raw_path=raw, exporters=exporters, date_warning=stale_date_in_filename(fname, now),
                           split_pattern=pattern, label_style=style, split_by=list(self.split_by))
+        if folder_pattern(o.get("folder_pattern")).startswith("{project}") and proj and not o.get("project_folder"):
+            plan.project_dirs = project_markers(root, proj)
         for e in self.extra_cfg:
             plan.extras.append(OutputPlan(folder=folder, file_name=e.get("file_name") or f"{Path(fname).stem}_2.hdf5",
                                           collision=e.get("collision") or plan.collision,
@@ -143,8 +147,14 @@ class Experiment:
     def output_project(self) -> Dict[str, str]:
         """這次量測屬於論文庫的哪個專案：{"id", "name"}（檔案設置的「論文庫專案」）；沒有 → {}。"""
         p = (self.config.get("output") or {}).get("lab_project") or {}
-        return {"id": str(p.get("id") or ""), "name": str(p.get("name") or "")} if isinstance(p, dict) and p.get("id") \
-            else {}
+        if not (isinstance(p, dict) and p.get("id")):
+            return {}
+        out: Dict[str, Any] = {"id": str(p.get("id") or ""), "name": str(p.get("name") or "")}
+        if isinstance(p.get("path"), list) and len(p["path"]) > 1:        # 1.0.10：子專案（上層的名稱與 id）
+            out["path"] = [str(x) for x in p["path"]]
+            if isinstance(p.get("path_ids"), list):
+                out["path_ids"] = [str(x) for x in p["path_ids"]]
+        return out
 
     def output_tags(self) -> List[str]:
         """這次量測的標籤（檔案設置的標籤 = 平台共用標籤；.nc 檔也寫同樣的 tags）。"""
@@ -167,6 +177,7 @@ class Experiment:
             self.station.bus.log("⚠️ 無有效量測數據，取消存檔", "warning")
             return []
         output.folder.mkdir(parents=True, exist_ok=True)
+        write_markers(output.project_dirs)
         paths: List[Path] = []
         for plan in [output, *output.extras]:
             paths.extend(self._export_plan(dataset, plan))
@@ -279,6 +290,7 @@ class Experiment:
     def export_segment(self, seg: Dataset, output: OutputPlan, key: tuple) -> List[Path]:
         """匯出一個段落（外圈某個值）。已匯出過的段落覆寫同一個檔名。"""
         output.folder.mkdir(parents=True, exist_ok=True)
+        write_markers(output.project_dirs)
         index, label = segment_label([a.spec() for a in self.plan.axes], output.split_by or self.split_by, key,
                                      by_index=True, style=output.label_style)
         base = split_name(output.split_pattern, Path(output.file_name).stem, index, label)

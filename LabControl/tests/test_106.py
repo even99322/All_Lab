@@ -213,32 +213,38 @@ def test_diagrams_overlay_and_side_by_side_together(window):
     w.popout_live()
     vna = w.live.vna
     vna.set_compact(False)
+    sp = vna.trace()
+    K = lambda f: f"{sp}:{f}"  # noqa: E731
+    vna.overlay.setChecked(False)
     vna.set_views(["db", "phase", "lin"])
     p = vna.plots
-    vna.overlay.setChecked(False)
-    assert p.groups == [["db"], ["phase"], ["lin"]]
+    assert p.groups == [[K("db")], [K("phase")], [K("lin")]]
     msgs = []
     vna.message.connect(msgs.append)
-    # 曲線名稱拖到 dB 圖中間 → 疊在一起；其他圖照樣並排
-    assert p.move_trace("phase", "db", DROP_CENTER)
-    assert p.groups == [["db", "phase"], ["lin"]] and vna.groups == p.groups
-    cv = p.cell_for("phase").canvas
-    assert cv.series == [("db", "L"), ("phase", "R")]
+    # trace 名稱拖到 dB 圖中間 → 疊在一起；其他圖照樣並排
+    assert p.move_trace(K("phase"), K("db"), DROP_CENTER)
+    assert p.groups == [[K("db"), K("phase")], [K("lin")]] and vna.groups == p.groups
+    cv = p.cell_for(K("phase")).canvas
+    assert cv.series == [(K("db"), "L"), (K("phase"), "R")]
     # 整張圖拖到另一張的左邊 / 上面 → 放在它前面
-    assert p.move_cell("lin", "db+phase", DROP_BEFORE)
-    assert p.groups == [["lin"], ["db", "phase"]]
+    both = f"{K('db')}+{K('phase')}"
+    assert p.move_cell(K("lin"), both, DROP_BEFORE)
+    assert p.groups == [[K("lin")], [K("db"), K("phase")]]
     grid = p.grid
-    assert grid.getItemPosition(grid.indexOf(p.cells["lin"]))[:2] == (0, 0)
-    # 第三種單位疊不上去；IQ 只能自己一張
-    assert not p.move_cell("lin", "db+phase", DROP_CENTER) and "兩種單位" in msgs[-1]
-    vna._toggle_view("iq", True)
-    assert ["iq"] in p.groups and not p.move_trace("iq", "lin", DROP_CENTER)
-    # 一條曲線拉出來放旁邊、右鍵分開
-    assert p.move_trace("db", "lin", DROP_AFTER)
-    assert p.groups[:3] == [["lin"], ["db"], ["phase"]]
-    p.move_trace("phase", "db", DROP_CENTER)
-    p.split_out("phase")
-    assert ["phase"] in p.groups and ["db"] in p.groups
+    assert grid.getItemPosition(grid.indexOf(p.cells[K("lin")]))[:2] == (0, 0)
+    # 第三種單位疊不上去；Polar 只能跟 Polar / Smith 疊
+    assert not p.move_cell(K("lin"), both, DROP_CENTER) and "兩種單位" in msgs[-1]
+    p.add_trace(sp, "iq")
+    assert [K("iq")] in p.groups and not p.move_trace(K("iq"), K("lin"), DROP_CENTER)
+    p.add_trace(sp, "smith")                                    # Smith 疊在 Polar 那張
+    assert [K("iq"), K("smith")] in p.groups and p.cell_for(K("smith")).canvas.smith_items
+    p.remove_trace(K("smith"))
+    # 一條 trace 拉出來放旁邊、右鍵分開
+    assert p.move_trace(K("db"), K("lin"), DROP_AFTER)
+    assert p.groups[:3] == [[K("lin")], [K("db")], [K("phase")]]
+    p.move_trace(K("phase"), K("db"), DROP_CENTER)
+    p.split_out(K("phase"))
+    assert [K("phase")] in p.groups and [K("db")] in p.groups
     # 版面：上下 / 左右
     vna.layout_box.setCurrentIndex(vna.layout_box.findData("cols"))
     cols = [grid.getItemPosition(grid.indexOf(p.cell_for(g[0])))[:2] for g in p.groups]
@@ -248,14 +254,14 @@ def test_diagrams_overlay_and_side_by_side_together(window):
     assert rows == [(i, 0) for i in range(len(p.groups))]
     # 分組與版面記在 live_ui.json，下次打開一樣
     saved = _UIState().load()
-    assert saved["groups"] == p.groups and saved["layout"] == "rows"
-    # 「全部疊圖」：能疊的疊在一張，IQ 另開
+    assert saved["tgroups"] == p.groups and saved["layout"] == "rows"
+    # 「全部疊圖」：能疊的疊在一張，第三種單位與 Polar 另開
     vna.overlay.setChecked(True)
-    assert p.groups == [["lin", "db"], ["phase"], ["iq"]]                # 第三種單位與 IQ 另開
+    assert len(p.groups) == 3 and [K("iq")] in p.groups and len(p.groups[0]) == 2
     vna.overlay.setChecked(False)
     assert all(len(g) == 1 for g in p.groups)
     # 拖放：放在圖的中間 = 疊圖區，邊緣 = 放旁邊
-    cell = p.cells["db"]
+    cell = p.cells[K("db")]
     cell.resize(400, 300)
     assert cell.zone_at(QtCore.QPoint(200, 150))[0] == DROP_CENTER
     assert cell.zone_at(QtCore.QPoint(10, 150)) == (DROP_BEFORE, "left")

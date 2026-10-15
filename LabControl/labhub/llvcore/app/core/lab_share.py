@@ -114,3 +114,48 @@ def project_folders(root: str | Path) -> list[str]:
     except OSError:
         return []
 
+
+
+# ---- v1.0.6: sub-projects (Lab Control 1.0.10 saves into 數據集散地/<project>/<sub-project>/…/yyyy/mm/Data_mmdd) ----
+MARKER = ".qel-project.json"
+import re as _re  # noqa: E402
+
+_DATE_LIKE = _re.compile(r"^(\d{2}|\d{4}|\d{8}|Data_\d+.*)$", _re.IGNORECASE)
+
+
+def is_date_folder(name: str) -> bool:
+    """yyyy / mm / Data_mmdd style folders (where the data itself lives), not sub-projects."""
+    return bool(_DATE_LIKE.match(name))
+
+
+def sub_projects(folder: str | Path, timeout: float = 3.0) -> list[str]:
+    """Sub-project folders directly inside a project folder: every sub-folder that is not a date folder
+    (yyyy, mm, Data_mmdd) and does not start with . or _. A slow share answers within ``timeout`` or not at all."""
+    result: dict = {}
+
+    def probe() -> None:
+        try:
+            result["names"] = sorted((d.name for d in Path(folder).iterdir() if d.is_dir()
+                                      and not d.name.startswith((".", "_")) and not is_date_folder(d.name)),
+                                     key=str.casefold)
+        except OSError:
+            result["names"] = []
+    worker = threading.Thread(target=probe, daemon=True)
+    worker.start()
+    worker.join(timeout)
+    return list(result.get("names") or [])
+
+
+def project_chain(root: str | Path, path: str | Path) -> list[str]:
+    """Folder names from the 數據集散地 root down to ``path``, stopping at the first date folder
+    (…/YIG/mirror/2026/10 → ["YIG", "mirror"]). Outside the root → []."""
+    try:
+        rel = Path(path).resolve().relative_to(Path(root).resolve())
+    except (OSError, ValueError):
+        return []
+    out = []
+    for part in rel.parts:
+        if part.startswith((".", "_")) or is_date_folder(part):
+            break
+        out.append(part)
+    return out

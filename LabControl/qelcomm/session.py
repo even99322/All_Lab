@@ -242,10 +242,13 @@ class Session:
         """專案詳細：數據標籤（tag_info，含論文數）、論文（papers，每篇有 url）、數據數。"""
         return self.request("GET", f"/api/platform/projects/{urllib.parse.quote(str(pid), safe='')}")
 
-    def create_project(self, name: str, short_name: str = "", description: str = "", color: str = "") -> Dict[str, Any]:
-        """在論文庫建立專案（需要論文庫的權限）。"""
-        return self.request("POST", "/api/platform/projects", {"name": name, "short_name": short_name,
-                                                               "description": description, "color": color})
+    def create_project(self, name: str, short_name: str = "", description: str = "", color: str = "",
+                       parent: str = "") -> Dict[str, Any]:
+        """在論文庫建立專案（需要論文庫的權限）；parent = 上層專案 id → 子專案（1.0.10）。"""
+        body = {"name": name, "short_name": short_name, "description": description, "color": color}
+        if parent:
+            body["parent"] = str(parent)
+        return self.request("POST", "/api/platform/projects", body)
 
     def add_project_tags(self, pid: str, tags: Iterable[str]) -> List[str]:
         return self.request("PUT", f"/api/platform/projects/{urllib.parse.quote(str(pid), safe='')}/tags",

@@ -625,8 +625,17 @@ class BrowserWindow(QMainWindow):
 
         self.project_combo = _Combo()
         self.project_combo.setObjectName("browserProjectFolder")
+        self.project_combo.setSizeAdjustPolicy(_Combo.AdjustToContents)
         self.project_combo.activated.connect(self._project_chosen)
-        folder_layout.addWidget(self.project_combo)
+        # v1.0.6: sub-projects — when the chosen project folder has sub-projects, another combo box appears to the
+        # right (wrapping to the next line when there is no room), one per level
+        from app.gui.flow_layout import FlowLayout
+
+        self.project_box = QWidget()
+        self.project_flow = FlowLayout(self.project_box, spacing=4)
+        self.project_flow.addWidget(self.project_combo)
+        self.sub_project_combos: list = []
+        folder_layout.addWidget(self.project_box)
         QTimer.singleShot(0, self._refresh_project_combo)
         self.folder_tree = QTreeWidget()
         self.folder_tree.setHeaderHidden(True)
@@ -1059,14 +1068,58 @@ class BrowserWindow(QMainWindow):
             for name in lab_share.project_folders(root):
                 combo.addItem(name, str(root / name))
             cur = Path(self.scanner_root).resolve() if self.scanner_root else None
+            chain = lab_share.project_chain(root, cur) if cur is not None else []
+            want = str((root / chain[0]).resolve()) if chain else (str(Path(root).resolve()) if cur == Path(
+                root).resolve() else None)
             for i in range(combo.count()):
-                if cur is not None and combo.itemData(i) and Path(combo.itemData(i)).resolve() == cur:
+                if want is not None and combo.itemData(i) and str(Path(combo.itemData(i)).resolve()) == want:
                     combo.setCurrentIndex(i)
                     break
             else:
                 combo.setCurrentIndex(-1)
                 combo.setPlaceholderText(self.localizer.text("project.choose"))
         combo.blockSignals(False)
+        self._build_sub_project_combos(root, chain if root is not None and self.scanner_root else [])
+
+    def _build_sub_project_combos(self, root, chain: list) -> None:
+        """One combo box per level below the chosen project folder that has sub-projects (v1.0.6)."""
+        from PySide6.QtWidgets import QComboBox as _Combo
+
+        from app.core import lab_share
+
+        for c in self.sub_project_combos:
+            self.project_flow.removeWidget(c)
+            c.hide()
+            c.deleteLater()
+        self.sub_project_combos = []
+        if root is None:
+            return
+        folder = Path(root)
+        for level, name in enumerate(chain):
+            folder = folder / name
+            subs = lab_share.sub_projects(folder)
+            if not subs:
+                break
+            c = _Combo()
+            c.setObjectName(f"browserSubProject{level + 1}")
+            c.setSizeAdjustPolicy(_Combo.AdjustToContents)
+            c.addItem(self.localizer.text("project.only").format(name=name), str(folder))
+            for s in subs:
+                c.addItem(s, str(folder / s))
+            nxt = chain[level + 1] if level + 1 < len(chain) else None
+            c.setCurrentIndex(subs.index(nxt) + 1 if nxt in subs else 0)
+            c.activated.connect(lambda _i, c=c: self._sub_project_chosen(c))
+            self.project_flow.addWidget(c)
+            c.show()
+            self.sub_project_combos.append(c)
+            if nxt not in subs:
+                break
+        self.project_box.updateGeometry()
+
+    def _sub_project_chosen(self, combo) -> None:
+        path = combo.currentData()
+        if path and (not self.scanner_root or Path(path).resolve() != Path(self.scanner_root).resolve()):
+            self.open_database(path)
 
     def _project_chosen(self, index: int) -> None:
         path = self.project_combo.itemData(index) if index >= 0 else None

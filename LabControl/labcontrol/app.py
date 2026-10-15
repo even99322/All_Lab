@@ -111,6 +111,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     try:
         st = Station.from_lab(a.lab, simulate=True if a.sim else None)
+        from .core import vna_ports
+
+        vna_ports.install(st)                     # 1.0.10：VNA 一連線就掃描哪些 port 有接線
     except Exception as e:  # noqa: BLE001 — 設定檔錯誤：告訴使用者去哪裡改
         QtWidgets.QMessageBox.critical(None, APP_NAME, f"讀取儀器清單失敗：\n{e}\n\n設定資料夾：{lab_home()}")
         return 1

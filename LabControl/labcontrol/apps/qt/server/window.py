@@ -467,6 +467,9 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
                 elif a.isEnabled():
                     m.addAction(a)
             d = it.data(0, ITEM)
+            if d and self._is_vna(d) and d.get("connected"):
+                m.addSeparator()
+                m.addAction("S 參數顯示…", lambda d=d, it=it: self.port_visibility(d, it))
             if d and d.get("network") and self.hub is not None:
                 sub = m.addMenu("移到群組")
                 cur = GroupTree.group_of(it).data(0, GROUP)
@@ -476,6 +479,31 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
                     a = sub.addAction(tg["title"], lambda tg=tg, d=d: self.move_to(d, tg))
                     a.setEnabled(tg["id"] == UNASSIGNED or tg["local"] or bool(tg["node"] and tg["online"]))
         m.exec(self.tree.viewport().mapToGlobal(pos))
+
+    def _is_vna(self, d: Dict[str, Any]) -> bool:
+        inst = self.station.instruments.get(d.get("name") or "") if d.get("local") else None
+        if inst is not None:
+            return getattr(inst, "MEASURE_KIND", "") == "vna" and hasattr(inst, "detect_ports")
+        drv = str(d.get("driver") or "").lower()
+        return any(x in drv for x in ("zna", "znb", "vna"))
+
+    def port_visibility(self, d: Dict[str, Any], it=None) -> QtWidgets.QDialog:
+        """1.0.10：即時數據要顯示這台 VNA 的哪些 S 參數（連線時自動掃描，只顯示有接線的）。"""
+        from ....remote.backend import LocalBackend
+        from .ports_dialog import PortVisibilityDialog
+
+        if d.get("local"):
+            be = LocalBackend(self.station)
+        else:
+            g = GroupTree.group_of(it).data(0, GROUP) if it is not None else None
+            if not g or not g.get("node"):
+                self._log("這台 VNA 不在本機也不在量測電腦上")
+                return None
+            be = self._node_backend(g["node"])
+        dlg = PortVisibilityDialog(be, d["name"], self)
+        dlg.setModal(False)
+        dlg.show()
+        return dlg
 
     def _double(self, it, _col) -> None:
         if it.data(0, ITEM) is not None:

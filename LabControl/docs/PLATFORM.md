@@ -229,6 +229,22 @@ iPhone / iPad Safari「加入主畫面」）。
   「在應用程式中開啟」。新版 Edge 的安裝在「… → 更多工具 → 應用程式」。
 - iPhone / iPad 裝好的 App 有自己的登入（第一次開要登入，之後 30 天不用）。舊的 `/m` 捷徑仍可用。
 
+### 0l. 1.0.10：VNA 式 trace、只顯示有接線的 port、子專案
+
+```
+trace = 來源（S21 / 量測通道）＋ 格式（db phase smith iq lin uphase re im delay），key "S21:db"
+diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Smith 只跟 Polar / Smith 疊）
+即時數據 ── backend.vna_traces(name, [S21, S11], create) ── ZNA.acquire_many（一次掃描）
+連線 ── instrument.connected ── vna_ports.scan：n×n 個 S 參數 → LAB/vna_ports.json {levels, wired, visible}
+子專案 ── 論文庫 projects.parent_id ── Hub projects[].parent / path / folder（主/子/孫）── 方案 output.lab_project.path
+       └─ 數據集散地/主/子/…/yyyy/mm/Data_mmdd（每層 .qel-project.json）── 讀檔程式 lab_share.sub_projects()
+```
+
+- 有接線：穿透 Sij 的 |S| 中位數 > `live.port_threshold_db`（−60 dB）；那些 port 的 Sii 也顯示；一個都沒有 → 全部顯示。
+  儀器伺服器「S 參數顯示…」可以手動勾選（`visible`），或回到掃描結果。
+- 手動步進：`run_defaults.manual_loop: true` → 每一點自動循環量測，直到「記錄並下一點」。
+- 子專案需要論文庫支援 `parent_id`（論文庫專案專區的「新增子專案」）；論文庫還不支援時一切照舊（都是最上層）。
+
 以下第 1–7 節是 0.0.13–0.0.25（有啟動器時）的說明，平台 API、數據目錄、標籤與論文仍然適用。
 
 ## 1. 組成

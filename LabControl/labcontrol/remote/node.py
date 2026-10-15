@@ -40,8 +40,8 @@ QUICK = {"ping", "status", "stop", "pause", "update", "release", "group_stop", "
 READ_ONLY = {"ping", "status", "get", "get_all", "describe", "sources", "ramp_status", "vnas", "vna_catalog",
              "catalog", "templates", "check_scheme", "instruments_file"}
 #: 即時監控的讀取 / 控制：另一條佇列處理，不會排在「全部連線」「開始量測」這類慢指令後面而逾時
-LIVE = {"get", "describe", "get_all", "sources", "vnas", "vna_catalog", "vna_ports", "vna_trace", "fine_step", "output",
-        "group_ramp"}
+LIVE = {"get", "describe", "get_all", "sources", "vnas", "vna_catalog", "vna_ports", "vna_trace", "vna_traces",
+        "vna_scan", "vna_set_visible", "fine_step", "output", "group_ramp"}
 #: 等待上傳的即時資料上限（Hub 斷線太久時丟掉最舊的曲線，不影響量測）
 MAX_PENDING = 4000
 
@@ -691,6 +691,20 @@ class NodeService:
             raise CommandError("量測進行中，即時監控暫停讀取 VNA")
         x, z, unit = self._backend().vna_trace(name, trace, bool(create))
         return {"x": enc_array(x), "z": enc_array(z), "unit": unit}
+
+    def cmd_vna_traces(self, sender, name: str, traces: List[str], create: bool = False) -> Dict[str, Any]:
+        if self._active_runner() is not None:
+            raise CommandError("量測進行中，即時監控暫停讀取 VNA")
+        x, zs, unit = self._backend().vna_traces(name, list(traces or []), bool(create))
+        return {"x": enc_array(x), "z": {k: enc_array(v) for k, v in zs.items()}, "unit": unit}
+
+    def cmd_vna_scan(self, sender, name: str) -> Dict[str, Any]:
+        if self._active_runner() is not None:
+            raise CommandError("量測進行中，稍後再掃描 port")
+        return self._backend().vna_scan(name)
+
+    def cmd_vna_set_visible(self, sender, name: str, params: Optional[List[str]] = None) -> Dict[str, Any]:
+        return self._backend().vna_set_visible(name, params)
 
     def cmd_add_instrument(self, sender, name: str, options: Dict[str, Any], save: bool = True) -> Dict[str, Any]:
         """把儀器設定加到這台（儀器伺服器把儀器移到這個節點、這台還沒有設定時）。"""

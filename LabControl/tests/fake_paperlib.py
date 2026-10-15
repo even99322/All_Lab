@@ -161,13 +161,16 @@ def make_handler(state: FakePaperlib):
                 name = (b.get("name") or "").strip()
                 if not name:
                     return 400, {"detail": "請填專案名稱"}, {}
-                if any(pr["name"] == name for pr in state.projects):
+                parent = b.get("parent_id")
+                if parent is not None and not any(pr["id"] == int(parent) for pr in state.projects):
+                    return 400, {"detail": "找不到上層專案"}, {}
+                if any(pr["name"] == name and pr.get("parent_id") == parent for pr in state.projects):
                     return 409, {"detail": "已經有同名的專案"}, {}
                 pid = max(pr["id"] for pr in state.projects) + 1
                 state.projects.append({"id": pid, "name": name, "short_name": b.get("short_name") or "",
                                        "description": b.get("description") or "", "goal": "", "next_step": "",
                                        "status": "active", "color": b.get("color") or "#2563eb", "sort": pid,
-                                       "paper_ids": []})
+                                       "paper_ids": [], "parent_id": int(parent) if parent is not None else None})
                 return 200, {"ok": True, "id": pid}, {}
             m = re.fullmatch(r"/api/projects/(\d+)", path)
             if m and method == "GET":

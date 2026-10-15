@@ -863,8 +863,14 @@ class Platform:
             return cached
         projects = [{"id": str(p.get("id")), "name": p.get("name") or "", "short_name": p.get("short_name") or "",
                      "description": p.get("description") or "", "status": p.get("status") or "active",
-                     "color": p.get("color") or "#2563eb", "n_papers": p.get("n_papers")} for p in items
-                    if isinstance(p, dict) and p.get("id") is not None]
+                     "color": p.get("color") or "#2563eb", "n_papers": p.get("n_papers"),
+                     # 1.0.10：子專案（論文庫 parent_id；可以一層一層嵌套）
+                     "parent": str(p.get("parent_id") if p.get("parent_id") is not None else (p.get("parent") or ""))}
+                    for p in items if isinstance(p, dict) and p.get("id") is not None]
+        ids = {p["id"] for p in projects}
+        for p in projects:
+            if p["parent"] not in ids or p["parent"] == p["id"]:
+                p["parent"] = ""                       # 上層不見了（被刪 / 沒權限）：當成最上層
         self._proj_cache = (time.time(), projects)
         changed = False
         with self._con() as con:
@@ -892,6 +898,29 @@ class Platform:
         n = re.sub(r'[\\/:*?"<>|\x00-\x1f]+', "_", name or "").strip(" .")
         return n or f"project_{pid}"
 
+    def project_chain(self, pid: str) -> List[Dict[str, Any]]:
+        """1.0.10：[最上層, …, 這個專案]（子專案一層一層往上找）。"""
+        items = {p["id"]: p for p in (self._proj_cache[1] or [])}
+        if str(pid) not in items:
+            with self._con() as con:
+                for r in con.execute("SELECT info FROM projects_cache"):
+                    p = json.loads(r["info"])
+                    items.setdefault(str(p.get("id")), p)
+        chain: List[Dict[str, Any]] = []
+        cur, seen = str(pid), set()
+        while cur and cur in items and cur not in seen:
+            seen.add(cur)
+            chain.insert(0, items[cur])
+            cur = str(items[cur].get("parent") or "")
+        return chain
+
+    def folder_path(self, pid: str, name: str = "") -> str:
+        """專案資料夾（子專案在上層的資料夾裡：主專案/子專案/孫專案）。"""
+        chain = self.project_chain(pid)
+        if not chain:
+            return self.folder_name(name, pid)
+        return "/".join(self.folder_name(p.get("name") or "", str(p.get("id"))) for p in chain)
+
     def projects(self, sess: Optional[Dict[str, Any]], force: bool = False) -> List[Dict[str, Any]]:
         """論文庫的專案 ＋ 平台的數據數量、數據標籤、資料夾。"""
         items = self._paperlib_projects(sess, force)
@@ -903,28 +932,32 @@ class Platform:
                 ptags.setdefault(r["project"], []).append(r["tag"])
         out = []
         for p in items:
+            chain = [x["name"] for x in self.project_chain(p["id"])] or [p["name"]]
             out.append(dict(p, data=counts.get(p["id"], 0), tags=ptags.get(p["id"], []),
-                            folder=self.folder_name(p["name"], p["id"]),
+                            folder=self.folder_path(p["id"], p["name"]), path=chain,
                             url=f"{self.paperlib_public}/#/projects/{p['id']}" if self.paperlib_public else ""))
         return out
 
     def create_project(self, sess: Dict[str, Any], name: str, short_name: str = "", description: str = "",
-                       color: str = "") -> Dict[str, Any]:
+                       color: str = "", parent: str = "") -> Dict[str, Any]:
         name = (name or "").strip()
         if not name or len(name) > 80:
             raise PlatformError(400, "專案名稱 1–80 字")
         pl = self.need_paperlib()
-        body = {"name": name, "short_name": short_name, "description": description}
+        body: Dict[str, Any] = {"name": name, "short_name": short_name, "description": description}
         if color:
             body["color"] = color
+        if parent:
+            body["parent_id"] = int(parent) if str(parent).isdigit() else parent     # 1.0.10：子專案
         try:
             pl.send("POST", "/api/projects", body, sess["pl_session"])
         except PlatformError as e:
             if e.code == 403:
                 raise PlatformError(403, f"論文庫不允許你建立專案（{e}）；請站長在論文庫建立或開權限") from None
             raise
-        self.audit(sess["user"]["username"], "project", f"建立 {name}")
-        p = next((x for x in self.projects(sess, force=True) if x["name"] == name), None)
+        self.audit(sess["user"]["username"], "project", f"建立 {name}" + (f"（{parent} 的子專案）" if parent else ""))
+        p = next((x for x in self.projects(sess, force=True)
+                  if x["name"] == name and (not parent or x.get("parent") == str(parent))), None)
         if p is None:
             raise PlatformError(502, "論文庫回報成功，但讀不到新專案")
         return p
@@ -1012,8 +1045,8 @@ class Platform:
             src = self.files_dir / r["node"] / r["rel"]
             if not src.is_file():
                 continue
-            folder = self.folder_name(self.project_name(r["project"]), r["project"])
-            want[self.views_dir / folder / r["node"] / r["rel"]] = src
+            folder = self.folder_path(r["project"], self.project_name(r["project"]))
+            want[self.views_dir.joinpath(*folder.split("/")) / r["node"] / r["rel"]] = src
         with self._con() as con:
             managed = {r["path"] for r in con.execute("SELECT path FROM view_files")}
         made = linked = copied = removed = 0

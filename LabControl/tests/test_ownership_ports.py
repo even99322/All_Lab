@@ -225,19 +225,55 @@ def test_vna_panel_detect_ports_builds_matrix(tmp_path, monkeypatch):
     msgs = []
     p.message.connect(msgs.append)
     p.set_backend(LocalBackend(st))
-    assert _pump(app, lambda: len(p.sbtn) == 16)                 # 選 VNA 時自動偵測
-    assert p.sgrid.itemAtPosition(2, 0).widget().text() == "S31"
-    assert p.sgrid.itemAtPosition(3, 2).widget().text() == "S43"
+    # 1.0.10：選 VNA 時自動偵測並掃描 16 個 S 參數，只顯示有接線的（模擬：1–2、2–3 有接線）
+    assert _pump(app, lambda: len(p.sbtn) == 7)
+    assert sorted(p.sbtn) == ["S11", "S12", "S21", "S22", "S23", "S32", "S33"]
+    assert p.sgrid.itemAtPosition(1, 2).widget().text() == "S23"
+    assert p.sgrid.itemAtPosition(2, 0) is None                  # S31 沒接線 → 不顯示
     assert p.trace() == "S21" and p.sbtn["S21"].font().bold()
-    assert "4 port" in p.ports_label.text()
-    p.sbtn["S43"].click()
-    assert _pump(app, lambda: p.last is not None and p.last[0] == "S43")
+    assert "4 port" in p.ports_label.text() and "7" in p.ports_label.text()
+    p.sbtn["S23"].click()
+    assert _pump(app, lambda: p.last is not None and p.last[0] == "S23")
+    assert p.plots.active == "S23:db"
+    # 伺服器手動打開 S31 → 即時數據跟著出現
+    LocalBackend(st).vna_set_visible("VNA2", ["S21", "S23", "S31"])
+    assert _pump(app, lambda: sorted(p.sbtn) == ["S21", "S23", "S31"])
+    LocalBackend(st).vna_set_visible("VNA2", None)
+    assert _pump(app, lambda: len(p.sbtn) == 7)
     st.instruments["VNA2"].options["ports"] = 2
-    p.detect_ports()                                             # 按鈕：重新偵測
+    p.detect_ports()                                             # 按鈕：重新掃描
     assert _pump(app, lambda: len(p.sbtn) == 4)
     assert any("2 port" in m for m in msgs)
-    assert p.trace() == "S21"                                    # S43 不存在了 → 回到 S21
+    assert p.trace() == "S21"                                    # S23 不存在了 → 回到 S21
     p.close()
+    p.deleteLater()
+    st.close()
+
+
+def test_port_scan_finds_wired_pairs(tmp_path, monkeypatch):
+    monkeypatch.setenv("LAB_CONTROL_HOME", str(tmp_path))
+    from labcontrol.core import vna_ports
+    from labcontrol.core.station import Station
+
+    assert vna_ports.wired({"S21": -12, "S12": -12, "S31": -95, "S13": -96}, 3) == ["S11", "S12", "S21", "S22"]
+    assert vna_ports.wired({"S21": -95}, 2) == ["S11", "S12", "S21", "S22"]           # 都沒接線：全部留著
+    st = Station({"simulate": True, "_lab_plugins": False, "instruments": {
+        "VNA2": {"driver": "rs.zna", "sim": {"ports": 4, "sweep_time": 0, "wired": [[1, 3]]}}}})
+    vna_ports.install(st)
+    got = []
+    st.bus.subscribe("vna.ports", lambda t, p: got.append(p["info"]))
+    st.connect(["VNA2"])                                         # 一連線就掃描
+    import time
+
+    t0 = time.time()
+    while not got and time.time() - t0 < 10:
+        time.sleep(0.02)
+    assert got
+    info = got[-1]
+    assert info["wired"] == ["S11", "S13", "S31", "S33"] and info["visible"] == info["wired"]
+    assert info["levels"]["S31"] > -60 > info["levels"]["S41"]
+    assert (tmp_path / "vna_ports.json").is_file()
+    st.close()
 
 
 def test_server_window_pins_usb_to_other_node(tmp_path, monkeypatch):

@@ -59,7 +59,7 @@ def test_pause_rollback_resume(station, tmp_path):
 
 
 def test_manual_mode_retain_and_loop(station, tmp_path):
-    exp = Experiment(station, experiment_cfg(stop=158.602, manual=True))
+    exp = Experiment(station, experiment_cfg(stop=158.602, manual=True, manual_loop=False))
     out = exp.plan_output(root=tmp_path)
     r = exp.create_runner(out)
     waiting = []
@@ -85,6 +85,26 @@ def test_manual_mode_retain_and_loop(station, tmp_path):
     assert Experiment.needs_review(ds)
     back = open_dataset(out.raw_path)
     assert len(back.records[0].shots) == 2 and back.records[0].retained
+
+
+def test_manual_mode_loops_by_default(station, tmp_path):
+    """1.0.10：手動步進預設每一點一進來就一直重複量測，按「記錄並下一點」才前進。"""
+    exp = Experiment(station, experiment_cfg(stop=158.6005, manual=True, loop_interval="0 s"))
+    r = exp.create_runner(exp.plan_output(root=tmp_path))
+    assert r.options.manual_loop
+    waiting, shots, loops = [], [], []
+    station.bus.subscribe("manual.waiting", lambda t, p: waiting.append((p["index"], p["loop"])))
+    station.bus.subscribe("manual.shots", lambda t, p: shots.append(p["count"]))
+    station.bus.subscribe("manual.loop", lambda t, p: loops.append(p["loop"]))
+    r.start()
+    wait_for(lambda: shots and shots[-1] >= 3)                    # 沒按任何東西就在量
+    assert waiting[0] == (0, True)
+    r.loop_stop()
+    wait_for(lambda: loops == [False])
+    r.accept(retain=False)
+    wait_for(lambda: len(waiting) == 2 and len(shots) > 3 and shots[-1] >= 2)   # 下一點又自動循環
+    r.accept(retain=False)
+    assert r.wait(20) and r.state == State.FINISHED and len(r.dataset.records) == 2
 
 
 def test_error_retry_then_pause(station, tmp_path, monkeypatch):

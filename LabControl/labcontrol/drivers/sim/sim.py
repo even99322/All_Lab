@@ -201,12 +201,22 @@ class SimVNA(Instrument, TraceAcquirer):
         pp = ports_of(name or "")
         if pp and pp[0] == pp[1]:                     # 反射 Sii：接近全反射，共振處有小凹陷
             resp = 10 ** (-self.baseline_db / 20) * 10 ** (-3 / 20) * (0.75 + 0.25 * resp)
-        elif pp and {pp[0], pp[1]} != {1, 2}:         # 其他 port 之間：較弱的耦合
+        elif pp and not self._wired(pp):              # 1.0.10：沒接線的 port 之間只有雜訊（約 -100 dB）
+            resp = resp * 1e-5
+        elif pp and {pp[0], pp[1]} != {1, 2}:         # 其他有接線的 port 之間：較弱的耦合
             resp = resp * 10 ** (-6 / 20)
         n_avg = max(1, int(self._s.get("averages") or 1))
         snr = 10 ** ((power - self.ref_power) / 20)
         noise = (self._rng.normal(size=f.size) + 1j * self._rng.normal(size=f.size)) * self.noise / np.sqrt(n_avg) / snr
         return amp * (resp + noise) * phase
+
+    def _wired(self, pp) -> bool:
+        """sim: wired: [[1, 2], [2, 3]]（預設 1–2、2–3 有接線）。"""
+        pairs = self.options.get("wired") or [[1, 2], [2, 3]]
+        return any({int(a), int(b)} == {pp[0], pp[1]} for a, b in pairs)
+
+    def acquire_many(self, names: List[str], temporary: bool = False) -> Dict[str, np.ndarray]:
+        return {n: self.acquire(n) for n in dict.fromkeys(names)}
 
     def labber_settings(self, name: Optional[str] = None) -> List[list]:
         real = _real(self.options, self.FALLBACK_REAL)

@@ -141,7 +141,9 @@ def test_live_vna_and_popout_and_measure_tab(win, monkeypatch):
     live.vna.reload()
     assert pump(lambda: live.vna.name == "VNA1" and "start_freq" in live.vna.edits)
     assert pump(lambda: live.vna.edits["start_freq"].text() not in ("", "—"))
-    live.vna.sbtn["S11"].setChecked(True)
+    live.vna.set_views(["db"])
+    live.vna.sbtn["S11"].setChecked(True)                            # 目前的 trace 改量 S11
+    assert live.vna.plots.views == ["S11:db"]
     live.vna.read_trace()
     assert pump(lambda: live.vna.last is not None and live.vna.last[0] == "S11")
     assert len(live.vna.last[1]) > 10
@@ -158,39 +160,52 @@ def test_live_vna_and_popout_and_measure_tab(win, monkeypatch):
     live.vna.apply()
     assert pump(lambda: win.station.parameter("VNA1.sweep_time_auto").get() is False and
                 win.station.parameter("VNA1.sweep_time").get() == pytest.approx(0.05))
-    # 曲線複選：每種一張圖；IQ 是 Re–Im
+    # trace：每條 = S 參數 ＋ 格式（像 VNA）；Polar 是 Re–Im
+    K = lambda f: f"S11:{f}"  # noqa: E731
+    live.vna.overlay.setChecked(False)
     live.vna.set_views(["db", "uphase", "iq"])
     plots = live.vna.plots
-    assert list(plots.plots) == ["db", "uphase", "iq"]
-    assert pump(lambda: plots.curves["iq"].getData()[0] is not None and len(plots.curves["iq"].getData()[0]) > 10)
-    x_iq, y_iq = plots.curves["iq"].getData()
-    z = live.vna.last[2]
+    assert list(plots.plots) == [K("db"), K("uphase"), K("iq")]
+    live.vna.read_trace()
+    assert pump(lambda: plots.curves[K("iq")].getData()[0] is not None and len(plots.curves[K("iq")].getData()[0]) > 10)
+    x_iq, y_iq = plots.curves[K("iq")].getData()
+    z = live.vna.last[2]["S11"]
     assert np.allclose(x_iq, z.real) and np.allclose(y_iq, z.imag)
     # 九宮格：3 張 = 上左右＋下；拖曳交換位置
     grid = plots.grid
     pos = {k: grid.getItemPosition(grid.indexOf(plots.cells[k])) for k in plots.views}
-    assert pos == {"db": (0, 0, 1, 1), "uphase": (0, 1, 1, 1), "iq": (1, 0, 1, 2)}
-    plots.swap("iq", "db")                                           # IQ 與 dB 交換位置
-    assert live.vna.selected_views() == ["iq", "uphase", "db"]
-    assert grid.getItemPosition(grid.indexOf(plots.cells["iq"])) == (0, 0, 1, 1)
-    # 最多 5 張：第 6 張會被拒絕；5 張 = 四方格＋下
-    for k in ("lin", "re", "im"):
-        live.vna.vbtn[k].setChecked(True)
-        live.vna._toggle_view(k, True)
-    assert len(live.vna.selected_views()) == 5 and not live.vna.vbtn["im"].isChecked()
-    last = live.vna.selected_views()[-1]
-    assert grid.getItemPosition(grid.indexOf(plots.cells[last])) == (2, 0, 1, 2)
+    assert pos == {K("db"): (0, 0, 1, 1), K("uphase"): (0, 1, 1, 1), K("iq"): (1, 0, 1, 2)}
+    plots.swap(K("iq"), K("db"))
+    assert live.vna.selected_views() == [K("iq"), K("uphase"), K("db")]
+    assert grid.getItemPosition(grid.indexOf(plots.cells[K("iq")])) == (0, 0, 1, 1)
+    # 選 trace → 格式鍵 / S 參數鍵改它；＋ Trace（另一個 S 參數）一起讀
+    plots.set_active(K("db"))
+    assert live.vna.vbtn["db"].isChecked() and live.vna.sbtn["S11"].isChecked()
+    live.vna.vbtn["lin"].click()
+    assert K("lin") in plots.views and K("db") not in plots.views and plots.active == K("lin")
+    live.vna.sbtn["S21"].click()                                     # 目前的 trace 改量 S21
+    assert "S21:lin" in plots.views and plots.active == "S21:lin"
+    assert pump(lambda: set(live.vna.last[2]) == {"S11", "S21"})    # 兩個 S 參數一次讀
+    # 最多 8 條：第 9 條會被拒絕；5 張以上兩欄往下排
+    msgs = []
+    live.vna.message.connect(msgs.append)
+    for f in ("re", "im", "phase", "delay", "smith"):
+        plots.add_trace("S11", f, new_cell=True)
+    assert len(plots.views) == 8
+    assert plots.add_trace("S11", "db") is None and "最多" in msgs[-1]
+    last = plots.groups[-1][0]
+    assert grid.getItemPosition(grid.indexOf(plots.cells[last]))[:2] == (3, 1)
     # 頻率軸連動（數值同步，圖寬不同也對齊）
-    plots.cells["db"].plot.setXRange(5.021e9, 5.022e9, padding=0)
-    lo, hi = plots.cells["uphase"].plot.getViewBox().viewRange()[0]
+    plots.cells["S21:lin"].plot.setXRange(5.021e9, 5.022e9, padding=0)
+    lo, hi = plots.cells[K("uphase")].plot.getViewBox().viewRange()[0]
     assert lo == pytest.approx(5.021e9) and hi == pytest.approx(5.022e9)
     # 數據點
     live.vna.points.setChecked(True)
-    assert plots.cells["db"].curve.opts["symbol"] == "o"
+    assert plots.cells[K("uphase")].curve.opts["symbol"] == "o"
     live.vna.points.setChecked(False)
-    assert plots.cells["db"].curve.opts["symbol"] is None
-    live.vna.set_views([])                                          # 至少保留一種
-    assert live.vna.selected_views() == ["db"]
+    assert plots.cells[K("uphase")].curve.opts["symbol"] is None
+    live.vna.set_views([])                                          # 至少保留一條
+    assert live.vna.selected_views() == [f"{live.vna.trace()}:db"]
     # 連續、間隔最短：讀完立刻讀下一次
     live.vna.interval.setValue(0)
     n0 = []
@@ -205,29 +220,33 @@ def test_live_vna_and_popout_and_measure_tab(win, monkeypatch):
     assert live.vna.plot_window is not None and live.vna.plot_holder.indexOf(plots) < 0
     live.vna.plot_window.close()
     assert live.vna.plot_window is None and live.vna.plot_holder.currentWidget() is plots
-    # 疊圖：dB 左軸、Phase / Unwrap 右軸，同一張畫布；IQ 不能疊
+    # 疊圖：dB 左軸、Phase / Unwrap 右軸，同一張畫布；第三種單位另開
+    S = live.vna.trace()
+    K = lambda f: f"{S}:{f}"  # noqa: E731
     live.vna.set_views(["db", "phase", "uphase"])
     live.vna.overlay.setChecked(True)
-    ov = plots.cell_for("db").canvas
+    ov = plots.cell_for(K("db")).canvas
     assert plots.mode == "overlay" and len(plots.groups) == 1
-    assert ov.series == [("db", "L"), ("phase", "R"), ("uphase", "R")] and ov.vb2 is not None
-    live.vna._toggle_view("lin", True)                               # 第三種單位 → 拒絕
-    assert "lin" not in live.vna.selected_views()
+    assert ov.series == [(K("db"), "L"), (K("phase"), "R"), (K("uphase"), "R")] and ov.vb2 is not None
+    plots.add_trace(S, "lin")                                        # 第三種單位 → 自己一張
+    assert len(plots.groups) == 2 and [K("lin")] in plots.groups
+    plots.remove_trace(K("lin"))
+    assert len(plots.groups) == 1
     live.vna.read_trace()
-    assert pump(lambda: ov.data.get("phase") is not None and len(ov.data["phase"][0]) > 10)
+    assert pump(lambda: ov.data.get(K("phase")) is not None and len(ov.data[K("phase")][0]) > 10)
     # 拖曲線 = 上下移動（只改顯示）；重設偏移
-    ov.shift("db", 5.0)
-    y_shown = ov.curves["db"].getData()[1]
-    assert np.allclose(y_shown, ov.data["db"][1] + 5.0)
+    ov.shift(K("db"), 5.0)
+    y_shown = ov.curves[K("db")].getData()[1]
+    assert np.allclose(y_shown, ov.data[K("db")][1] + 5.0)
     plots.reset_offsets()
-    assert np.allclose(ov.curves["db"].getData()[1], ov.data["db"][1])
+    assert np.allclose(ov.curves[K("db")].getData()[1], ov.data[K("db")][1])
     # 找得到滑鼠下的曲線（拖曳用）
     QtWidgets = __import__("PyQt6.QtWidgets", fromlist=["QtWidgets"])
     QtWidgets.QApplication.processEvents()
-    xx, yy = ov.data["db"]
+    xx, yy = ov.data[K("db")]
     i = len(xx) // 2
     sp = ov.vb.mapViewToScene(__import__("PyQt6.QtCore", fromlist=["QPointF"]).QPointF(xx[i], yy[i]))
-    assert ov.curve_at(sp) == "db"
+    assert ov.curve_at(sp) == K("db")
     # 軸縮放：在左軸上拖曳只改左軸範圍
     r0 = ov.vb.viewRange()[1]
     ov.vb.scaleBy(y=0.5)
@@ -238,7 +257,7 @@ def test_live_vna_and_popout_and_measure_tab(win, monkeypatch):
     ov.add_marker(f0)
     ov.add_marker(float(xx[i + 10]))
     mv = ov.marker_values()
-    assert [m["name"] for m in mv] == ["M1", "M2"] and mv[0]["values"]["db"] == pytest.approx(yy[i], abs=1e-6)
+    assert [m["name"] for m in mv] == ["M1", "M2"] and mv[0]["values"][K("db")] == pytest.approx(yy[i], abs=1e-6)
     assert "M2" in ov.readout.text()
     ov.remove_marker(ov.markers[0])
     assert [m["name"] for m in ov.marker_values()] == ["M1"]
@@ -255,7 +274,7 @@ def test_live_vna_and_popout_and_measure_tab(win, monkeypatch):
     assert win.live_window.isVisible()
     assert pump(lambda: live.dc.cards and live.dc.isVisible() and live.vna.isVisible() and
                 live.vna.split.isVisible() and live.dcw.width() > 100 and live.vw.width() > 100)
-    assert live.vna.plots.views == ["db", "phase", "uphase"]          # 使用者選的圖保留
+    assert live.vna.plots.views == [K("db"), K("phase"), K("uphase")]          # 使用者選的圖保留
     win.live_window.close()
     # 開始量測 → 量測監控視窗自動彈出，即時控制暫停；結束後恢復
     assert not win.measure_window.isVisible()
