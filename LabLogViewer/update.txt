@@ -1874,3 +1874,19 @@ Date: 2026-10-15
     take the drag themselves (cut lines, Marks, colour-bar handles) and axis drags are unchanged; the
     cross-section histogram (_HistViewBox.allow_pan) still pans.
   - help: viewer-zoom, shortcuts; whats_new 1.0.8. tests/test_v1_0_7_tools.py::test_pointer_tool_does_not_drag_the_data.
+
+v1.0.9 - LABBER-STYLE CUTS, LABBER AUTO RANGE, UPDATE POPUP
+Date: 2026-10-20
+
+  - cross_section_window.CrossSection: X cut row 0 / map row 1 col 0 / Y cut row 1 col 1 (not mirrored, no second
+    Y labels, min width 160); solid white cut lines (width 2), gold cut traces (dots when ≤ 400 points), dark-blue
+    markers; pg.TextItem read-out "z / y / x" at the crossing (flips near the right / bottom edge). The contrast
+    panel (vertical histogram as BarGraphItem + horizontal LinearRegionItem, Max / Min, Auto / Full range) sits in
+    Plot2DWidget.left_panel_host (new HBox slot left of the GraphicsLayoutWidget); the v1.0.5 popup and corner
+    button are gone.
+  - plot_2d_widget.robust_color_limits: Labber's "Auto range" (removes outliers) = 1st–99th percentile
+    (AUTO_RANGE_TAIL 0.01, was 5e-5); falls back to min–max when most pixels are equal.
+  - app/gui/update_toast.py: a frameless bottom-right card for a new "update" notice (hub push / GitHub feed) and,
+    at Browser start, for the newest unread one: Update now (hub_updates.install_now) or Download (opens the
+    installer URL when not an installed build), What's new, Later. LABLOGVIEWER_NO_UPDATE_TOAST=1 (tests).
+  - tests/test_v1_0_9_viewer.py; test_v106_cross_section / test_v1_0_5_viewer / test_v020_range_spinbox updated.

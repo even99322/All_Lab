@@ -1,12 +1,9 @@
 """2D X/Y cross-section: the viewer's own heat map with draggable cut lines.
 
-``CrossSection`` attaches to a ``Plot2DWidget`` and rebuilds its layout: X cut on
-top, Y cut on the LEFT (mirrored: its vertical axis is the heat map's Y axis and
-the value grows towards the left, so the colour bar on the right stays free) and
-a "Contrast" button in the corner (v1.0.5: the intensity histogram and Max / Min / Auto / Full range
-open from it instead of filling the corner).  The X and Y cuts can be shown separately
-(``set_parts``).  ``CrossSectionWindow``
-is the same thing in its own window (used for multi-pane layouts).
+v1.0.9 — laid out like Labber's Log Browser: the X cut on TOP, the Y cut on the RIGHT (normal orientation, values
+growing to the right), solid cut lines with a z / y / x read-out box at their crossing, and the contrast controls
+(intensity histogram, Max / Min, Auto range / Full range) in a panel on the LEFT of the map. ``set_parts`` shows
+the X and the Y cut separately. ``CrossSectionWindow`` is the same thing in its own window (multi-pane layouts).
 
 It only consumes an already-loaded ``Grid2DData``; moving a line slices a numpy
 array and never touches the HDF5 file.
@@ -19,8 +16,7 @@ import pyqtgraph as pg
 from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
-    QCheckBox, QDoubleSpinBox, QFrame, QGraphicsProxyWidget, QGridLayout, QHBoxLayout, QLabel,
-    QPushButton, QToolButton, QVBoxLayout, QWidget,
+    QCheckBox, QDoubleSpinBox, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
 )
 
 from app.core.data_model import Grid2DData
@@ -28,10 +24,18 @@ from app.gui.plot_2d_widget import DEFAULT_COLORMAP, Plot2DWidget, robust_color_
 
 HISTOGRAM_BINS = 200
 LEFT_AXIS_WIDTH = 64
+Y_CUT_AXIS_WIDTH = 8             # its Y values are the map's: no second set of labels next to the colour bar
+Y_CUT_MIN_WIDTH = 160
 BOTTOM_AXIS_HEIGHT = 48
-LINE_WIDTH = 3
-X_COLOR = "#1f77b4"
-Y_COLOR = "#d62728"
+LINE_WIDTH = 2
+LINE_COLOR = "#FFFFFF"           # Labber: solid white cut lines
+LINE_SHADOW = "#202020"
+CUT_COLOR = "#B8902A"            # Labber's gold cut traces
+MARKER_COLOR = "#1F3FA0"         # the other line's position inside a cut plot
+PANEL_WIDTH = 190
+# kept for older callers
+X_COLOR = CUT_COLOR
+Y_COLOR = CUT_COLOR
 
 
 def nearest_index(values: np.ndarray, target: float) -> int:
@@ -62,6 +66,10 @@ def intensity_histogram(values: np.ndarray, bins: int = HISTOGRAM_BINS):
     return edges, counts.astype(float)
 
 
+def _fmt(value: float, unit: str | None) -> str:
+    return f"{value:.6g} {unit}".rstrip() if unit else f"{value:.6g}"
+
+
 class CrossSection:
     """Cut plots, draggable lines and contrast controls around a Plot2DWidget."""
 
@@ -73,41 +81,49 @@ class CrossSection:
         self._pad_timer.setSingleShot(True)
         self._pad_timer.setInterval(0)
         self._pad_timer.timeout.connect(self._align)
-        gw = plot2d.graphics_widget
         self.x_cut_plot = pg.PlotItem()
         self.y_cut_plot = pg.PlotItem()
         for plot in (self.x_cut_plot, self.y_cut_plot):
             plot.hideButtons()
-        self.x_curve = self.x_cut_plot.plot(pen=pg.mkPen(X_COLOR, width=2))
-        self.y_curve = self.y_cut_plot.plot(pen=pg.mkPen(Y_COLOR, width=2))
+            plot.showGrid(x=True, y=True, alpha=0.35)
+        self.x_curve = self.x_cut_plot.plot(pen=pg.mkPen(CUT_COLOR, width=1.5))
+        self.y_curve = self.y_cut_plot.plot(pen=pg.mkPen(CUT_COLOR, width=1.5))
         self.x_cut_plot.hideAxis("bottom")
-        self.y_cut_plot.hideAxis("left")
-        self.y_cut_plot.invertX(True)
         self.x_cut_plot.setXLink(plot2d.plot_item)
         self.y_cut_plot.setYLink(plot2d.plot_item)
 
-        self.h_line = pg.InfiniteLine(angle=0, movable=True, pen=pg.mkPen(X_COLOR, width=LINE_WIDTH, style=Qt.DashLine),
-                                      hoverPen=pg.mkPen(X_COLOR, width=LINE_WIDTH + 2))
-        self.v_line = pg.InfiniteLine(angle=90, movable=True, pen=pg.mkPen(Y_COLOR, width=LINE_WIDTH, style=Qt.DashLine),
-                                      hoverPen=pg.mkPen(Y_COLOR, width=LINE_WIDTH + 2))
-        for line in (self.h_line, self.v_line):
-            line.setZValue(20)
-            plot2d.plot_item.addItem(line, ignoreBounds=True)
-            line.sigPositionChanged.connect(self._on_line_moved)
-        self.x_marker = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen(Y_COLOR, width=1, style=Qt.DotLine))
-        self.y_marker = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen(X_COLOR, width=1, style=Qt.DotLine))
+        def line(angle):
+            item = pg.InfiniteLine(angle=angle, movable=True, pen=pg.mkPen(LINE_COLOR, width=LINE_WIDTH),
+                                   hoverPen=pg.mkPen(LINE_COLOR, width=LINE_WIDTH + 2))
+            item.setZValue(20)
+            return item
+
+        self.h_line, self.v_line = line(0), line(90)
+        for item in (self.h_line, self.v_line):
+            plot2d.plot_item.addItem(item, ignoreBounds=True)
+            item.sigPositionChanged.connect(self._on_line_moved)
+        self.readout = pg.TextItem(anchor=(0, 0), color="#111111", fill=pg.mkBrush(255, 255, 255, 225),
+                                   border=pg.mkPen("#666666"))
+        self.readout.setZValue(30)
+        plot2d.plot_item.addItem(self.readout, ignoreBounds=True)
+        self.x_marker = pg.InfiniteLine(angle=90, movable=False, pen=pg.mkPen(MARKER_COLOR, width=2))
+        self.y_marker = pg.InfiniteLine(angle=0, movable=False, pen=pg.mkPen(MARKER_COLOR, width=2))
         self.x_cut_plot.addItem(self.x_marker, ignoreBounds=True)
         self.y_cut_plot.addItem(self.y_marker, ignoreBounds=True)
 
+        # ---- contrast panel (left of the map): vertical intensity histogram + Max / Min + Auto / Full range ----
         self.hist_plot = pg.PlotItem(viewBox=_HistViewBox(self._fit_hist_view))
         self.hist_plot.hideButtons()
         self.hist_plot.setMenuEnabled(False)
-        self.hist_plot.setMouseEnabled(x=True, y=False)
-        self.hist_plot.setLabel("left", "Intensity")
-        self.hist_curve = pg.PlotCurveItem(fillLevel=0, brush=(120, 140, 170, 160),
-                                           pen=pg.mkPen(None))
-        self.hist_plot.addItem(self.hist_curve)
-        self.hist_region = pg.LinearRegionItem(values=(0.0, 1.0), brush=(40, 80, 220, 90))
+        self.hist_plot.setMouseEnabled(x=False, y=True)
+        self.hist_plot.hideAxis("bottom")
+        self.hist_plot.getViewBox().invertX(True)            # bars grow towards the map
+        self.hist_bars = pg.BarGraphItem(x0=[0.0], y0=[0.0], width=[0.0], height=[1.0],
+                                         brush=(70, 90, 120, 230), pen=pg.mkPen(None))
+        self.hist_plot.addItem(self.hist_bars)
+        self.hist_region = pg.LinearRegionItem(values=(0.0, 1.0), orientation="horizontal",
+                                               brush=(40, 80, 220, 45),
+                                               pen=pg.mkPen((40, 80, 220), width=2))
         self.hist_region.setZValue(10)
         self.hist_plot.addItem(self.hist_region, ignoreBounds=True)
         self._region_timer = QTimer(plot2d)
@@ -116,49 +132,45 @@ class CrossSection:
         self._region_timer.timeout.connect(self._on_region_changed)
         self.hist_region.sigRegionChanged.connect(lambda *_: self._region_timer.start())
 
+        self.panel = QWidget()
+        self.panel.setObjectName("contrastPanel")
+        self.panel.setFixedWidth(PANEL_WIDTH)
+        panel_layout = QVBoxLayout(self.panel)
+        panel_layout.setContentsMargins(4, 4, 6, 4)
+        panel_layout.setSpacing(4)
+        title = QLabel("Contrast")
+        title.setStyleSheet("font-weight: 600;")
+        panel_layout.addWidget(title)
+        self.hist_view = pg.GraphicsLayoutWidget()
+        self.hist_view.setObjectName("contrastHistogram")
+        self.hist_view.ci.addItem(self.hist_plot, row=0, col=0)
+        panel_layout.addWidget(self.hist_view, 1)
         self.controls = QWidget()
         grid = QGridLayout(self.controls)
-        grid.setContentsMargins(4, 0, 4, 0)
-        grid.setSpacing(2)
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setSpacing(3)
         self.max_spin, self.min_spin = self._spin(), self._spin()
         self.auto_button, self.full_button = QPushButton("Auto range"), QPushButton("Full range")
-        grid.addWidget(QLabel("Contrast"), 0, 0, 1, 2)
-        grid.addWidget(QLabel("Max:"), 1, 0)
-        grid.addWidget(self.max_spin, 1, 1)
-        grid.addWidget(QLabel("Min:"), 2, 0)
-        grid.addWidget(self.min_spin, 2, 1)
-        grid.addWidget(self.auto_button, 3, 0, 1, 2)
-        grid.addWidget(self.full_button, 4, 0, 1, 2)
-        grid.setRowStretch(5, 1)
-        self.controls.hide()
+        self.auto_button.setObjectName("contrastAutoRange")
+        self.full_button.setObjectName("contrastFullRange")
+        grid.addWidget(QLabel("Max:"), 0, 0)
+        grid.addWidget(self.max_spin, 0, 1)
+        grid.addWidget(QLabel("Min:"), 1, 0)
+        grid.addWidget(self.min_spin, 1, 1)
+        grid.addWidget(self.auto_button, 2, 0, 1, 2)
+        grid.addWidget(self.full_button, 3, 0, 1, 2)
+        panel_layout.addWidget(self.controls)
         self.max_spin.editingFinished.connect(self._on_spin_changed)
         self.min_spin.editingFinished.connect(self._on_spin_changed)
         self.auto_button.clicked.connect(self.auto_range)
         self.full_button.clicked.connect(self.full_range)
+        self.panel.hide()
 
         self._attached = False
         self._full_limits = (0.0, 1.0)
         self.parts = {"x": True, "y": True}
-        # v1.0.5: the histogram and contrast controls live in a popup opened from a corner button
-        self.contrast_popup = QFrame(plot2d, Qt.WindowType.Popup)
-        self.contrast_popup.setObjectName("contrastPopup")
-        self.contrast_popup.setFrameShape(QFrame.Shape.StyledPanel)
-        popup_layout = QHBoxLayout(self.contrast_popup)
-        popup_layout.setContentsMargins(6, 6, 6, 6)
-        self.hist_view = pg.GraphicsLayoutWidget()
-        self.hist_view.setMinimumSize(320, 190)
-        self.hist_view.ci.addItem(self.hist_plot, row=0, col=0)
-        popup_layout.addWidget(self.hist_view, 1)
-        popup_layout.addWidget(self.controls)
-        self.controls.show()
-        self.contrast_button = QToolButton(plot2d.graphics_widget)
-        self.contrast_button.setObjectName("contrastButton")
-        self.contrast_button.setText("◧ Contrast")
-        self.contrast_button.setToolTip("Intensity histogram and color range (Max / Min / Auto / Full range)")
-        self.contrast_button.setAutoRaise(False)
-        self.contrast_button.clicked.connect(self.show_contrast_popup)
-        self.contrast_button.hide()
         plot2d.view_box.sigResized.connect(lambda *_: self._pad_timer.start())
+        plot2d.view_box.sigRangeChanged.connect(lambda *_: self._place_readout())
 
     @staticmethod
     def _spin() -> QDoubleSpinBox:
@@ -171,16 +183,8 @@ class CrossSection:
 
     # ---- layout -------------------------------------------------------------
 
-    def show_contrast_popup(self) -> None:
-        button = self.contrast_button
-        self.sync_levels()
-        self._update_histogram()
-        self.contrast_popup.adjustSize()
-        self.contrast_popup.move(button.mapToGlobal(button.rect().bottomLeft()))
-        self.contrast_popup.show()
-
     def set_parts(self, x: bool | None = None, y: bool | None = None) -> None:
-        """Show the X cut (top) and / or the Y cut (left); neither → the plain heat map."""
+        """Show the X cut (top) and / or the Y cut (right); neither → the plain heat map."""
         if x is not None:
             self.parts["x"] = bool(x)
         if y is not None:
@@ -202,15 +206,14 @@ class CrossSection:
             if item in ci.items:
                 ci.removeItem(item)
         show_x, show_y = self.parts["x"], self.parts["y"]
-        col = 1 if show_y else 0
         row = 1 if show_x else 0
         if show_x:
-            ci.addItem(self.x_cut_plot, row=0, col=col)
+            ci.addItem(self.x_cut_plot, row=0, col=0)
+        ci.addItem(plot2d.plot_item, row=row, col=0)
         if show_y:
-            ci.addItem(self.y_cut_plot, row=row, col=0)
-        ci.addItem(plot2d.plot_item, row=row, col=col)
+            ci.addItem(self.y_cut_plot, row=row, col=1)
         for index in (0, 1, 2):
-            ci.layout.setColumnStretchFactor(index, (1 if index == 0 else 4 if index == 1 else 0) if show_y
+            ci.layout.setColumnStretchFactor(index, (3 if index == 0 else 1 if index == 1 else 0) if show_y
                                              else (1 if index == 0 else 0))
             ci.layout.setRowStretchFactor(index, (1 if index == 0 else 3 if index == 1 else 0) if show_x
                                           else (1 if index == 0 else 0))
@@ -220,14 +223,6 @@ class CrossSection:
         self.v_line.setVisible(show_y)            # the Y cut along the vertical one
         self.x_marker.setVisible(show_y)
         self.y_marker.setVisible(show_x)
-        self._place_contrast_button()
-
-    def _place_contrast_button(self) -> None:
-        """Top-right corner (above the color bar): free in every layout."""
-        view = self.plot2d.graphics_widget
-        button = self.contrast_button
-        button.adjustSize()
-        button.move(max(4, view.width() - button.width() - 6), 4)
 
     def attach(self) -> None:
         if self._attached:
@@ -237,14 +232,19 @@ class CrossSection:
         plot2d.plot_item.setTitle(None)
         for plot in (plot2d.plot_item, self.x_cut_plot):
             plot.getAxis("left").setWidth(LEFT_AXIS_WIDTH)
+        self.y_cut_plot.getAxis("left").setWidth(Y_CUT_AXIS_WIDTH)
+        self.y_cut_plot.getAxis("left").setStyle(showValues=False)
+        self.y_cut_plot.setMinimumWidth(Y_CUT_MIN_WIDTH)
         for plot in (plot2d.plot_item, self.y_cut_plot):
             plot.getAxis("bottom").setHeight(BOTTOM_AXIS_HEIGHT)
         plot2d._vline.setVisible(False)
         plot2d._hline.setVisible(False)
+        if self.panel.parent() is not plot2d.left_panel_host:
+            plot2d.left_panel_layout.addWidget(self.panel)
+        self.panel.show()
+        plot2d.left_panel_host.show()
         self._attached = True
-        self._place_contrast_button()
-        self.contrast_button.show()
-        self.contrast_button.raise_()
+        self.readout.setVisible(True)
         self._refit_layout()
         self.on_plot()
         self._pad_timer.start()
@@ -271,10 +271,11 @@ class CrossSection:
         plot2d.plot_item.getAxis("left").setWidth(None)
         plot2d.plot_item.getAxis("bottom").setHeight(None)
         plot2d.plot_item.getAxis("left").setStyle(autoExpandTextSpace=True)
-        self.contrast_button.hide()
-        self.contrast_popup.hide()
+        self.panel.hide()
+        plot2d.left_panel_host.hide()
         self.h_line.setVisible(False)
         self.v_line.setVisible(False)
+        self.readout.setVisible(False)
         self._attached = False
         self._refit_layout()
         grid = plot2d._grid
@@ -282,9 +283,9 @@ class CrossSection:
             plot2d.plot(grid, colormap=plot2d._colormap_name, z_min=plot2d._z_min, z_max=plot2d._z_max)
 
     def _align(self) -> None:
+        """The X cut's plotting area spans exactly the map's (the colour bar sits right of the map)."""
         if not self._attached:
             return
-        self._place_contrast_button()
         plot2d = self.plot2d
         pad = plot2d.plot_item.sceneBoundingRect().right() - plot2d.view_box.sceneBoundingRect().right()
         axis = self.x_cut_plot.getAxis("right")
@@ -292,6 +293,7 @@ class CrossSection:
         axis.setStyle(showValues=False, tickLength=0)
         axis.setPen(pg.mkPen(None))
         axis.setWidth(max(float(pad), 1.0))
+        self._place_readout()
 
     # ---- data ---------------------------------------------------------------
 
@@ -347,15 +349,30 @@ class CrossSection:
             return
         x, y = self.line_position()
         xs, x_cut, ys, y_cut, row, column = cut_arrays(grid, x, y)
-        self.x_curve.setData(xs, x_cut)
-        self.y_curve.setData(y_cut, ys)
+        dots = {"symbol": "o", "symbolSize": 3, "symbolPen": None, "symbolBrush": CUT_COLOR}
+        self.x_curve.setData(xs, x_cut, **(dots if xs.size <= 400 else {"symbol": None}))
+        self.y_curve.setData(y_cut, ys, **(dots if ys.size <= 400 else {"symbol": None}))
         self.x_marker.setValue(x)
         self.y_marker.setValue(y)
         z = float(np.asarray(grid.z_values, dtype=float)[row, column])
+        z_unit = getattr(grid, "z_unit", None)
         self.plot2d.coord_label.setText(
             f"{grid.x_name} = {xs[column]:.6g} {grid.x_unit or ''}   "
             f"{grid.y_name} = {ys[row]:.6g} {grid.y_unit or ''}   {grid.z_name} = {z:.6g}"
         )
+        self.readout.setText(f"z: {_fmt(z, z_unit)}\ny: {_fmt(ys[row], grid.y_unit)}\nx: {_fmt(xs[column], grid.x_unit)}")
+        self._place_readout()
+
+    def _place_readout(self) -> None:
+        """The z / y / x box sits just below-right of the crossing, flipped near the right / bottom edge."""
+        if not self._attached:
+            return
+        x, y = self.line_position()
+        (x0, x1), (y0, y1) = self.plot2d.view_box.viewRange()
+        fx = (x - x0) / (x1 - x0) if x1 != x0 else 0.0
+        fy = (y - y0) / (y1 - y0) if y1 != y0 else 1.0
+        self.readout.setAnchor((1.0 if fx > 0.75 else 0.0, 1.0 if fy < 0.25 else 0.0))
+        self.readout.setPos(x, y)
 
     # ---- contrast -----------------------------------------------------------
 
@@ -382,7 +399,7 @@ class CrossSection:
             return
         low, high = float(plot2d._z_min), float(plot2d._z_max)
         margin = max((high - low) * HIST_VIEW_MARGIN, 1e-300)
-        self.hist_plot.setXRange(low - margin, high + margin, padding=0)
+        self.hist_plot.setYRange(low - margin, high + margin, padding=0)
 
     def set_contrast(self, low: float, high: float) -> None:
         if not (np.isfinite(low) and np.isfinite(high)) or low == high:
@@ -409,13 +426,14 @@ class CrossSection:
     def _update_histogram(self) -> None:
         grid = self.plot2d._grid
         if grid is None:
-            self.hist_curve.setData(np.array([0.0, 1.0]), np.array([0.0]), stepMode="center")
+            self.hist_bars.setOpts(x0=[0.0], y0=[0.0], width=[0.0], height=[1.0])
             return
         edges, counts = intensity_histogram(np.asarray(grid.z_values, dtype=float))
-        self.hist_curve.setData(edges, counts, stepMode="center")
-        self.hist_plot.setLabel("bottom", f"{grid.z_name}")
+        self.hist_edges, self.hist_counts = edges, counts
+        self.hist_bars.setOpts(x0=np.zeros(counts.size), y0=edges[:-1], width=counts, height=np.diff(edges))
+        self.hist_plot.setLabel("left", f"{grid.z_name}")
         self._fit_hist_view()
-        self.hist_plot.setYRange(0.0, float(counts.max()) if counts.size else 1.0, padding=0.05)
+        self.hist_plot.setXRange(0.0, float(counts.max()) if counts.size else 1.0, padding=0.05)
 
     def _on_region_changed(self) -> None:
         if self._updating:
@@ -452,14 +470,11 @@ class CrossSection:
             if label is not None and hasattr(label, "setColor"):
                 label.setColor(colors.text)
         self.hist_view.setBackground(colors.plot_background)
-        self.contrast_button.setStyleSheet(
-            f"QToolButton {{ background: {colors.panel}; color: {colors.text}; border: 1px solid {colors.border};"
-            f" border-radius: 4px; padding: 2px 8px; }}")
-        self.contrast_popup.setStyleSheet(f"#contrastPopup {{ background: {colors.plot_background}; }}")
-        self.controls.setStyleSheet(
-            f"QWidget {{ background: {colors.plot_background}; color: {colors.text}; }}"
-            f"QDoubleSpinBox {{ background: {colors.panel}; border: 1px solid {colors.border}; }}"
-            f"QPushButton {{ background: {colors.panel}; border: 1px solid {colors.border}; padding: 2px; }}"
+        self.panel.setStyleSheet(
+            f"#contrastPanel, #contrastPanel QWidget {{ background: {colors.plot_background}; color: {colors.text}; }}"
+            f"#contrastPanel QDoubleSpinBox {{ background: {colors.panel}; border: 1px solid {colors.border}; }}"
+            f"#contrastPanel QPushButton {{ background: {colors.panel}; border: 1px solid {colors.border};"
+            f" padding: 3px; }}"
         )
 
 

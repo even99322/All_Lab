@@ -245,6 +245,14 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 - 手動步進：`run_defaults.manual_loop: true` → 每一點自動循環量測，直到「記錄並下一點」。
 - 子專案需要論文庫 1.8.0（`projects.parent_id`、schema 8；專案專區「新增子專案」、編輯專案改「上層專案」、同一層名稱不重複、刪除時子專案移到上一層）；舊版論文庫一切照舊（都是最上層）。
 
+### 0n. 1.0.12：手機控制電磁鐵、常用設定
+
+- `/magnet`（導覽「電磁鐵」）→ `POST /api/nodes/<節點>/commands {cmd: "magnets"}`：節點回傳這台電腦即時數據的電源群組
+  （`live_groups.json` 的 `local:<電腦名稱>`，跟桌面一樣的名稱、成員、M1–M3）、每台的電流與輸出；量測中 `locked: true`，不讀儀器。
+  操作用既有的 `group_ramp` / `ramp_status` / `group_stop` / `fine_step` / `output`，記憶用 `magnet_memory`（桌面即時數據每次輪詢時同步）。
+- 節點 `_check_idle()`：`remote.node.lock_during_run`（預設開）時，量測進行中拒絕所有遠端寫入（手機、網頁、別台電腦）。
+- 即時數據常用設定存在 `LAB/live_ui.json` 的 `vna_presets`（起訖頻率、點數、功率、IF、平均 [開, 次數]、掃描時間、S 參數）；平均次數 `avg_count`（依儀器）。
+
 ### 0m. 1.0.11：量測監控截面、讀檔程式轉檔、控制台更新論文庫
 
 - 量測監控影像 = `HeatView`：heat[ix, j]（ix = 曲線 x、j = 最內圈掃描點）；X 截面 = heat[:, 橫線]、Y 截面 = heat[直線, :]；

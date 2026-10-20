@@ -22,7 +22,7 @@ import weakref
 import numpy as np
 import pyqtgraph as pg
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QVBoxLayout, QWidget, QLabel
+from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget, QLabel
 
 from app.theme import WHITE_PLOT
 from app.gui.fonts import mono_family
@@ -104,7 +104,7 @@ def colormap_pixmap(name: str, width: int = 96, height: int = 14):
     return QPixmap.fromImage(image.copy())
 
 
-AUTO_RANGE_TAIL = 5e-5          # fraction of pixels ignored at each end of the auto range
+AUTO_RANGE_TAIL = 0.01          # v1.0.9: like Labber's "Auto range" — the outlying 1 % at each end is ignored
 
 
 # v2.1.5: "Smooth 2D heatmap" (View menu, default on). A sweep often has few rows (e.g. 77 currents x 10001
@@ -171,7 +171,9 @@ def zero_centered_limits(low: float, high: float) -> tuple[float, float]:
 
 
 def robust_color_limits(values: np.ndarray) -> tuple[float, float]:
-    """Return display-only limits resistant to isolated extreme pixels."""
+    """Auto range (v1.0.9: Labber's rule, "optimize the contrast by removing outliers"): the colour range covers
+    the data between the 1st and the 99th percentile, so a few extreme pixels (e.g. the noise spikes of a d/dx map)
+    no longer squeeze the whole picture into one colour. "Full range" still shows minimum to maximum."""
     finite = np.asarray(values, dtype=float)
     if finite.size > 1_500_000:
         # Display-only limits: a regular stride sample is plenty and ~5x cheaper.
@@ -182,10 +184,10 @@ def robust_color_limits(values: np.ndarray) -> tuple[float, float]:
     if finite.size < 100:
         low, high = float(finite.min()), float(finite.max())
     else:
-        # Nearly the full range: only the few most extreme pixels are ignored, so a narrow
-        # resonance keeps its colour structure (a 1 %-99 % clip saturated it).
-        tail = max(AUTO_RANGE_TAIL, 3.0 / finite.size) * 100.0
+        tail = AUTO_RANGE_TAIL * 100.0
         low, high = (float(value) for value in np.percentile(finite, (tail, 100.0 - tail)))
+        if low == high:                       # most pixels equal: fall back to the values that differ
+            low, high = float(finite.min()), float(finite.max())
     if low == high:
         scale = max(abs(low), 1.0)
         low -= scale * 5e-10
@@ -221,7 +223,18 @@ class Plot2DWidget(QWidget):
         layout.addWidget(self.coord_label)
 
         self.graphics_widget = pg.GraphicsLayoutWidget()
-        layout.addWidget(self.graphics_widget)
+        # v1.0.9: the cross-section's contrast panel (histogram, Max / Min, Auto / Full range) sits LEFT of the map
+        row = QHBoxLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        self.left_panel_host = QWidget()
+        self.left_panel_host.setObjectName("plot2dLeftPanel")
+        self.left_panel_layout = QVBoxLayout(self.left_panel_host)
+        self.left_panel_layout.setContentsMargins(0, 0, 0, 0)
+        self.left_panel_host.hide()
+        row.addWidget(self.left_panel_host)
+        row.addWidget(self.graphics_widget, 1)
+        layout.addLayout(row, 1)
 
         self.plot_item: pg.PlotItem = self.graphics_widget.addPlot()
         # Hide pyqtgraph's floating in-plot quick controls (Auto-range / menu).

@@ -118,16 +118,14 @@ def test_full_range_and_inline_parts(qapp):
     widget.set_cross_section_enabled(True)
     cross = widget._cross
     ci = widget.graphics_widget.ci
-    assert cross.hist_plot not in ci.items and cross.contrast_button.isVisible()
+    assert cross.hist_plot not in ci.items and cross.panel.isVisible()          # v1.0.9: contrast panel at the left
     cross.set_parts(x=True, y=False)
     assert cross.x_cut_plot in ci.items and cross.y_cut_plot not in ci.items
     cross.set_parts(x=False, y=True)
     assert cross.y_cut_plot in ci.items and cross.x_cut_plot not in ci.items
-    cross.show_contrast_popup()
-    assert cross.contrast_popup.isVisible() and cross.contrast() == (widget._z_min, widget._z_max)
-    cross.contrast_popup.hide()
+    assert cross.contrast() == (widget._z_min, widget._z_max)
     cross.set_parts(x=False, y=False)
-    assert not widget.cross_section_enabled and not cross.contrast_button.isVisible()
+    assert not widget.cross_section_enabled and not cross.panel.isVisible()
     widget.close()
 
 

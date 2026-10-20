@@ -613,6 +613,9 @@ class BrowserWindow(QMainWindow):
         view_row.addWidget(self.debackground_button)
         from app.gui.notification_bell import BellButton
         self.notification_bell = BellButton(self.localizer, TOOLBAR_ICON_SIZE)
+        from app.gui import update_toast        # v1.0.9: new versions pop up at the bottom right
+
+        update_toast.install(self.localizer)
         view_row.addWidget(self.notification_bell)
         # Annotation sits at the top right in every window.
         from app.gui.annotation import make_annotation_button

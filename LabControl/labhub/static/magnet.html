@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>電磁鐵</title>
+<style>
+  :root { --bg:#f3f4f6; --card:#fff; --text:#1c1f24; --muted:#6b7280; --line:#e2e5e9; --soft:#eef0f3;
+          --accent:#1971c2; --accent-soft:#e7f1fb; --ok:#2b8a3e; --warn:#e67700; --err:#e03131; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111317; --card:#1b1d22; --text:#e9ecef; --muted:#9aa1ab; --line:#2b2f36; --soft:#23262c;
+            --accent:#4dabf7; --accent-soft:#1d2d3d; --ok:#51cf66; --warn:#ffa94d; --err:#ff6b6b; }
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; background:var(--bg); color:var(--text); }
+  body { font:15px/1.45 -apple-system,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:10px 12px 40px; }
+  .top { display:flex; align-items:center; gap:10px; margin:4px 0 8px; }
+  .top h1 { font-size:19px; margin:0; }
+  .top .sp { flex:1; } .upd { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .tabs { display:flex; gap:8px; overflow-x:auto; padding:2px 0 8px; scrollbar-width:none; }
+  .tabs::-webkit-scrollbar { display:none; }
+  .tab { flex:none; display:flex; gap:6px; align-items:center; padding:6px 13px; border-radius:999px; border:1px solid var(--line);
+         background:var(--card); font-weight:600; cursor:pointer; color:var(--text); font-size:14px; }
+  .tab.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .dot { width:8px; height:8px; border-radius:50%; background:#868e96; flex:none; }
+  .dot.on { background:var(--ok); } .dot.run { background:var(--accent); animation:p 1.4s infinite; }
+  @keyframes p { 50% { opacity:.35; } }
+  .lock { display:none; background:#fff4e6; color:#a24d00; border:1px solid #ffc078; border-radius:12px; padding:10px 12px;
+          margin-bottom:10px; font-weight:600; }
+  @media (prefers-color-scheme: dark) { .lock { background:#3a2a14; color:#ffc078; border-color:#8a5a1c; } }
+  .lock.show { display:block; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:12px; }
+  .hd { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+  .hd .nm { font-weight:700; font-size:17px; }
+  .hd .sp { flex:1; }
+  .pill { font-size:12px; padding:1px 8px; border-radius:999px; background:var(--soft); color:var(--muted); font-weight:600; }
+  .pill.on { background:#d3f9d8; color:#2b8a3e; } .pill.err { background:#ffe3e3; color:var(--err); }
+  @media (prefers-color-scheme: dark) { .pill.on { background:#1e3a24; color:#69db7c; } .pill.err { background:#3b1d1d; } }
+  .vals { display:flex; flex-wrap:wrap; gap:6px 18px; margin:4px 0 8px; }
+  .v { display:flex; flex-direction:column; }
+  .v .k { font-size:12px; color:var(--muted); }
+  .v .n { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:.3px; }
+  .v .n small { font-size:13px; font-weight:600; color:var(--muted); margin-left:3px; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:7px 0; }
+  .row > .lb { font-size:13px; color:var(--muted); min-width:34px; }
+  input, select { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:9px; padding:7px 9px; }
+  input.tg { width:9.5em; font-variant-numeric:tabular-nums; }
+  input.rt { width:5.5em; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:5px; min-height:38px; padding:6px 14px; border-radius:10px;
+         border:1px solid var(--line); background:var(--soft); color:var(--text); font:inherit; font-weight:700; cursor:pointer; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.stop { background:var(--err); border-color:var(--err); color:#fff; }
+  .btn.pm { width:48px; font-size:20px; }
+  .btn.mem { min-width:84px; flex-direction:column; gap:0; line-height:1.15; padding:4px 10px; }
+  .btn.mem small { font-weight:600; color:var(--muted); font-size:11.5px; font-variant-numeric:tabular-nums; }
+  .btn:disabled { opacity:.45; cursor:default; }
+  .ramp { font-size:13px; color:var(--accent); font-weight:600; }
+  .muted { color:var(--muted); } .small { font-size:12px; } .err { color:var(--err); }
+  .empty { text-align:center; color:var(--muted); padding:36px 10px; }
+  .toast { position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:var(--text);
+           color:var(--bg); padding:9px 16px; border-radius:10px; font-weight:600; opacity:0; transition:.2s; pointer-events:none;
+           z-index:40; max-width:92vw; }
+  .toast.show { opacity:.95; }
+</style>
+</head>
+<body>
+<!--QEL-NAV-->
+<main>
+  <div class="top"><h1>🧲 電磁鐵</h1><span class="sp"></span><span class="upd" id="upd"></span></div>
+  <div class="tabs" id="tabs"></div>
+  <div class="lock" id="lock"></div>
+  <div id="groups"><div class="empty">讀取中…</div></div>
+  <p class="muted small">跟量測電腦「即時數據」的電源群組一樣：群組的第一台是主控，其他跟著動。目標與記憶用斜坡移動（記憶用
+    <span id="memrate">0.05</span> mA/s）。量測進行中不能調整，避免跟量測的指令衝突。</p>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+let NODES = [], CUR = null, DATA = null, BUSY = false, JOBS = {}, TIMER = null, FAILS = 0;
+try { CUR = localStorage.getItem("qel-magnet-node"); } catch (e) {}
+
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast.t);
+  toast.t = setTimeout(() => el.classList.remove("show"), 3500); }
+async function api(path, opts) {
+  const r = await fetch(path, Object.assign({ credentials:"same-origin", cache:"no-store" }, opts || {}));
+  if (r.status === 401) { location.href = "/login?next=/magnet"; throw new Error("login"); }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.ok === false) throw new Error(d.error || r.statusText);
+  return d;
+}
+async function cmd(name, args, wait = 15) {
+  const d = await api(`/api/nodes/${encodeURIComponent(CUR)}/commands?wait=${wait}`,
+    { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ cmd:name, args:args || {} }) });
+  const r = d.reply || {};
+  if (!r.ok) throw new Error(r.error || "量測電腦沒有回應");
+  return r.result;
+}
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+function scaleOf(unit) { return unit === "A" ? [1e3, "mA"] : unit === "V" ? [1e3, "mV"] : [1, unit || ""]; }
+function decimals(res, k) { return Math.max(0, Math.min(7, Math.ceil(-Math.log10(res * k) - 1e-9))); }
+function show(v, src) { if (v == null || !isFinite(v)) return "—"; const [k] = scaleOf(src.unit);
+  return (v * k).toFixed(decimals(src.resolution || 1e-6, k)); }
+
+// ---- 量測電腦 ---------------------------------------------------------------------
+async function loadNodes() {
+  try {
+    const st = await api("/api/state");
+    NODES = (st.nodes || []).filter(n => n.online);
+    if (!NODES.some(n => n.name === CUR)) CUR = NODES.length ? NODES[0].name : null;
+    $("tabs").innerHTML = NODES.map(n => `<div class="tab${n.name === CUR ? " on" : ""}" data-n="${esc(n.name)}">
+      <span class="dot ${n.state === "running" || n.state === "paused" ? "run" : "on"}"></span>${esc(n.name)}</div>`).join("");
+    if (!CUR) { $("groups").innerHTML = '<div class="empty">沒有在線上的量測電腦（Lab Control 要開著並連到平台）</div>'; }
+  } catch (e) { $("groups").innerHTML = `<div class="empty err">${esc(e.message)}</div>`; }
+}
+$("tabs").addEventListener("click", e => {
+  const t = e.target.closest(".tab"); if (!t) return;
+  CUR = t.dataset.n; DATA = null; JOBS = {};
+  try { localStorage.setItem("qel-magnet-node", CUR); } catch (e) {}
+  [...document.querySelectorAll(".tab")].forEach(x => x.classList.toggle("on", x.dataset.n === CUR));
+  $("groups").innerHTML = '<div class="empty">讀取中…</div>'; refresh(true);
+});
+
+// ---- 讀取 ----------------------------------------------------------------------
+async function refresh(force) {
+  if (!CUR || (BUSY && !force)) return;
+  try {
+    const d = await cmd("magnets", { read: !DATA || !DATA.locked }, 12);
+    if (d && d.name && d.name !== CUR) return;
+    DATA = d; FAILS = 0;
+    $("upd").textContent = new Date().toTimeString().slice(0, 8);
+    $("memrate").textContent = ((d.memory_rate || 5e-5) * 1e3).toPrecision(2);
+    render();
+  } catch (e) {
+    if (++FAILS >= 2) $("groups").innerHTML = `<div class="empty err">${esc(e.message)}</div>`;
+  }
+}
+
+function locked() { return !DATA || DATA.locked || !DATA.allow_set; }
+
+function render() {
+  const d = DATA, src = {};
+  (d.sources || []).forEach(s => src[s.ref] = s);
+  const lock = $("lock");
+  if (d.locked) { lock.textContent = `🔒 量測進行中（${(d.run && d.run.name) || "量測"}）：不能調整電磁鐵，避免跟量測的指令衝突。顯示的是最後讀到的值。`; lock.classList.add("show"); }
+  else if (!d.allow_set) { lock.textContent = "🔒 這台量測電腦不允許遠端設定儀器（settings.yaml remote.node.allow_remote_set）"; lock.classList.add("show"); }
+  else lock.classList.remove("show");
+  const groups = d.groups || [];
+  if (!groups.length) { $("groups").innerHTML = '<div class="empty">這台量測電腦沒有已連線的電源</div>'; return; }
+  const active = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.keep : null;
+  const kept = {}; document.querySelectorAll("input[data-keep]").forEach(i => kept[i.dataset.keep] = i.value);
+  (d.ramps || []).forEach(j => { const g = groups.find(g => g.members.includes((j.refs || [])[0])); if (g) JOBS[g.index] = j; });
+  $("groups").innerHTML = groups.map(g => card(g, src)).join("");
+  document.querySelectorAll("input[data-keep]").forEach(i => { if (kept[i.dataset.keep] != null) i.value = kept[i.dataset.keep]; });
+  if (active) { const el = document.querySelector(`input[data-keep="${active}"]`); if (el) el.focus(); }
+}
+
+function card(g, src) {
+  const m0 = src[g.members[0]] || {}, [k, u] = scaleOf(m0.unit), dis = locked() ? " disabled" : "";
+  const vals = g.members.map((r, i) => { const s = src[r] || {};
+    return `<div class="v"><span class="k">${esc(s.label || r)}${i === 0 && g.members.length > 1 ? "（主控）" : ""}</span>
+      <span class="n">${show(s.level, s)}<small>${esc(u)}</small></span>${s.error ? `<span class="small err">${esc(s.error)}</span>` : ""}</div>`; }).join("");
+  const outs = g.members.map(r => (src[r] || {}).output).filter(o => o != null);
+  const on = outs.length && outs.every(Boolean);
+  const pill = outs.length ? `<span class="pill${on ? " on" : ""}">輸出 ${on ? "ON" : outs.some(Boolean) ? "部分" : "OFF"}</span>` : "";
+  const res = m0.resolution || 1e-6, steps = [1, 10, 100, 1000].map(n => n * res);
+  const fine = g.members.length <= 2 ? `<div class="row"><span class="lb">微調</span>
+      <select data-keep="st${g.index}" id="st${g.index}">${steps.map((s, i) => `<option value="${s}"${i === 1 ? " selected" : ""}>${(s * k).toPrecision(1)} ${u}</option>`).join("")}</select>
+      <button class="btn pm" data-a="fine" data-g="${g.index}" data-d="-1"${dis}>−</button>
+      <button class="btn pm" data-a="fine" data-g="${g.index}" data-d="1"${dis}>＋</button>
+      ${g.members.length === 2 ? '<span class="small muted">兩台時動比較低／高的那台</span>' : ""}</div>` : "";
+  const mem = (g.memory || []).map((v, i) => `<button class="btn mem" data-a="mem" data-g="${g.index}" data-i="${i}"${v == null || dis ? " disabled" : ""}>
+      M${i + 1}<small>${v == null ? "—" : (v * k).toFixed(decimals(res, k)) + " " + u}</small></button>`).join("");
+  const job = JOBS[g.index];
+  const ramp = job && !job.done ? `<div class="row"><span class="ramp">↗ 斜坡中 → ${(job.target * k).toFixed(decimals(res, k))} ${u}
+      ${job.actual_rate ? `（${(job.actual_rate * k).toPrecision(2)} ${u}/s）` : ""}</span>
+      <button class="btn stop" data-a="stop" data-g="${g.index}">■ 停止</button></div>` : "";
+  return `<div class="card"><div class="hd"><span class="nm">${esc(g.name)}</span><span class="sp"></span>${pill}</div>
+    <div class="vals">${vals}</div>${ramp}
+    <div class="row"><span class="lb">目標</span>
+      <input class="tg" inputmode="decimal" data-keep="tg${g.index}" id="tg${g.index}" placeholder="${show(m0.level, m0)}"${dis}>
+      <span class="muted">${esc(u)}</span>
+      <button class="btn primary" data-a="go" data-g="${g.index}"${dis}>前往</button></div>
+    ${fine}
+    <div class="row"><span class="lb">記憶</span>${mem}
+      <button class="btn" data-a="save" data-g="${g.index}"${dis} title="把目前的值存到一個記憶">存目前值…</button></div>
+    ${outs.length ? `<div class="row"><span class="lb">輸出</span>
+      <button class="btn" data-a="out" data-g="${g.index}" data-on="${on ? 0 : 1}"${dis}>${on ? "關閉輸出" : "打開輸出"}</button></div>` : ""}
+  </div>`;
+}
+
+// ---- 操作 ----------------------------------------------------------------------
+function group(i) { return (DATA.groups || []).find(g => g.index === i); }
+function srcOf(ref) { return (DATA.sources || []).find(s => s.ref === ref) || {}; }
+async function act(fn, what) {
+  if (BUSY) return; BUSY = true;
+  try { await fn(); } catch (e) { toast(`${what}失敗：${e.message}`); }
+  BUSY = false; refresh(true);
+}
+async function startRamp(g, target, rate) {
+  const jid = await cmd("group_ramp", Object.assign({ refs:g.members, target }, rate ? { rate } : {}), 20);
+  JOBS[g.index] = { id:jid, target, done:false }; followRamp(g.index, jid);
+}
+async function followRamp(gi, jid) {
+  for (;;) {
+    await new Promise(r => setTimeout(r, 900));
+    let st; try { st = await cmd("ramp_status", { job:jid }, 8); } catch (e) { continue; }
+    JOBS[gi] = st;
+    if (DATA) render();
+    if (st.done) { delete JOBS[gi]; if (st.error) toast(`斜坡停止：${st.error}`); refresh(true); return; }
+  }
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest("button[data-a]"); if (!b || !DATA) return;
+  const gi = +b.dataset.g, g = group(gi); if (!g) return;
+  const s0 = srcOf(g.members[0]), [k, u] = scaleOf(s0.unit);
+  if (b.dataset.a === "go") {
+    const v = parseFloat(($("tg" + gi).value || "").replace(",", "."));
+    if (!isFinite(v)) { toast(`輸入目標值（${u}）`); return; }
+    act(() => startRamp(g, v / k, null), "前往");
+  } else if (b.dataset.a === "mem") {
+    const v = g.memory[+b.dataset.i]; if (v == null) return;
+    act(() => startRamp(g, v, DATA.memory_rate || null), "記憶");
+  } else if (b.dataset.a === "fine") {
+    const step = parseFloat($("st" + gi).value);
+    act(() => cmd("fine_step", { refs:g.members, direction:+b.dataset.d, step }, 15), "微調");
+  } else if (b.dataset.a === "stop") {
+    const j = JOBS[gi]; act(() => cmd("group_stop", j ? { job:j.id } : {}, 8), "停止");
+  } else if (b.dataset.a === "out") {
+    const on = b.dataset.on === "1";
+    if (!confirm(`${on ? "打開" : "關閉"}「${g.name}」的輸出？`)) return;
+    act(() => cmd("output", { refs:g.members, on }, 15), "輸出切換");
+  } else if (b.dataset.a === "save") {
+    const slot = prompt(`把 ${g.name} 目前的值（${show(s0.level, s0)} ${u}）存到哪個記憶？輸入 1、2 或 3`, "1");
+    const i = parseInt(slot, 10); if (!(i >= 1 && i <= 3)) return;
+    act(() => cmd("magnet_memory", { group:gi, slot:i - 1, value:s0.level }, 10), "存記憶");
+  }
+});
+
+// 只在畫面看得到時讀（手機鎖螢幕 / 換分頁時停）
+function loop() { clearInterval(TIMER); TIMER = setInterval(() => { if (!document.hidden) refresh(false); }, 2500); }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadNodes(); refresh(true); } });
+setInterval(() => { if (!document.hidden) loadNodes(); }, 15000);
+loadNodes().then(() => refresh(true)); loop();
+</script>
+</body>
+</html>

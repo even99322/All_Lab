@@ -20,6 +20,7 @@ os.environ.setdefault("LABLOGVIEWER_FIRST_OPEN_2D", "0")
 os.environ.setdefault("LABLOGVIEWER_NO_UPDATE_CHECK", "1")
 # ... nor the lab platform hub (v2.1.2; test_v212_hub_update.py uses its own local hub).
 os.environ.setdefault("LABLOGVIEWER_NO_HUB", "1")
+os.environ.setdefault("LABLOGVIEWER_NO_UPDATE_TOAST", "1")      # v1.0.9: no bottom-right popups in tests
 # v2.1.5: never ask to download pet pictures during a test.
 os.environ.setdefault("LLV_NO_PET_OFFER", "1")
 

@@ -538,8 +538,31 @@ class DCGroupsPanel(QtWidgets.QWidget):
         if self.key and self.groups:
             try:
                 self.store.save(self.key, self.groups)
+                self._store_mtime = self.store.path.stat().st_mtime
             except OSError as e:
                 self.message.emit(f"無法儲存群組：{e}")
+
+    def sync_store_memory(self) -> bool:
+        """1.0.12：手機 / 網頁（Hub 的「電磁鐵」頁）改了 M1–M3 → 這裡的記憶跟著更新（不覆蓋回去）。"""
+        try:
+            mtime = self.store.path.stat().st_mtime
+        except OSError:
+            return False
+        if mtime == getattr(self, "_store_mtime", None) or not self.key:
+            return False
+        self._store_mtime = mtime
+        saved = self.store.load(self.key) or []
+        changed = False
+        for i, g in enumerate(self.groups):
+            for sg in saved:
+                if sg["members"] == g["members"] and sg["memory"] != g["memory"]:
+                    g["memory"] = list(sg["memory"])
+                    changed = True
+                    for c in self.cards:
+                        if c.index == i:
+                            c.g["memory"] = list(g["memory"])
+                            c._update_memory()
+        return changed
 
     # ---- 畫面 ---------------------------------------------------------------------
     def render(self) -> None:
@@ -620,6 +643,7 @@ class DCGroupsPanel(QtWidgets.QWidget):
             for c in self.cards:
                 c.update_values(self.levels, self.outputs, self.errors)
                 c.set_job(st.get(c.index) if c.index in self.jobs else None)
+            self.sync_store_memory()
 
         def fail(m):
             self._polling = False

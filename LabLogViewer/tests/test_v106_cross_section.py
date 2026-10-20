@@ -86,7 +86,7 @@ def test_embedded_cross_section_in_plot2d_widget(qapp):
     assert widget.cross_section_enabled and cross.line_position() == (4.5, 102.0)
     cross.set_line_position(7.0, 101.0)
     values, ys = cross.y_curve.getData()
-    assert np.allclose(values, _grid().z_values[:, 7]) and cross.y_cut_plot.getViewBox().xInverted()
+    assert np.allclose(values, _grid().z_values[:, 7]) and not cross.y_cut_plot.getViewBox().xInverted()  # v1.0.9: Labber
     widget.plot(_grid())
     assert cross.line_position() == (7.0, 101.0)
     seen = []
@@ -99,24 +99,26 @@ def test_embedded_cross_section_in_plot2d_widget(qapp):
 
 
 def test_histogram_view_follows_contrast_pans_and_resets(qapp):
+    """v1.0.9: the histogram is vertical (value axis up, like the map), left of the map."""
     window = CrossSectionWindow()
     window.set_grid(_grid())
     window.set_contrast(1010.0, 1012.0)
     vb = window.cross.hist_plot.getViewBox()
-    low, high = vb.viewRange()[0]
+    low, high = vb.viewRange()[1]
     assert low < 1010.0 < 1012.0 < high and high - low < 20.0
-    assert vb.state["mouseEnabled"][0] is True and vb.state["mouseEnabled"][1] is False
-    vb.setXRange(5000.0, 5010.0, padding=0)
-    assert vb.viewRange()[0][0] > 4999.0
+    assert vb.state["mouseEnabled"][0] is False and vb.state["mouseEnabled"][1] is True
+    vb.setYRange(5000.0, 5010.0, padding=0)
+    assert vb.viewRange()[1][0] > 4999.0
     vb.mouseDoubleClickEvent(_Ev())
-    low, high = vb.viewRange()[0]
+    low, high = vb.viewRange()[1]
     assert low < 1010.0 < 1012.0 < high
     # dragging the region must not rescale the view under the cursor
     window.cross._fit_hist_view()
-    before = vb.viewRange()[0]
+    before = vb.viewRange()[1]
     window.cross.hist_region.setRegion((1010.2, 1011.2))
     window.cross._on_region_changed()
-    assert vb.viewRange()[0] == before
+    assert vb.viewRange()[1] == before
+    assert window.cross.contrast() == (1010.2, 1011.2)
     window.close()
 
 

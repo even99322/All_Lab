@@ -123,6 +123,7 @@ remote:
     name: ""                   # 節點名稱（空白 = 電腦名稱）
     allow_remote_run: true     # 允許遠端開始量測
     allow_remote_set: true     # 允許遠端設定儀器
+    lock_during_run: true      # 量測進行中，遠端（手機 / 網頁 / 別台電腦）不能寫儀器（避免指令衝突）
     allow_update: true         # 允許遠端要求更新（量測中會等量測結束）
     allowed_users: []          # 空白 = 所有有 Hub token 的人；例：["alice@PC-01"]（停止 / 暫停不受限制）
 

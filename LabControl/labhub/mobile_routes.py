@@ -5,6 +5,8 @@
     GET  /api/m                    → 所有量測電腦的概況（手機首頁）
     GET  /api/m/<名稱>?frame=&since= → 一台的完整狀態；frame 相同時熱圖只回傳版本 > since 的列
     GET  /m                        → 手機網頁（Android / iOS 的瀏覽器都可以，「加到主畫面」像 App 一樣開）
+    GET  /magnet                   → 1.0.12：電磁鐵（電源群組的電流、斜坡、微調、記憶、輸出；透過節點指令
+                                     magnets / group_ramp / fine_step / output / magnet_memory，量測進行中節點拒絕寫入）
 
 權限：跟 /nodes 一樣（裝置 token，或有量測權限的論文庫帳號）。資料只放在記憶體（Hub 重新啟動後由 Lab Control 補送）。
 """
@@ -136,6 +138,14 @@ def _page(h: Handler) -> None:
     from .web_nav import page
 
     page(h, "mobile.html", "live")
+
+
+@route("GET", r"/magnet/?")
+def _magnet(h: Handler) -> None:
+    """1.0.12：手機 / 網頁控制電磁鐵（量測電腦的電源群組；量測進行中只能看）。"""
+    from .web_nav import page
+
+    page(h, "magnet.html", "magnet")
 
 
 @route("GET", r"/m/manifest\.webmanifest", auth=False)

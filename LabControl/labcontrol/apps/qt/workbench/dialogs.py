@@ -555,9 +555,20 @@ class MeasureDialog(QtWidgets.QDialog):
                     self._fields[key] = (_Field(key, label, unit), w)
                     self.sform.addRow(label, w)
                 fields = [f for f in fields if f.key not in ("start_freq", "stop_freq")]
+        is_vna = self._has_freq()
         for f in fields:
             raw = (b.settings or {}).get(f.key)
-            if f.kind == "bool":
+            if f.key == "averages" and is_vna:             # 1.0.12：平均 = 勾選 ＋ 次數（關閉時次數保留）
+                from ..live.vna_panel import DEFAULT_AVG, AvgEdit, _UIState
+
+                mem = (_UIState().load().get("avg_count") or {}).get(b.instrument or "", DEFAULT_AVG)
+                w = AvgEdit(mem)
+                w.setObjectName("measureAvg")
+                try:
+                    w.set_value(int(float(str(raw).split()[0])) if raw is not None else 0, mem)
+                except (TypeError, ValueError):
+                    w.set_value(0, mem)
+            elif f.kind == "bool":
                 w = QtWidgets.QCheckBox()
                 w.setChecked(str(raw).strip().upper() in ("1", "ON", "TRUE", "YES") if raw is not None else False)
             elif f.kind == "enum" and f.choices:
@@ -583,8 +594,13 @@ class MeasureDialog(QtWidgets.QDialog):
 
     def _collect(self) -> Dict[str, Any]:
         s = dict(self.b.settings or {})
+        from ..live.vna_panel import AvgEdit
+
         for key, (f, w) in self._fields.items():
-            if isinstance(w, QtWidgets.QCheckBox):
+            if isinstance(w, AvgEdit):
+                s[key] = int(w.value())
+                self._remember_avg(w)
+            elif isinstance(w, QtWidgets.QCheckBox):
                 s[key] = w.isChecked()
             elif isinstance(w, QtWidgets.QComboBox):
                 s[key] = w.currentText()
@@ -619,6 +635,16 @@ class MeasureDialog(QtWidgets.QDialog):
         self.b.settings = s
         self._mode = new
         self._build()
+
+    def _remember_avg(self, w) -> None:
+        """平均次數記在這台電腦（跟即時數據共用），關掉平均再打開時沿用。"""
+        from ..live.vna_panel import _UIState
+
+        ui = _UIState()
+        mem = dict(ui.load().get("avg_count") or {})
+        if mem.get(self.b.instrument or "") != w.remembered():
+            mem[self.b.instrument or ""] = w.remembered()
+            ui.save(avg_count=mem)
 
     # ---- 套用儀器目前值 ------------------------------------------------------------------
     def _backend(self):
@@ -660,7 +686,11 @@ class MeasureDialog(QtWidgets.QDialog):
                 errs.append(f.label)
                 continue
             try:
-                if isinstance(w, QtWidgets.QCheckBox):
+                from ..live.vna_panel import AvgEdit
+
+                if isinstance(w, AvgEdit):
+                    w.set_value(int(round(float(v))))
+                elif isinstance(w, QtWidgets.QCheckBox):
                     w.setChecked(bool(v) if not isinstance(v, str) else v.strip().upper() in ("1", "ON", "TRUE"))
                 elif isinstance(w, QtWidgets.QComboBox):
                     w.setCurrentText(str(v))

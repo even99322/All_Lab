@@ -38,10 +38,10 @@ log = logging.getLogger(__name__)
 QUICK = {"ping", "status", "stop", "pause", "update", "release", "group_stop", "ramp_status"}
 #: 只讀，不檢查 allowed_users
 READ_ONLY = {"ping", "status", "get", "get_all", "describe", "sources", "ramp_status", "vnas", "vna_catalog",
-             "catalog", "templates", "check_scheme", "instruments_file"}
+             "catalog", "templates", "check_scheme", "instruments_file", "magnets"}
 #: 即時監控的讀取 / 控制：另一條佇列處理，不會排在「全部連線」「開始量測」這類慢指令後面而逾時
 LIVE = {"get", "describe", "get_all", "sources", "vnas", "vna_catalog", "vna_ports", "vna_trace", "vna_traces",
-        "vna_scan", "vna_set_visible", "fine_step", "output", "group_ramp"}
+        "vna_scan", "vna_set_visible", "fine_step", "output", "group_ramp", "magnets", "magnet_memory"}
 #: 等待上傳的即時資料上限（Hub 斷線太久時丟掉最舊的曲線，不影響量測）
 MAX_PENDING = 4000
 
@@ -556,6 +556,7 @@ class NodeService:
     def cmd_set(self, sender, ref: str, value: Any) -> Any:
         if not setting("remote.node.allow_remote_set", True):
             raise CommandError("這個節點不允許遠端設定儀器（settings.yaml remote.node.allow_remote_set）")
+        self._check_idle()
         self.station.ensure_connected([ref])
         p = self.station.parameter(ref)
         if isinstance(value, str):
@@ -644,6 +645,66 @@ class NodeService:
     def _check_set(self) -> None:
         if not setting("remote.node.allow_remote_set", True):
             raise CommandError("這個節點不允許遠端設定儀器（settings.yaml remote.node.allow_remote_set）")
+        self._check_idle()
+
+    def _check_idle(self) -> None:
+        """1.0.12：量測進行中，遠端（手機 / 網頁 / 別台電腦）不能寫儀器，避免跟量測的指令衝突。"""
+        if setting("remote.node.lock_during_run", True) and self._active_runner() is not None:
+            run = self.run or {}
+            raise CommandError(f"量測進行中（{run.get('name') or '量測'}）：遠端不能調整儀器，避免跟量測的指令衝突；"
+                               "等量測結束再調整")
+
+    # ---- 1.0.12：手機 / 網頁控制電磁鐵（Hub 的「電磁鐵」頁）---------------------------------------
+    def _groups_key(self) -> str:
+        return f"local:{hostname()}"
+
+    def cmd_magnets(self, sender, read: bool = True) -> Dict[str, Any]:
+        """電源群組（跟這台量測電腦的「即時數據」一樣：名稱、成員、M1–M3）＋ 每台的電流與輸出。
+        量測進行中：不碰儀器（只回傳最後知道的值），locked = True。"""
+        from ..core import live_groups as lg
+        from ..core.grouping import GroupRamp, default_groups, list_sources
+
+        running = self._active_runner() is not None
+        locked = bool(running and setting("remote.node.lock_during_run", True))
+        sources = list_sources(self.station)
+        if read and not running:
+            for s in sources:
+                try:
+                    v = self.station.parameter(s["ref"]).get()
+                    s["level"] = v.item() if hasattr(v, "item") else v
+                except Exception as e:  # noqa: BLE001
+                    s["error"] = str(e)
+                ref_out = s["ref"].rsplit(".", 1)[0] + ".output"
+                try:
+                    if s.get("output") is not None:
+                        s["output"] = bool(self.station.parameter(ref_out).get())
+                except Exception:  # noqa: BLE001
+                    pass
+        store = lg.GroupStore(lab_path("live_groups.json"))
+        groups = lg.reconcile(store.load(self._groups_key()), sources, default_groups(self.station))
+        groups = lg.visible(groups, [s["ref"] for s in sources])
+        run = dict(self.run) if self.run else None
+        return {"name": self.name, "time": time.time(), "running": running, "locked": locked, "run": run,
+                "allow_set": bool(setting("remote.node.allow_remote_set", True)),
+                "memory_rate": float(setting("live.memory_ramp_mA_s", 0.05)) * 1e-3,
+                "sources": sources, "groups": groups, "ramps": GroupRamp.active()}
+
+    def cmd_magnet_memory(self, sender, group: int, slot: int, value: Optional[float] = None) -> Dict[str, Any]:
+        """把 value（SI，None = 清除）存進群組 group 的 M{slot+1}（跟本機即時數據共用）。"""
+        from ..core import live_groups as lg
+        from ..core.grouping import default_groups, list_sources
+
+        self._check_set()
+        store = lg.GroupStore(lab_path("live_groups.json"))
+        sources = list_sources(self.station)
+        groups = lg.reconcile(store.load(self._groups_key()), sources, default_groups(self.station))
+        if not 0 <= int(group) < len(groups) or not 0 <= int(slot) < lg.N_MEMORY:
+            raise CommandError("沒有這個群組 / 記憶")
+        groups[int(group)]["memory"][int(slot)] = None if value is None else float(value)
+        store.save(self._groups_key(), groups)
+        self.station.bus.log(f"🛰 {sender.get('user')} 記憶 {groups[int(group)]['name']} M{int(slot) + 1} = {value}")
+        self.station.bus.publish("live.groups_changed", key=self._groups_key())
+        return {"group": int(group), "memory": groups[int(group)]["memory"]}
 
     def cmd_sources(self, sender) -> Dict[str, Any]:
         return self._backend().sources()

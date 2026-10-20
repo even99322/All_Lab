@@ -97,6 +97,58 @@ class PlotWindow(QtWidgets.QMainWindow):
         super().closeEvent(ev)
 
 
+#: 1.0.12：常用設定（快速切換）存的參數——起訖頻率（不存中心 / 頻寬，免得互相蓋掉）、點數、功率、IF、平均、掃描時間
+PRESET_KEYS = ["start_freq", "stop_freq", "points", "power", "if_bw", "averages", "sweep_time_auto", "sweep_time"]
+MAX_PRESETS = 12
+DEFAULT_AVG = 10
+
+
+class AvgEdit(QtWidgets.QWidget):
+    """1.0.12：VNA 平均 = 勾選開關 ＋ 次數。關掉時次數保留（不再用 0 表示關閉）；寫入 VNA 時關閉 = 0。"""
+
+    changed = pyqtSignal()
+    stepped = pyqtSignal()
+
+    def __init__(self, count: int = DEFAULT_AVG, parent=None) -> None:
+        super().__init__(parent)
+        from ..digit_edit import WheelLineEdit
+
+        h = QtWidgets.QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(4)
+        self.check = QtWidgets.QCheckBox("開")
+        self.check.setObjectName("vnaAvgOn")
+        self.count = WheelLineEdit(str(max(1, int(count))))
+        self.count.setObjectName("vnaAvgCount")
+        self.count.setMinimumWidth(50)
+        self.count.setEnabled(False)
+        self.count.setToolTip("平均次數（關掉時保留，下次打開沿用）")
+        h.addWidget(self.check)
+        h.addWidget(self.count, 1)
+        self.check.clicked.connect(lambda on: (self.count.setEnabled(on), self.changed.emit()))
+        self.count.textEdited.connect(lambda _t: self.changed.emit())
+        self.count.stepped.connect(self.stepped.emit)
+
+    def remembered(self) -> int:
+        try:
+            return max(1, int(round(float(self.count.text()))))
+        except ValueError:
+            return DEFAULT_AVG
+
+    def value(self) -> int:
+        """寫進 VNA 的值：關閉 = 0，開啟 = 次數（≥ 1）。"""
+        return self.remembered() if self.check.isChecked() else 0
+
+    def set_value(self, n: Any, remembered: Optional[int] = None) -> None:
+        try:
+            n = int(round(float(n or 0)))
+        except (TypeError, ValueError):
+            n = 0
+        self.check.setChecked(n >= 1)
+        self.count.setText(str(n if n >= 1 else max(1, int(remembered or self.remembered()))))
+        self.count.setEnabled(n >= 1)
+
+
 class VNAPanel(QtWidgets.QWidget):
     message = pyqtSignal(str)
 
@@ -170,6 +222,27 @@ class VNAPanel(QtWidgets.QWidget):
         self._detecting: set = set()
         self._want_sparam = saved.get("sparam") or "S21"
         self._build_sbuttons(SPARAMS, {})
+        # 1.0.12：常用設定（快速切換）——點一下套用；右鍵 重新命名 / 用目前設定覆蓋 / 刪除
+        prow = QtWidgets.QHBoxLayout()
+        prow.setSpacing(4)
+        plab = QtWidgets.QLabel("常用")
+        plab.setProperty("role", "muted")
+        prow.addWidget(plab)
+        from ..flow_layout import FlowLayout
+
+        self.preset_box = QtWidgets.QWidget()
+        self.preset_flow = FlowLayout(self.preset_box, spacing=4)
+        prow.addWidget(self.preset_box, 1)
+        self.b_save_preset = QtWidgets.QPushButton("＋ 存成常用")
+        self.b_save_preset.setObjectName("vnaSavePreset")
+        self.b_save_preset.setToolTip("把目前的設定（起訖頻率、點數、功率、IF、平均、掃描時間、S 參數）存成一個常用設定，"
+                                      "之後點一下就切換過去")
+        self.b_save_preset.clicked.connect(lambda: self.save_preset())
+        prow.addWidget(self.b_save_preset, 0, Qt.AlignmentFlag.AlignTop)
+        tl.addLayout(prow)
+        self.preset_buttons: List[QtWidgets.QPushButton] = []
+        self._avg_memory: Dict[str, int] = dict(saved.get("avg_count") or {})
+        self._rebuild_presets()
         self.form_box = QtWidgets.QWidget()
         self.form = QtWidgets.QGridLayout(self.form_box)
         self.form.setContentsMargins(0, 0, 0, 0)
@@ -693,7 +766,14 @@ class VNAPanel(QtWidgets.QWidget):
             lab = QtWidgets.QLabel(f"{p.get('label') or k}" + (f"（{du}）" if du and p.get("kind") != "bool" else ""))
             lab.setProperty("role", "muted")
             lab.setToolTip(p["ref"] + (f"\n{p['doc']}" if p.get("doc") else ""))
-            if p.get("kind") == "bool" and p.get("settable"):
+            if k == "averages" and p.get("settable"):
+                e = AvgEdit(self._avg_memory.get(self.name or "", DEFAULT_AVG))
+                e.changed.connect(lambda k=k: self._mark(k))
+                e.stepped.connect(lambda k=k: (self._mark(k), self._wheel_apply.start(700)))
+                e.count.returnPressed.connect(self.apply)
+                lab.setText("平均")
+                lab.setToolTip(lab.toolTip() + "\n勾選 = 開啟平均並用右邊的次數；不勾 = 關閉（次數保留）")
+            elif p.get("kind") == "bool" and p.get("settable"):
                 e: QtWidgets.QWidget = QtWidgets.QCheckBox()
                 e.clicked.connect(lambda _c, k=k: self._mark(k))
             elif p.get("settable"):
@@ -751,7 +831,11 @@ class VNAPanel(QtWidgets.QWidget):
                 e = self.edits.get(k)
                 if e is None or k in self.dirty:
                     continue
-                if isinstance(e, QtWidgets.QCheckBox):
+                if isinstance(e, AvgEdit):
+                    if not err:
+                        e.set_value(v, self._avg_memory.get(self.name or ""))
+                        self._remember_avg(e)
+                elif isinstance(e, QtWidgets.QCheckBox):
                     e.setChecked(bool(v))
                 else:
                     e.setText("錯誤" if err else _fmt(v, p))
@@ -769,6 +853,10 @@ class VNAPanel(QtWidgets.QWidget):
             if k not in self.dirty:
                 continue
             p, e = self.params[k], self.edits[k]
+            if isinstance(e, AvgEdit):
+                todo.append((p["ref"], e.value()))
+                self._remember_avg(e)
+                continue
             if isinstance(e, QtWidgets.QCheckBox):
                 todo.append((p["ref"], bool(e.isChecked())))
                 continue
@@ -804,6 +892,145 @@ class VNAPanel(QtWidgets.QWidget):
             if not self.cont.isChecked():
                 self.read_trace()
         run_bg(work, ok, lambda m: self.message.emit(f"❌ 套用失敗：{m}"))
+
+    # ---- 1.0.12：平均次數記憶、常用設定 -----------------------------------------------------
+    def _remember_avg(self, e: "AvgEdit") -> None:
+        name = self.name or ""
+        n = e.remembered()
+        if self._avg_memory.get(name) != n:
+            self._avg_memory[name] = n
+            self.ui.save(avg_count=dict(self._avg_memory))
+
+    def presets(self) -> List[Dict[str, Any]]:
+        return [p for p in (self.ui.load().get("vna_presets") or []) if isinstance(p, dict) and p.get("name")]
+
+    def _save_presets(self, presets: List[Dict[str, Any]]) -> None:
+        self.ui.save(vna_presets=presets[:MAX_PRESETS])
+        self._rebuild_presets()
+
+    def current_settings(self) -> Dict[str, Any]:
+        """表單上目前的值（含還沒套用的修改）：{key: 文字 / bool / [平均開, 次數]}，加上 S 參數。"""
+        values: Dict[str, Any] = {}
+        for k in PRESET_KEYS:
+            e = self.edits.get(k)
+            if e is None or not self.params.get(k, {}).get("settable"):
+                continue
+            if isinstance(e, AvgEdit):
+                values[k] = [e.check.isChecked(), e.remembered()]
+            elif isinstance(e, QtWidgets.QCheckBox):
+                values[k] = bool(e.isChecked())
+            elif isinstance(e, QtWidgets.QLineEdit) and e.text().strip() and e.text() != "錯誤":
+                values[k] = e.text().strip()
+        if values.get("sweep_time_auto") is True:
+            values.pop("sweep_time", None)
+        return {"values": values, "sparam": self._want_sparam}
+
+    def save_preset(self, name: Optional[str] = None, index: Optional[int] = None) -> Optional[Dict[str, Any]]:
+        cur = self.current_settings()
+        if not cur["values"]:
+            self.message.emit("還沒有讀到 VNA 的設定：先連線並選 VNA")
+            return None
+        presets = self.presets()
+        if index is None and len(presets) >= MAX_PRESETS:
+            self.message.emit(f"常用設定最多 {MAX_PRESETS} 個：先刪掉一個（右鍵）")
+            return None
+        if name is None and index is None:
+            v = cur["values"]
+            guess = "—".join(x for x in (v.get("start_freq"), v.get("stop_freq")) if x) or f"設定 {len(presets) + 1}"
+            name, ok = QtWidgets.QInputDialog.getText(self, "存成常用設定", "名稱：", text=guess)
+            if not ok or not str(name).strip():
+                return None
+        item = {"name": str(name if name is not None else presets[index]["name"]).strip(), **cur}
+        if index is None:
+            presets.append(item)
+        else:
+            presets[index] = item
+        self._save_presets(presets)
+        self.message.emit(f"✔ 已存常用設定「{item['name']}」")
+        return item
+
+    def load_preset(self, index: int, apply: bool = True) -> bool:
+        """把常用設定填進表單（標成待寫入）並套用到 VNA。"""
+        presets = self.presets()
+        if not 0 <= index < len(presets) or self.busy:
+            return False
+        pr = presets[index]
+        for k, v in (pr.get("values") or {}).items():
+            e = self.edits.get(k)
+            if e is None:
+                continue
+            if isinstance(e, AvgEdit):
+                on, n = (v if isinstance(v, (list, tuple)) and len(v) == 2 else (bool(v), v))
+                e.set_value(int(n) if on else 0, int(n) if n else None)
+            elif isinstance(e, QtWidgets.QCheckBox):
+                e.setChecked(bool(v))
+            elif isinstance(e, QtWidgets.QLineEdit):
+                e.setText(str(v))
+            else:
+                continue
+            self._mark(k)
+        sp = pr.get("sparam")
+        if sp and sp in self.sbtn and not self.sbtn[sp].isChecked():
+            self.sbtn[sp].setChecked(True)
+        for i, b in enumerate(self.preset_buttons):
+            b.setChecked(i == index)
+        self.message.emit(f"切換到常用設定「{pr['name']}」")
+        if apply:
+            self.apply()
+        return True
+
+    def _rebuild_presets(self) -> None:
+        for b in self.preset_buttons:
+            self.preset_flow.removeWidget(b)
+            b.setParent(None)
+            b.deleteLater()
+        self.preset_buttons = []
+        for i, pr in enumerate(self.presets()):
+            b = QtWidgets.QPushButton(pr["name"])
+            b.setCheckable(True)
+            b.setObjectName("vnaPreset")
+            v = pr.get("values") or {}
+            b.setToolTip("點一下套用：" + "、".join(f"{self.params.get(k, {}).get('label') or k} {x if not isinstance(x, list) else ('開 ' + str(x[1]) if x[0] else '關')}"
+                                                  for k, x in v.items()) + (f"、{pr['sparam']}" if pr.get("sparam") else "")
+                         + "\n右鍵：重新命名 / 用目前設定覆蓋 / 刪除")
+            b.clicked.connect(lambda _c, i=i: self.load_preset(i))
+            b.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+            b.customContextMenuRequested.connect(lambda pos, i=i, b=b: self._preset_menu(i, b.mapToGlobal(pos)))
+            b.setEnabled(not self.busy)
+            self.preset_flow.addWidget(b)
+            self.preset_buttons.append(b)
+        self.preset_box.updateGeometry()
+
+    def _preset_menu(self, index: int, where) -> None:
+        presets = self.presets()
+        if not 0 <= index < len(presets):
+            return
+        m = QtWidgets.QMenu(self)
+        a_ren = m.addAction("重新命名…")
+        a_over = m.addAction("用目前的設定覆蓋")
+        m.addSeparator()
+        a_del = m.addAction("刪除")
+        a_left = m.addAction("往前移") if index > 0 else None
+        act = m.exec(where)
+        if act is a_ren:
+            name, ok = QtWidgets.QInputDialog.getText(self, "重新命名", "名稱：", text=presets[index]["name"])
+            if ok and str(name).strip():
+                presets[index]["name"] = str(name).strip()
+                self._save_presets(presets)
+        elif act is a_over:
+            self.save_preset(index=index)
+        elif act is a_del:
+            self.delete_preset(index)
+        elif a_left is not None and act is a_left:
+            presets.insert(index - 1, presets.pop(index))
+            self._save_presets(presets)
+
+    def delete_preset(self, index: int) -> None:
+        presets = self.presets()
+        if 0 <= index < len(presets):
+            gone = presets.pop(index)
+            self._save_presets(presets)
+            self.message.emit(f"已刪除常用設定「{gone['name']}」")
 
     def minimum_frequency(self) -> Optional[float]:
         """目前曲線 |S| 最小處的頻率（Hz）；沒有曲線 → None。"""
@@ -931,7 +1158,7 @@ class VNAPanel(QtWidgets.QWidget):
     def set_busy(self, busy: bool) -> None:
         self.busy = busy
         for w in (self.b_apply, self.b_read, self.rf, self.cont, self.b_ports, *self.sbtn.values(),
-                  *self.edits.values()):
+                  *self.edits.values(), *getattr(self, "preset_buttons", []), self.b_save_preset):
             w.setEnabled(not busy)
         if busy:
             self.cont.setChecked(False)

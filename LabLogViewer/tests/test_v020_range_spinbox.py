@@ -67,10 +67,11 @@ def test_arrow_step_scales_with_value(qapp):
 
 
 def test_auto_range_is_nearly_full_and_not_forced_symmetric():
+    """v1.0.9: Labber's Auto range — the outlying 1 % at each end is left out (was 0.005 % before)."""
     rng = np.random.default_rng(1)
     z = rng.normal(0.0, 1.0, 200_000)
     low, high = robust_color_limits(z)
-    assert z.min() <= low < -3.0 and 3.0 < high <= z.max()
-    assert (z < low).mean() < 2e-4
+    assert -2.4 < low < -2.25 and 2.25 < high < 2.4
+    assert abs((z < low).mean() - 0.01) < 1e-3 and abs((z > high).mean() - 0.01) < 1e-3
     assert zero_centered_limits(-0.3, 1e-6) == (-0.3, 1e-6)
     assert zero_centered_limits(-1.0, 0.9) == (-1.0, 1.0)
