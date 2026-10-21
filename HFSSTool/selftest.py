@@ -15,6 +15,18 @@ def _probe(q):
 def run() -> int:
     os.environ["HFSS_NO_UPDATE_CHECK"] = "1"
     log = os.path.join(tempfile.gettempdir(), "hfss_selftest.log")
+    import faulthandler
+    crash = open(log + ".crash", "w", encoding="utf-8")
+    faulthandler.enable(file=crash, all_threads=True)          # 原生程式當掉時留下 Python 的位置
+    try:
+        from PyQt6.QtCore import qInstallMessageHandler
+
+        def qt_msg(mode, ctx, msg):
+            crash.write(f"Qt {mode}: {msg}\n")
+            crash.flush()
+        qInstallMessageHandler(qt_msg)
+    except Exception:  # noqa: BLE001
+        pass
     lines = []
     keep = []
     ok = True
@@ -60,10 +72,20 @@ def run() -> int:
         return app.platformName()
     step("介面", gui)
 
-    def dxf():
+    def need_app():
         from PyQt6.QtWidgets import QApplication
         if QApplication.instance() is None:
             keep.append(QApplication(sys.argv[:1]))
+
+    step("ezdxf", lambda: __import__("ezdxf").__version__)
+    step("shapely", lambda: __import__("shapely").__version__)
+
+    def buf():
+        from shapely.geometry import LineString
+        return round(LineString([(0, 0), (10, 0), (10, 5)]).buffer(0.5, cap_style="flat", join_style="mitre").area, 3)
+    step("shapely 運算", buf)
+
+    def dxf():
         from dxf_model import Design
         d = Design.template("CPW")
         f = os.path.join(tempfile.gettempdir(), "hfss_selftest.dxf")
@@ -72,12 +94,17 @@ def run() -> int:
         os.remove(f)
         if not r.auto_ground or len(r.generated()["ub"]) != 2:
             raise RuntimeError("CPW 範本讀回來不對")
+        return "CPW 範本存檔 / 讀回"
+    step("DXF 檔案", dxf)
+
+    def editor():
+        need_app()
         from dxf_editor import DxfEditor
         w = DxfEditor(mode="MS")
         w.dirty = False
         w.close()
-        return f"ezdxf {__import__('ezdxf').__version__}, shapely {__import__('shapely').__version__}"
-    step("DXF 編輯器", dxf)
+        return "ok"
+    step("DXF 編輯器", editor)
 
     def upd():
         import updater

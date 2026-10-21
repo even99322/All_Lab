@@ -50,7 +50,7 @@ jobs:
           echo "HFSS tool $v"
       - name: Build
         run: |
-          pyinstaller --noconfirm --log-level WARN packaging/hfsstool.spec
+          pyinstaller --noconfirm --log-level WARN packaging/hfsstool.spec 2>&1 | Select-String '::notice|ERROR' | ForEach-Object { $_.Line }
           Get-ChildItem dist | Format-Table Name, Length
           if (-not (Test-Path "dist/HFSSTool_v${{ steps.v.outputs.version }}_windows.exe")) { throw "沒有產生 exe" }
       - name: Self-test
@@ -60,6 +60,9 @@ jobs:
           $log = Get-Content "$env:TEMP/hfss_selftest.log" -Raw -Encoding utf8 -ErrorAction SilentlyContinue
           Write-Output $log
           Write-Output "::notice title=self-test exit::$($p.ExitCode)"
+          $crash = Get-Content "$env:TEMP/hfss_selftest.log.crash" -Raw -Encoding utf8 -ErrorAction SilentlyContinue
+          $k = 0
+          foreach ($line in ("$crash" -split "`n")) { $t = $line.Trim(); if ($t -and $k -lt 40) { Write-Output "::notice title=crash $k::$($t -replace '%', '%25')"; $k++ } }
           $i = 0
           foreach ($line in ("$log" -split "`n")) {
             $t = $line.Trim()

@@ -31,6 +31,11 @@ a = Analysis(
     excludes=["tkinter", "PyQt5", "PySide2", "PySide6", "IPython", "jupyter", "notebook", "pytest"],
     noarchive=False,
 )
+# 執行環境 DLL 有好幾份時（不同套件各帶一份），印出來看用的是哪一份
+for name, src, kind in a.binaries:
+    low = os.path.basename(name).lower()
+    if low.startswith(("msvcp140", "vcruntime140", "concrt140")):
+        print(f"::notice title=dll {low}::{src}")
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
