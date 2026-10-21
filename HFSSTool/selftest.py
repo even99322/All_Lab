@@ -16,6 +16,7 @@ def run() -> int:
     os.environ["HFSS_NO_UPDATE_CHECK"] = "1"
     log = os.path.join(tempfile.gettempdir(), "hfss_selftest.log")
     lines = []
+    keep = []
     ok = True
 
     def write():
@@ -51,6 +52,7 @@ def run() -> int:
     def gui():
         from PyQt6.QtWidgets import QApplication
         app = QApplication.instance() or QApplication(sys.argv[:1])
+        keep.append(app)                       # 留著：不然 QApplication 被回收，下一步建視窗會讓程式直接結束
         from ui_main import MainWindow
         w = MainWindow()
         w.close()
@@ -59,6 +61,9 @@ def run() -> int:
     step("介面", gui)
 
     def dxf():
+        from PyQt6.QtWidgets import QApplication
+        if QApplication.instance() is None:
+            keep.append(QApplication(sys.argv[:1]))
         from dxf_model import Design
         d = Design.template("CPW")
         f = os.path.join(tempfile.gettempdir(), "hfss_selftest.dxf")
