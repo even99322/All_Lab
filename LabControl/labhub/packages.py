@@ -39,11 +39,13 @@ TARGETS: Dict[str, tuple] = {
     "launcher": ("module", "量子工程平台 App（舊的啟動器，0.0.26 起不再使用）"),
     "setup": ("module", "Windows 安裝程式（量測＋讀檔一起裝，從 NAS 下載）"),
     "llvpets": ("module", "讀檔程式的寵物圖檔（選擇性下載）"),
+    "hfss": ("module", "模擬工具 HFSS 自動化工具"),
 }
 MANIFEST = "qel-module.json"
 #: 安裝檔檔名的開頭 → 模塊
 BINARY_PREFIX = {"qellauncher": "launcher", "labcontrol": "labcontrol", "labcontrolmonitor": "monitor",
-                 "labmonitor": "monitor", "lablogviewer": "lablogviewer", "qelsetup": "setup"}
+                 "labmonitor": "monitor", "lablogviewer": "lablogviewer", "qelsetup": "setup",
+                 "hfsstool": "hfss"}
 BINARY_EXT = (".exe", ".msi", ".dmg", ".pkg")
 _BIN = re.compile(r"^(?P<name>[A-Za-z]+)[_-]v?(?P<ver>\d+(?:\.\d+){1,3})[_-](?P<plat>windows|win64|win|macos|mac|osx)"
                   r"(?:[_-][A-Za-z0-9]+)*\.(?:exe|msi|dmg|pkg|zip)$", re.I)
@@ -254,6 +256,16 @@ def _identify_zip(src: Union[str, Path, bytes], filename: str = "") -> Dict[str,
                 return found("llvpets", str(json.loads(_read(z, pets)).get("version") or ""))
             except ValueError:
                 raise PackageError("pets_manifest.json 格式錯誤") from None
+        hw = _find(names, "hfss_worker.py")           # 1.0.16：HFSS 自動化工具（config.py 的 APP_VERSION = "v3.2"）
+        if hw:
+            cfg = (hw.rsplit("/", 1)[0] + "/config.py") if "/" in hw else "config.py"
+            v = _ver(_read(z, cfg), re.compile(r"""^APP_VERSION\s*=\s*["']v?([0-9.]+)["']""", re.M))
+            r = found("hfss", v)
+            if not r["notes"]:
+                text = _read(z, _find(names, "README.md"))
+                m = re.search(rf"^###\s*v?{re.escape(v or '')}\s*\n(.*?)(?:\n###\s|\n##\s|\Z)", text, re.S | re.M)
+                r["notes"] = m.group(1).strip()[:4000] if m else ""
+            return r
         app = _find(names, "app/__init__.py")
         if app and "LabLogViewer" in _read(z, _find(names, "main.py")):
             return found("lablogviewer", _ver(_read(z, app)))

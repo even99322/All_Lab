@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.16 — 2026-10-21
+
+平台模塊下載加入「模擬」（HFSS 自動化工具）：控制台丟工具的 zip 就發佈，首頁有下載按鈕與安裝方式；中文檔名自動換成英數。只需要更新 Hub。詳見 [docs/releases/v1.0.16.md](docs/releases/v1.0.16.md)。
+
+---
+
 ## 1.0.15 — 2026-10-21
 
 內網 https：內網跟 VPN 用同一個 https 網址與同一張 Tailscale 憑證（Hub 自己在內網開 :8443 平台、:8444 論文庫，憑證自動換新）；控制台與首頁監測憑證還剩幾天、快到期警告。只需要更新 Hub（加一次 docker-compose 與 DNS 設定）。詳見 [docs/releases/v1.0.15.md](docs/releases/v1.0.15.md)。

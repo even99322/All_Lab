@@ -176,8 +176,10 @@ function downloadButtons(m) {
   const zip = src && src.files.find(f => f.name.toLowerCase().endsWith(".zip") && !f.platform);
   let h = `<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">` +
     dl.map(f => `<a class="btn ${f.platform === MY_OS ? "primary" : "small"}" href="${esc(f.url)}" download title="${esc(f.name)}・${size(f.size)}">⬇ ${esc(dlLabel(f))}　${esc(f.version)}</a><span class="small muted" style="margin:-2px 0 2px 4px">${esc(f.name.split(".").pop())} · ${size(f.size)}</span>`).join("") + `</div>`;
-  if (!dl.length) h = `<span class="small muted">站長還沒有上傳 Windows / Mac 版</span>`;
-  if (zip) h += `<div style="margin-top:4px"><a class="small" href="${esc(zip.url)}" title="給 Lab APP 或有 Python 的電腦">Python 版 zip ${esc(m.latest)}</a></div>`;
+  if (!dl.length && zip) h = `<a class="btn primary" href="${esc(zip.url)}" download title="${esc(zip.name)}・${size(zip.size)}">⬇ 下載 ${esc(m.latest)}</a><span class="small muted" style="margin:2px 0 0 4px">zip · ${size(zip.size)}</span>`;   // 1.0.16：只有 Python 原始碼的模塊（模擬工具）
+  else if (!dl.length) h = `<span class="small muted">站長還沒有上傳${m.note ? "" : " Windows / Mac 版"}</span>`;
+  else if (zip) h += `<div style="margin-top:4px"><a class="small" href="${esc(zip.url)}" title="給 Lab APP 或有 Python 的電腦">Python 版 zip ${esc(m.latest)}</a></div>`;
+  if (m.note) h += `<div class="small muted" style="margin-top:6px">${esc(m.note)}</div>`;
   if (dl.length) h += `<div class="small muted" style="margin-top:6px">第一次開啟：Windows 出現「Windows 已保護您的電腦」→ 其他資訊 → 仍要執行；
     macOS 打開 .dmg 把 App 拖到「應用程式」，第一次用右鍵 →「打開」。</div>`;
   return h;
@@ -191,7 +193,7 @@ function viewHome() {
     if (off) act = `<span class="small muted">站長沒有開放</span>`;
     else if (m.kind === "web" && m.url) act = `<a class="btn primary" href="${esc(m.url)}" ${m.url.startsWith("http") ? 'target="_blank" rel="noopener"' : ""}>開啟</a>`;
     else if (m.kind === "app") {
-      act = downloadButtons(m) + `<div class="small muted" style="margin-top:4px">裝好之後程式會自己更新。也可以把 <a href="/get">下載頁</a> 給新同學。</div>`;
+      act = downloadButtons(m) + (m.note ? "" : `<div class="small muted" style="margin-top:4px">裝好之後程式會自己更新。也可以把 <a href="/get">下載頁</a> 給新同學。</div>`);
     }
     return `<div class="tile${off ? " off" : ""}"><div class="t">${esc(m.name)}</div><div class="k">${esc(m.id)} · ${m.kind === "web" ? "網頁" : "桌面程式"}${m.owner_only ? " · 站長" : ""}</div>
       <div class="d">${esc(m.description || "")}</div><div>${act}</div></div>`;

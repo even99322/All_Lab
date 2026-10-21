@@ -2,5 +2,5 @@
 
 只依賴 PyQt6 與標準函式庫（不需要 labcontrol 的量測套件），所以 exe 小、任何電腦都能開。
 """
-__version__ = "1.0.15"
+__version__ = "1.0.16"
 APP_NAME = "Lab Control Monitor"

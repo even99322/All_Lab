@@ -63,6 +63,11 @@ DEFAULT_MODULES: Dict[str, Dict[str, Any]] = {
     # 0.0.30：讀檔程式的寵物圖檔（LabLogViewerPets_v<版本>.zip）：安裝時選擇要不要，或在讀檔程式裡下載
     "llvpets": {"name": "讀檔寵物圖檔", "kind": "app", "hidden": True, "order": 93,
                 "description": "LabLogViewer 桌面寵物的圖檔（約 220 MB，選擇性下載）"},
+    # 1.0.16：模擬工具（Python 原始碼 zip：HFSSTool_v<版本>.zip，控制台發佈）
+    "hfss": {"name": "模擬", "kind": "app", "app": "HFSS 自動化工具", "order": 4,
+             "description": "HFSS 自動化工具：DXF 版圖 → 3D 模型、S 參數與場型模擬、YIG 磁性球（Windows ＋ Ansys AEDT 2026 R1）",
+             "note": "Windows：解壓 → 依 README「安裝」建立 Python 環境（pip install -r requirements.txt）→ 執行 run_HFSS自動化工具.py。"
+                     "需要 Ansys Electronics Desktop 2026 R1（或 2025 R2）。"},
 }
 #: 下載頁 /get 列出、不用登入就能下載的獨立程式
 APPS = ("labcontrol", "lablogviewer")
@@ -429,7 +434,10 @@ class Platform:
         out = {k: dict(v, id=k) for k, v in DEFAULT_MODULES.items()}
         with self._con() as con:
             for r in con.execute("SELECT id, info FROM modules"):
-                out[r["id"]] = dict(out.get(r["id"], {}), **json.loads(r["info"]), id=r["id"])
+                info = json.loads(r["info"])
+                if r["id"] in DEFAULT_MODULES and info == {"name": r["id"], "kind": "python"}:
+                    continue                         # 舊版 Hub 發佈時自動建的空白設定：用內建的
+                out[r["id"]] = dict(out.get(r["id"], {}), **info, id=r["id"])
         if "papers" in out and not out["papers"].get("url"):
             out["papers"]["url"] = self.paperlib_public + "/" if self.paperlib_public else ""
         for mid, m in out.items():
@@ -518,7 +526,13 @@ class Platform:
         """data：檔案內容，或已經在 Hub 上的檔案路徑（大檔，例如合併好的模塊 zip，直接搬過去）。"""
         if not re.fullmatch(r"\d+(\.\d+){0,3}", version or ""):
             raise PlatformError(400, "版本號請用純數字，例如 0.0.13")
-        if not re.fullmatch(r"[A-Za-z0-9_.()-]{1,120}", filename or ""):
+        if filename and not re.fullmatch(r"[A-Za-z0-9_.()-]{1,120}", filename) and "/" not in filename \
+                and "\\" not in filename and len(filename) <= 120:
+            # 1.0.16：中文檔名（例如「HFSS自動化工具v3.2.zip」）→ 只留英數（下載連結、各電腦的檔名都安全）
+            stem, dot, ext = filename.rpartition(".")
+            stem = re.sub(r"[^A-Za-z0-9_.()-]+", "_", stem if dot else filename).strip("_.") or f"{mid}_v{version}"
+            filename = f"{stem}.{re.sub(r'[^A-Za-z0-9]', '', ext)}" if dot else stem
+        if not re.fullmatch(r"[A-Za-z0-9_.()-]{1,120}", filename or "") or filename.startswith("."):
             raise PlatformError(400, "檔名不合法")
         if mid not in self.modules():
             self.set_module(mid, {"name": mid, "kind": "python"})

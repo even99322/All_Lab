@@ -245,6 +245,13 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 - 手動步進：`run_defaults.manual_loop: true` → 每一點自動循環量測，直到「記錄並下一點」。
 - 子專案需要論文庫 1.8.0（`projects.parent_id`、schema 8；專案專區「新增子專案」、編輯專案改「上層專案」、同一層名稱不重複、刪除時子專案移到上一層）；舊版論文庫一切照舊（都是最上層）。
 
+### 0q. 1.0.16：模擬工具（HFSS 自動化工具）
+
+- 模塊 `hfss`（名稱「模擬」、kind app、`note` = 安裝方式）；發佈檔是 Python 原始碼 zip（`packages.identify`：`hfss_worker.py` ＋ `config.py`
+  `APP_VERSION = "v3.2"` → 3.2，說明取 README `### v3.2`；或 `qel-module.json` `{"id": "hfss"}`）。之後有打包好的 `HFSSTool_v<版本>_windows.exe` 也認得。
+- 首頁：沒有 .exe / .dmg 但有 zip → 主按鈕下載 zip ＋ `note`。舊版 Hub 發佈時自動建的空白模塊設定（`{"name": id, "kind": "python"}`）不會蓋掉內建的。
+- `add_release` 把非英數的檔名換成英數（底線），不再拒絕。
+
 ### 0p. 1.0.15：內網 https（跟 VPN 同一個網址）、憑證監測
 
 ```
