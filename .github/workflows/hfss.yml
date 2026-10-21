@@ -57,8 +57,12 @@ jobs:
         run: |
           $exe = "dist/HFSSTool_v${{ steps.v.outputs.version }}_windows.exe"
           $p = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru
-          Get-Content "$env:TEMP/hfss_selftest.log" -ErrorAction SilentlyContinue
-          if ($p.ExitCode -ne 0) { throw "self-test 失敗（$($p.ExitCode)）" }
+          $log = Get-Content "$env:TEMP/hfss_selftest.log" -Raw -Encoding utf8 -ErrorAction SilentlyContinue
+          Write-Output $log
+          if ($p.ExitCode -ne 0) {
+            $msg = ($log -replace "%", "%25" -replace "`r", "" -replace "`n", "%0A")
+            Write-Output "::error title=self-test::$msg"
+            throw "self-test 失敗（$($p.ExitCode)）" }
       - uses: actions/upload-artifact@v5
         with:
           name: HFSSTool-windows
