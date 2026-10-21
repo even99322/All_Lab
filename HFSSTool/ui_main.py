@@ -82,6 +82,9 @@ class MainWindow(QMainWindow):
         self.init_yig_tab()
         self.init_plot_tab()
         self.init_status_bar()
+        from update_ui import UpdateController          # v3.3：開啟時檢查新版、推播（跟量測程式一樣）
+        self.updater = UpdateController(self)
+        self.dxf_editor = None
         self._register_settings()
         self.load_settings()
         self._refresh_project_label()
@@ -125,7 +128,14 @@ class MainWindow(QMainWindow):
         btn_dxf = QPushButton("瀏覽...")
         btn_dxf.clicked.connect(lambda: self.browse_file(self.edit_dxf))
         path_layout.addWidget(QLabel("DXF 檔案路徑 :"), 0, 0)
-        path_layout.addWidget(self.edit_dxf, 0, 1)
+        dxf_row = QHBoxLayout()
+        dxf_row.setContentsMargins(0, 0, 0, 0)
+        dxf_row.addWidget(self.edit_dxf, 1)
+        btn_dxf_edit = QPushButton("✏ 編輯")
+        btn_dxf_edit.setToolTip("DXF 編輯器：改板材大小、用節點畫微波線、螺絲孔 / 過孔（沒有檔案時從範本開始）")
+        btn_dxf_edit.clicked.connect(self.open_dxf_editor)
+        dxf_row.addWidget(btn_dxf_edit)
+        path_layout.addLayout(dxf_row, 0, 1)
         path_layout.addWidget(btn_dxf, 0, 2)
 
         self.chk_enable_sync = QCheckBox("啟用 NAS 遠端同步 :")
@@ -967,7 +977,31 @@ class MainWindow(QMainWindow):
                 settings[key] = w.text()
         ConfigManager.save_settings(settings)
 
+    def open_dxf_editor(self):
+        """v3.3：DXF 編輯器；存檔後這裡的 DXF 路徑換成存的那個檔。"""
+        from dxf_editor import DxfEditor
+        if self.dxf_editor is not None and self.dxf_editor.isVisible():
+            self.dxf_editor.raise_()
+            self.dxf_editor.activateWindow()
+            return
+        path = self.edit_dxf.text().strip()
+        self.dxf_editor = DxfEditor(path if path and os.path.exists(path) else None,
+                                    mode=self.combo_type.currentText(), on_saved=self._dxf_saved)
+        icon = self.windowIcon()
+        if not icon.isNull():
+            self.dxf_editor.setWindowIcon(icon)
+        self.dxf_editor.show()
+
+    def _dxf_saved(self, path):
+        self.edit_dxf.setText(path)
+        if self.dxf_editor is not None:
+            self.combo_type.setCurrentText(self.dxf_editor.design.mode)
+        self.statusBar().showMessage(f"DXF 已存檔並套用：{path}", 8000)
+
     def closeEvent(self, event):
+        if self.dxf_editor is not None and self.dxf_editor.isVisible() and not self.dxf_editor.close():
+            event.ignore()
+            return
         if self._is_running():
             ans = QMessageBox.question(self, "任務執行中",
                                        "HFSS 任務仍在執行中，確定要關閉嗎？\n(工作程序會被終止；AEDT 端已送出的計算可能仍在進行)")
@@ -983,6 +1017,7 @@ class MainWindow(QMainWindow):
                 backup_folder_detached(pp['local_dir'], pp['storage_dir'])
         if self.help_dialog:
             self.help_dialog.close()
+        self.updater.stop()
         event.accept()
 
     # ==================================================================

@@ -245,6 +245,15 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 - 手動步進：`run_defaults.manual_loop: true` → 每一點自動循環量測，直到「記錄並下一點」。
 - 子專案需要論文庫 1.8.0（`projects.parent_id`、schema 8；專案專區「新增子專案」、編輯專案改「上層專案」、同一層名稱不重複、刪除時子專案移到上一層）；舊版論文庫一切照舊（都是最上層）。
 
+### 0r. 1.0.18：模擬工具 3.3（程式內更新、DXF 編輯器）
+
+- `APPS` 多了 `hfss` → `/get/info`、`/get/watch?app=hfss`、`/get/hfss/<版本>/<檔>`（不用登入）。
+- 模擬工具 `HFSSTool/updater.py`：Hub 位址 = `QEL_HUB` → `%USERPROFILE%\LAB\HFSS\update.json` 的 `hub_url` → 192.168.50.2:8765、100.114.33.20:8765；
+  開啟時 `/get/info`，之後 `/get/watch` 長輪詢；更新 = 下載到 exe 旁邊 `<exe>.new`（不能寫就 LAB\HFSS）→ PowerShell 等 pid 與外層 pid 結束 →
+  舊檔改名 `.old` → 新檔換上 → `--updated-from <舊版>` 重開。介面 `update_ui.py`（右下角通知、狀態列按鈕、版本視窗）。
+- DXF 編輯器 `dxf_editor.py`＋`dxf_model.py`（ezdxf、shapely）：微波線 = 中心線（圖層 `g_path`，XDATA `QELHFSS` 存線寬 / 間隙）→ 存檔時在 `g` 產生平頭斜接輪廓；
+  CPW `auto_ground` → `ub` = 板材 −（輪廓＋間隙）；產生的圖元帶 XDATA `gen`，重新開啟時重算；其他圖元原樣保留；存成 R2013。
+
 ### 0q. 1.0.16：模擬工具（HFSS 自動化工具）
 
 - 1.0.17：原始碼在 `HFSSTool/`；`.github/workflows/hfss.yml`（Windows）用 `HFSSTool/packaging/hfsstool.spec` 打包單一 exe

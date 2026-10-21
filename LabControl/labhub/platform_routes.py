@@ -597,7 +597,7 @@ def _get_feed(h: Handler, mid: str) -> None:
     h._json(lablogviewer_feed(_plat(h), mid))
 
 
-@route("GET", r"/get/(labcontrol|lablogviewer|setup|llvpets)/([0-9.]+)/([^/]+)", auth=False)
+@route("GET", r"/get/(labcontrol|lablogviewer|setup|llvpets|hfss)/([0-9.]+)/([^/]+)", auth=False)
 def _get_app_file(h: Handler, mid: str, version: str, filename: str) -> None:
     """量測 / 讀檔程式的安裝檔（.exe、.dmg…）與功能更新包（Python zip）：不用登入就能下載。"""
     from .appupdates import public_file

@@ -117,6 +117,7 @@ fetch("/get/info").then(r => r.json()).then(info => {
       <p class="muted">${esc(a.description)}</p></div>`;
     if (OS === "mobile") h += `<p class="muted">手機請用<a href="/portal">平台網頁</a>。程式要在 Windows 或 Mac 上下載。</p>`;
     else if (mine.length) h += `<a class="big" href="${esc(mine[0].url)}">⬇ 下載 ${esc(label(mine[0]))} 版 <small>${esc(mine[0].version)} · ${mb(mine[0].size)}</small></a>`;
+    else if (dl.length && dl.every(f => f.platform === "windows")) h += `<p class="empty">只有 Windows 版。</p>`;
     else h += `<p class="empty">這個作業系統的版本還沒有上傳。</p>`;
     if (other.length) h += `<div class="alt">其他版本：${other.map(f => `<a href="${esc(f.url)}" title="${esc(f.name)}">${esc(label(f))}（${esc(f.version)}）</a>`).join("")}</div>`;
     h += `</section>`;

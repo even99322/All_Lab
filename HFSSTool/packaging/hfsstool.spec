@@ -4,20 +4,21 @@
 import os
 import re
 
-from PyInstaller.utils.hooks import collect_all, copy_metadata
+from PyInstaller.utils.hooks import collect_all, collect_data_files, copy_metadata
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 VERSION = re.search(r'APP_VERSION\s*=\s*"v?([0-9.]+)"', open(os.path.join(ROOT, "config.py"), encoding="utf-8").read()).group(1)
 
 datas = [(os.path.join(ROOT, "icon.ico"), ".")]
 binaries = []
-hiddenimports = ["selftest", "mode_help", "pythoncom", "pywintypes", "win32com", "win32com.client",
+hiddenimports = ["selftest", "mode_help", "dxf_editor", "dxf_model", "update_ui", "updater", "shapely", "ezdxf.path", "pythoncom", "pywintypes", "win32com", "win32com.client",
                  "matplotlib.backends.backend_qtagg", "PIL.Image", "psutil"]
 for pkg in ("ansys.aedt.core",):
     d, b, h = collect_all(pkg)
     datas += d
     binaries += b
     hiddenimports += h
+datas += collect_data_files("ezdxf")
 for dist in ("pyaedt",):
     datas += copy_metadata(dist)
 

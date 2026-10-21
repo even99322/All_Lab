@@ -60,3 +60,39 @@ def test_hfss_exe_from_github():
     g = guess("HFSSTool_v3.2_windows.exe")
     assert g["target"] == "hfss" and g["version"] == "3.2" and g["platform"] == "windows"
     assert identify(b"MZ" + b"x" * 100, "HFSSTool_v3.2_windows.exe")["target"] == "hfss"
+
+
+def test_hfss_update_api(tmp_path):
+    """1.0.18：模擬工具的程式內更新：/get/info 有 hfss、/get/watch?app=hfss 推播、exe 不用登入就能下載。"""
+    import http.client
+    import threading
+
+    from labhub.server import Config, make_server
+
+    srv, state = make_server(Config(tmp_path / "hub", token="dev"), "127.0.0.1", 0)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        exe = b"MZ" + b"h" * 500
+        state.platform.add_release("hfss", "3.3", "HFSSTool_v3.3_windows.exe", exe, "boss")
+        port = srv.server_address[1]
+
+        def get(path):
+            c = http.client.HTTPConnection("127.0.0.1", port, timeout=20)
+            c.request("GET", path)
+            r = c.getresponse()
+            body = r.read()
+            c.close()
+            return r.status, body
+
+        st, body = get("/get/info")
+        app = next(a for a in json.loads(body)["apps"] if a["id"] == "hfss")
+        assert st == 200 and app["version"] == "3.3"
+        f = app["downloads"][0]
+        assert f["platform"] == "windows" and f["url"] == "/get/hfss/3.3/HFSSTool_v3.3_windows.exe" and f["sha256"]
+        assert get(f["url"]) == (200, exe)
+        st, body = get("/get/watch?app=hfss&version=3.2&wait=1")
+        assert json.loads(body)["changed"] is True
+        st, body = get("/get/watch?app=hfss&version=3.3&wait=0.2")
+        assert json.loads(body)["changed"] is False
+    finally:
+        srv.shutdown()

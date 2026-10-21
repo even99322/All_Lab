@@ -13,6 +13,7 @@ def _probe(q):
 
 
 def run() -> int:
+    os.environ["HFSS_NO_UPDATE_CHECK"] = "1"
     log = os.path.join(tempfile.gettempdir(), "hfss_selftest.log")
     lines = []
     ok = True
@@ -49,6 +50,30 @@ def run() -> int:
         from mode_help import ModeHelpDialog  # noqa: F401
         return app.platformName()
     step("介面", gui)
+
+    def dxf():
+        from dxf_model import Design
+        d = Design.template("CPW")
+        f = os.path.join(tempfile.gettempdir(), "hfss_selftest.dxf")
+        d.save(f)
+        r = Design.load(f)
+        os.remove(f)
+        if not r.auto_ground or len(r.generated()["ub"]) != 2:
+            raise RuntimeError("CPW 範本讀回來不對")
+        from dxf_editor import DxfEditor
+        w = DxfEditor(mode="MS")
+        w.dirty = False
+        w.close()
+        return f"ezdxf {__import__('ezdxf').__version__}, shapely {__import__('shapely').__version__}"
+    step("DXF 編輯器", dxf)
+
+    def upd():
+        import updater
+        s = updater.install_script("C:/a b/new.exe", "C:/a'b/HFSSTool.exe", [1, 2], updater.current_version())
+        if "C:/a''b/HFSSTool.exe" not in s:
+            raise RuntimeError("換檔腳本的路徑沒有跳脫")
+        return f"{updater.current_version()} 可以自己換新：{updater.can_self_update()}"
+    step("自動更新", upd)
 
     def spawn():
         import multiprocessing as mp

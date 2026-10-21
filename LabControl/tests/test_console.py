@@ -106,7 +106,7 @@ def test_public_download_page_and_measure_pc_token(hub):
     assert code == 200 and "登入".encode() in page and "不常下載".encode() not in page
     code, info = _call(url + "/get/info")
     apps = {a["id"]: a for a in info["apps"]}
-    assert list(apps) == ["labcontrol", "lablogviewer"] and info["downloads"] == []
+    assert list(apps) == ["labcontrol", "lablogviewer", "hfss"] and info["downloads"] == []   # 1.0.18：模擬工具
     lc = {f["platform"]: f for f in apps["labcontrol"]["downloads"]}
     assert apps["labcontrol"]["version"] == "0.0.26" and lc["windows"]["notes"] == "新版"
     assert lc["windows"]["url"] == "/get/labcontrol/0.0.26/LabControl_v0.0.26_windows.exe"

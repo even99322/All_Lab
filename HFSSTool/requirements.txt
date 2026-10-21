@@ -1,4 +1,4 @@
-# HFSS 自動化工具 v3.0 — AEDT 2026 R1
+# HFSS 自動化工具 v3.3 — AEDT 2026 R1
 # 安裝: python -m pip install -r requirements.txt
 
 # --- PyAEDT 與 Ansys 相依 (已升級) ---
@@ -61,3 +61,7 @@ six==1.17.0
 tzdata==2026.1
 pillow==12.2.0
 pywin32==311
+
+# --- v3.3 DXF 編輯器 ---
+ezdxf==1.4.4
+shapely==2.2.0

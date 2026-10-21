@@ -1,0 +1,225 @@
+"""自動更新（v3.3）：跟量測程式一樣向實驗室平台（Hub）問新版。
+
+    開啟 → GET <Hub>/get/info → apps 裡 id = "hfss" 的版本與 Windows exe
+         → 比目前新 → 主視窗右下角通知、狀態列「⬆ 更新到 x」
+    之後一直掛著 GET <Hub>/get/watch?app=hfss&version=<目前>&wait=60（長輪詢）：站長一發佈，幾秒內就跳通知
+    更新 → 下載新的 exe（核對 sha256）→ 關掉程式 → 換掉同一個檔（捷徑、工作列釘選照用）→ 重開
+
+Hub 位址：環境變數 QEL_HUB（逗號分隔）→ %USERPROFILE%\\LAB\\HFSS\\update.json 的 hub_url → 實驗室內網、VPN。
+這裡不用 Qt，介面在 update_ui.py。
+"""
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+from typing import Callable, Dict, List, Optional
+
+from config import APP_VERSION, SETTINGS_DIR
+
+APP_ID = "hfss"
+DEFAULT_HUBS = ("http://192.168.50.2:8765", "http://100.114.33.20:8765")
+CONF_FILE = os.path.join(SETTINGS_DIR, "update.json")
+
+
+class UpdateError(RuntimeError):
+    pass
+
+
+def current_version() -> str:
+    return APP_VERSION.lstrip("vV")
+
+
+def vkey(v: str) -> tuple:
+    return tuple(int(x) for x in re.findall(r"\d+", str(v or "0"))) or (0,)
+
+
+# ---- 設定 ---------------------------------------------------------------------------------------
+def load_conf() -> Dict:
+    try:
+        with open(CONF_FILE, encoding="utf-8") as f:
+            return json.load(f) or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_conf(**kw) -> None:
+    d = load_conf()
+    d.update(kw)
+    try:
+        os.makedirs(SETTINGS_DIR, exist_ok=True)
+        with open(CONF_FILE, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=1)
+    except OSError:
+        pass
+
+
+def hubs() -> List[str]:
+    out: List[str] = []
+    for src in (os.environ.get("QEL_HUB", ""), load_conf().get("hub_url", "")):
+        out += [u.strip().rstrip("/") for u in str(src).split(",") if u.strip()]
+    out += list(DEFAULT_HUBS)
+    seen, res = set(), []
+    for u in out:
+        if not re.match(r"^https?://", u):
+            u = "http://" + u
+        if u not in seen:
+            seen.add(u)
+            res.append(u)
+    return res
+
+
+# ---- 問 Hub ------------------------------------------------------------------------------------
+def _get_json(url: str, timeout: float) -> Dict:
+    req = urllib.request.Request(url, headers={"User-Agent": f"HFSSTool/{current_version()}"})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))   # 實驗室內網：不走系統代理
+    with opener.open(req, timeout=timeout) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def find_app(info: Dict) -> Optional[Dict]:
+    return next((a for a in info.get("apps") or [] if a.get("id") == APP_ID), None)
+
+
+def check(timeout: float = 4.0, hub_list: Optional[List[str]] = None) -> Optional[Dict]:
+    """→ {"hub", "app"}（app = Hub 的版本資訊；Hub 上還沒有這個程式時 app = None）；全部連不到 → None。"""
+    for hub in hub_list or hubs():
+        try:
+            info = _get_json(f"{hub}/get/info", timeout)
+        except (OSError, ValueError, urllib.error.URLError):
+            continue
+        return {"hub": hub, "app": find_app(info)}
+    return None
+
+
+def watch(hub: str, version: str, wait: float = 60.0) -> Dict:
+    """長輪詢：Hub 一發佈比 version 新的就回來（{changed, app}）。"""
+    q = urllib.parse.urlencode({"app": APP_ID, "version": version, "wait": int(wait)})
+    return _get_json(f"{hub}/get/watch?{q}", wait + 15)
+
+
+def is_newer(app: Optional[Dict]) -> bool:
+    return bool(app and app.get("version") and vkey(app["version"]) > vkey(current_version()))
+
+
+def pick_file(app: Dict, hub: str) -> Optional[Dict]:
+    """這台電腦要下載的檔：Windows exe（最新的那個）。"""
+    files = [f for f in app.get("downloads") or [] if f.get("platform") == "windows"]
+    if not files:
+        return None
+    f = max(files, key=lambda x: vkey(x.get("version")))
+    url = f.get("url", "")
+    if url.startswith("/"):
+        url = hub + url
+    return dict(f, url=url)
+
+
+# ---- 下載 / 換檔 ---------------------------------------------------------------------------------
+def can_self_update() -> bool:
+    """打包好的 Windows exe 才能自己換新；Python 原始碼版要自己下載。"""
+    return bool(getattr(sys, "frozen", False)) and os.name == "nt"
+
+
+def target_exe() -> str:
+    return os.path.abspath(sys.executable)
+
+
+def download(url: str, dst: str, sha256: str = "", progress: Optional[Callable[[int, int], None]] = None,
+             cancelled: Optional[Callable[[], bool]] = None) -> str:
+    tmp = dst + ".part"
+    h = hashlib.sha256()
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(urllib.request.Request(url, headers={"User-Agent": "HFSSTool"}), timeout=30) as r, \
+                open(tmp, "wb") as f:
+            total = int(r.headers.get("Content-Length") or 0)
+            got = 0
+            while True:
+                if cancelled and cancelled():
+                    raise UpdateError("已取消")
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                f.write(chunk)
+                h.update(chunk)
+                got += len(chunk)
+                if progress:
+                    progress(got, total)
+        if total and got != total:
+            raise UpdateError(f"下載不完整（{got:,} / {total:,} bytes）")
+        if sha256 and h.hexdigest().lower() != sha256.lower():
+            raise UpdateError("下載的檔案跟平台上的不一樣（sha256 不符），請再試一次")
+        os.replace(tmp, dst)
+    except (OSError, urllib.error.URLError) as e:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise UpdateError(f"下載失敗：{getattr(e, 'reason', e)}") from None
+    except UpdateError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+    return dst
+
+
+def _ps_quote(s: str) -> str:
+    return "'" + str(s).replace("'", "''") + "'"
+
+
+def install_script(new_exe: str, target: str, pids: List[int], old_version: str) -> str:
+    """PowerShell：等這個程式（含單一 exe 的外層程序）結束 → 舊檔改名 → 新檔換上 → 重開 → 刪舊檔。"""
+    return "\n".join([
+        "$ErrorActionPreference = 'SilentlyContinue'",
+        f"foreach ($p in @({', '.join(str(int(p)) for p in pids)})) {{ Wait-Process -Id $p -Timeout 120 }}",
+        f"$target = {_ps_quote(target)}; $new = {_ps_quote(new_exe)}; $old = $target + '.old'",
+        "for ($i = 0; $i -lt 120; $i++) {",
+        "  try { if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Force -ErrorAction Stop }",
+        "        Move-Item -LiteralPath $target -Destination $old -Force -ErrorAction Stop; break }",
+        "  catch { Start-Sleep -Milliseconds 500 } }",
+        "try { Move-Item -LiteralPath $new -Destination $target -Force -ErrorAction Stop }",
+        "catch { Move-Item -LiteralPath $old -Destination $target -Force }",
+        f"Start-Process -FilePath $target -ArgumentList '--updated-from', {_ps_quote(old_version)}",
+        "Start-Sleep -Seconds 8",
+        "Remove-Item -LiteralPath $old -Force",
+    ])
+
+
+def install(new_exe: str) -> None:
+    """在背景啟動換檔腳本；呼叫的人接著要關掉程式。"""
+    if not can_self_update():
+        raise UpdateError("只有打包好的 Windows 版能自己更新")
+    pids = [os.getpid()]
+    try:
+        pids.append(os.getppid())          # 單一 exe：外層解壓程序
+    except OSError:
+        pass
+    script = install_script(new_exe, target_exe(), pids, current_version())
+    enc = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+    subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
+                      "-EncodedCommand", enc], creationflags=flags, close_fds=True)
+
+
+def new_exe_path() -> str:
+    """新 exe 先下載到舊 exe 旁邊（同一個磁碟，換檔只要改名）；那裡不能寫就放 LAB\\HFSS。"""
+    target = target_exe()
+    folder = os.path.dirname(target)
+    probe = os.path.join(folder, ".hfss_write_test")
+    try:
+        with open(probe, "w") as f:
+            f.write("x")
+        os.remove(probe)
+        return target + ".new"
+    except OSError:
+        os.makedirs(SETTINGS_DIR, exist_ok=True)
+        return os.path.join(SETTINGS_DIR, "HFSSTool.new.exe")

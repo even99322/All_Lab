@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.18 — 2026-10-22
+
+模擬工具 3.3：開啟時檢查新版並推播、程式內一鍵更新（跟量測程式一樣）；DXF 編輯器（板材大小、節點畫微波線、CPW 自動上地、孔）。Hub 的 /get/info、/get/watch、下載頁加入模擬工具。詳見 [docs/releases/v1.0.18.md](docs/releases/v1.0.18.md)。
+
+---
+
 ## 1.0.17 — 2026-10-21
 
 模擬工具（HFSS 自動化工具）雲端打包成 Windows 單一 exe（GitHub 發佈 `hfss-v<版本>`），控制台「從 GitHub 取得新版」一起拿；首頁「模擬」給 Windows 下載。只需要更新 Hub。詳見 [docs/releases/v1.0.17.md](docs/releases/v1.0.17.md)。

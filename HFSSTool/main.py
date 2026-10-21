@@ -29,4 +29,6 @@ if __name__ == "__main__":
     app.setStyle("Fusion")
     window = MainWindow()
     window.show()
+    if "--updated-from" in sys.argv:          # v3.3：自動更新完重開
+        window.statusBar().showMessage(f"已更新到 {APP_VERSION}", 15000)
     sys.exit(app.exec())
