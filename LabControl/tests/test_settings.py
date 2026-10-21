@@ -22,7 +22,7 @@ def lab(tmp_path, monkeypatch):
 
 
 def test_version_and_name():
-    assert APP_NAME == "Lab Control" and __version__ == "1.0.13"
+    assert APP_NAME == "Lab Control" and __version__ == "1.0.14"
 
 
 def test_hub_version_matches_app():

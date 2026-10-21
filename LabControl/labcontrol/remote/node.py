@@ -687,7 +687,19 @@ class NodeService:
         return {"name": self.name, "time": time.time(), "running": running, "locked": locked, "run": run,
                 "allow_set": bool(setting("remote.node.allow_remote_set", True)),
                 "memory_rate": float(setting("live.memory_ramp_mA_s", 0.05)) * 1e-3,
+                "dial_range": float(setting("live.dial_range_mA", 200.0)) * 1e-3,
+                "max_rate": self._max_rate(),
                 "sources": sources, "groups": groups, "ramps": GroupRamp.active()}
+
+    def _max_rate(self) -> float:
+        """全域最大調整速率（A/s）：跟這台電腦即時數據的設定一樣（live_prefs.json，否則 live.max_ramp_mA_s）。"""
+        import json as _json
+
+        try:
+            v = float((_json.loads(lab_path("live_prefs.json").read_text(encoding="utf-8")) or {}).get("max_rate_mA_s") or 0)
+        except (OSError, ValueError, TypeError, AttributeError):
+            v = 0.0
+        return (v if v > 0 else float(setting("live.max_ramp_mA_s", 10.0))) * 1e-3
 
     def cmd_magnet_memory(self, sender, group: int, slot: int, value: Optional[float] = None) -> Dict[str, Any]:
         """把 value（SI，None = 清除）存進群組 group 的 M{slot+1}（跟本機即時數據共用）。"""

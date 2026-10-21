@@ -8,77 +8,124 @@
   :root { --bg:#f3f4f6; --card:#fff; --text:#1c1f24; --muted:#6b7280; --line:#e2e5e9; --soft:#eef0f3;
           --accent:#1971c2; --accent-soft:#e7f1fb; --ok:#2b8a3e; --warn:#e67700; --err:#e03131; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#111317; --card:#1b1d22; --text:#e9ecef; --muted:#9aa1ab; --line:#2b2f36; --soft:#23262c;
-            --accent:#4dabf7; --accent-soft:#1d2d3d; --ok:#51cf66; --warn:#ffa94d; --err:#ff6b6b; }
+    :root { --bg:#0e1116; --card:#151a21; --text:#e9ecef; --muted:#8b939d; --line:#2a313b; --soft:#1c222b;
+            --accent:#4dabf7; --accent-soft:#16283a; --ok:#40c057; --warn:#ffa94d; --err:#ff6b6b; }
   }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { margin:0; background:var(--bg); color:var(--text); }
-  body { font:15px/1.45 -apple-system,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; }
-  main { max-width:760px; margin:0 auto; padding:10px 12px 40px; }
-  .top { display:flex; align-items:center; gap:10px; margin:4px 0 8px; }
+  body { font:14px/1.45 -apple-system,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:10px 12px 40px; }
+  .top { display:flex; align-items:center; gap:10px; margin:4px 0 8px; flex-wrap:wrap; }
   .top h1 { font-size:19px; margin:0; }
   .top .sp { flex:1; } .upd { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .glob { font-size:13px; color:var(--muted); }
+  .glob b { color:var(--text); font-variant-numeric:tabular-nums; }
   .tabs { display:flex; gap:8px; overflow-x:auto; padding:2px 0 8px; scrollbar-width:none; }
   .tabs::-webkit-scrollbar { display:none; }
   .tab { flex:none; display:flex; gap:6px; align-items:center; padding:6px 13px; border-radius:999px; border:1px solid var(--line);
          background:var(--card); font-weight:600; cursor:pointer; color:var(--text); font-size:14px; }
   .tab.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
-  .dot { width:8px; height:8px; border-radius:50%; background:#868e96; flex:none; }
-  .dot.on { background:var(--ok); } .dot.run { background:var(--accent); animation:p 1.4s infinite; }
+  .dot { width:8px; height:8px; border-radius:50%; background:#868e96; flex:none; display:inline-block; }
+  .dot.on { background:var(--ok); } .dot.run { background:var(--accent); animation:p 1.4s infinite; } .dot.err { background:var(--err); }
   @keyframes p { 50% { opacity:.35; } }
   .lock { display:none; background:#fff4e6; color:#a24d00; border:1px solid #ffc078; border-radius:12px; padding:10px 12px;
           margin-bottom:10px; font-weight:600; }
   @media (prefers-color-scheme: dark) { .lock { background:#3a2a14; color:#ffc078; border-color:#8a5a1c; } }
   .lock.show { display:block; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; margin-bottom:12px; }
-  .hd { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
-  .hd .nm { font-weight:700; font-size:17px; }
-  .hd .sp { flex:1; }
-  .pill { font-size:12px; padding:1px 8px; border-radius:999px; background:var(--soft); color:var(--muted); font-weight:600; }
-  .pill.on { background:#d3f9d8; color:#2b8a3e; } .pill.err { background:#ffe3e3; color:var(--err); }
-  @media (prefers-color-scheme: dark) { .pill.on { background:#1e3a24; color:#69db7c; } .pill.err { background:#3b1d1d; } }
-  .vals { display:flex; flex-wrap:wrap; gap:6px 18px; margin:4px 0 8px; }
-  .v { display:flex; flex-direction:column; }
-  .v .k { font-size:12px; color:var(--muted); }
-  .v .n { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; letter-spacing:.3px; }
-  .v .n small { font-size:13px; font-weight:600; color:var(--muted); margin-left:3px; }
-  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:7px 0; }
-  .row > .lb { font-size:13px; color:var(--muted); min-width:34px; }
-  input, select { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:9px; padding:7px 9px; }
-  input.tg { width:9.5em; font-variant-numeric:tabular-nums; }
-  input.rt { width:5.5em; }
-  .btn { display:inline-flex; align-items:center; justify-content:center; gap:5px; min-height:38px; padding:6px 14px; border-radius:10px;
-         border:1px solid var(--line); background:var(--soft); color:var(--text); font:inherit; font-weight:700; cursor:pointer; }
-  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  .btn.stop { background:var(--err); border-color:var(--err); color:#fff; }
-  .btn.pm { width:48px; font-size:20px; }
-  .btn.mem { min-width:84px; flex-direction:column; gap:0; line-height:1.15; padding:4px 10px; }
-  .btn.mem small { font-weight:600; color:var(--muted); font-size:11.5px; font-variant-numeric:tabular-nums; }
+
+  /* ---- 群組卡片：左 M1–M3｜中 成員＋目標旋鈕｜右 微調（跟量測程式的即時數據一樣）---- */
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px; margin-bottom:12px;
+          display:grid; grid-template-columns:76px minmax(0,1fr) 112px; grid-template-areas:"mem main fine"; gap:10px; }
+  .mem { grid-area:mem; display:flex; flex-direction:column; gap:6px; }
+  .main { grid-area:main; min-width:0; }
+  .fine { grid-area:fine; display:flex; flex-direction:column; gap:6px; }
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:5px; min-height:34px; padding:4px 12px; border-radius:9px;
+         border:1px solid var(--line); background:var(--soft); color:var(--text); font:inherit; font-weight:600; cursor:pointer;
+         user-select:none; -webkit-user-select:none; touch-action:manipulation; }
   .btn:disabled { opacity:.45; cursor:default; }
-  .ramp { font-size:13px; color:var(--accent); font-weight:600; }
+  .btn.go { border-color:var(--accent); color:var(--accent); background:var(--accent-soft); }
+  .btn.stop { border-color:var(--err); color:var(--err); background:transparent; }
+  .btn.mem { flex-direction:column; gap:0; line-height:1.2; padding:5px 4px; min-height:38px; width:100%; }
+  .btn.mem small { font-size:12px; color:var(--muted); font-weight:600; font-variant-numeric:tabular-nums; }
+  .btn.mem.set { min-height:46px; }
+  .hd { display:flex; align-items:center; gap:8px; margin-bottom:6px; min-width:0; }
+  .hd .nm { font-weight:700; font-size:16px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hd .cnt { color:var(--muted); font-size:12px; flex:none; }
+  .hd .sp { flex:1; }
+  .hd .out { flex:none; min-height:30px; font-size:13px; }
+  .hd .out.on { border-color:var(--ok); color:var(--ok); }
+  .mbr { display:flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:8px; padding:5px 9px; margin-bottom:5px;
+         min-width:0; }
+  .mbr .lb { font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+  .mbr .tg { font-size:11px; color:var(--muted); flex:none; } .mbr .tg.m { color:var(--accent); }
+  .mbr .sp { flex:1; }
+  .mbr .v { font-weight:700; font-variant-numeric:tabular-nums; font-family:ui-monospace,Consolas,Menlo,monospace; flex:none; }
+  .mbr .e { color:var(--err); font-size:12px; }
+  .dialrow { display:flex; align-items:center; gap:8px; margin:6px 0 2px; flex-wrap:wrap; }
+  .dialrow .k { color:var(--muted); font-size:13px; }
+  .dial { display:inline-flex; align-items:stretch; border-radius:8px; }
+  .col { display:flex; flex-direction:column; align-items:center; width:30px; }
+  .col.pt { width:14px; }
+  .col button { width:28px; height:24px; padding:0; border:1px solid var(--line); background:var(--soft); color:var(--text);
+                border-radius:6px; font-size:10px; line-height:1; cursor:pointer; touch-action:manipulation; }
+  .col button:disabled { opacity:.4; }
+  .col .d { font:700 30px/1.15 ui-monospace,Consolas,Menlo,"DejaVu Sans Mono",monospace; padding:1px 0; cursor:pointer; }
+  .col.pt .d { cursor:default; }
+  .col .sp { height:24px; }
+  .dial.edit .d { color:var(--accent); }
+  .unit { font-size:15px; color:var(--muted); font-weight:600; }
+  .now { display:flex; align-items:center; gap:10px; margin:6px 0; flex-wrap:wrap; }
+  .now .k { color:var(--muted); font-size:13px; }
+  .now .v { color:var(--ok); font:700 19px ui-monospace,Consolas,Menlo,monospace; }
+  .badge { border:1px solid var(--line); border-radius:9px; padding:1px 8px; font-size:12px; color:var(--muted); }
+  .act { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  input, select { font:inherit; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px 8px; }
+  input.rt { width:9em; }
+  select.st { width:100%; }
+  .ramp { font-size:13px; color:var(--accent); font-weight:600; margin-top:4px; }
   .muted { color:var(--muted); } .small { font-size:12px; } .err { color:var(--err); }
   .empty { text-align:center; color:var(--muted); padding:36px 10px; }
   .toast { position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translateX(-50%); background:var(--text);
            color:var(--bg); padding:9px 16px; border-radius:10px; font-weight:600; opacity:0; transition:.2s; pointer-events:none;
            z-index:40; max-width:92vw; }
   .toast.show { opacity:.95; }
+
+  /* 手機：記憶一排在上、微調一排在下，旋鈕單獨一行 */
+  @media (max-width:600px) {
+    main { padding:8px 8px 36px; }
+    .card { grid-template-columns:minmax(0,1fr); grid-template-areas:"main" "mem" "fine"; padding:10px 9px; gap:8px; }
+    .mem { flex-direction:row; }
+    .btn.mem, .btn.mem.set { min-height:42px; }
+    .fine { flex-direction:row; align-items:stretch; }
+    .fine .btn { flex:1; min-height:42px; font-size:18px; }
+    .fine select.st { flex:1.3; width:auto; }
+    .col { width:29px; }
+    .col button { width:27px; height:30px; font-size:11px; }
+    .col .sp { height:30px; }
+    .col .d { font-size:28px; }
+    .act .btn { min-height:40px; }
+    input.rt { width:7.5em; }
+  }
+  @media (max-width:360px) { .col { width:26px; } .col button { width:24px; } .col .d { font-size:25px; } .col.pt { width:11px; } }
 </style>
 </head>
 <body>
 <!--QEL-NAV-->
 <main>
-  <div class="top"><h1>🧲 電磁鐵</h1><span class="sp"></span><span class="upd" id="upd"></span></div>
+  <div class="top"><h1>🧲 電磁鐵</h1><span class="glob" id="glob"></span><span class="sp"></span><span class="upd" id="upd"></span></div>
   <div class="tabs" id="tabs"></div>
   <div class="lock" id="lock"></div>
   <div id="groups"><div class="empty">讀取中…</div></div>
-  <p class="muted small">跟量測電腦「即時數據」的電源群組一樣：群組的第一台是主控，其他跟著動。目標與記憶用斜坡移動（記憶用
-    <span id="memrate">0.05</span> mA/s）。量測進行中不能調整，避免跟量測的指令衝突。</p>
+  <p class="muted small">跟量測電腦「即時數據」一樣：群組的第一台是 master，其他跟著動。目標的每一位都可以按 ▲▼ 單獨調整（點數字可以直接輸入），
+    按「前往」用斜坡移過去；M1–M3：空的點一下記住目前值、有值的點一下斜坡過去（<span id="memrate">0.05</span> mA/s），按住（電腦：右鍵）可以重記或清除。
+    量測進行中不能調整，避免跟量測的指令衝突。</p>
 </main>
 <div class="toast" id="toast"></div>
 <script>
 "use strict";
 const $ = id => document.getElementById(id);
 let NODES = [], CUR = null, DATA = null, BUSY = false, JOBS = {}, TIMER = null, FAILS = 0;
+const TG = {};               // 每個群組的目標（顯示單位，例如 mA）：{v, touched}
 try { CUR = localStorage.getItem("qel-magnet-node"); } catch (e) {}
 
 function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast.t);
@@ -98,10 +145,11 @@ async function cmd(name, args, wait = 15) {
   return r.result;
 }
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
-function scaleOf(unit) { return unit === "A" ? [1e3, "mA"] : unit === "V" ? [1e3, "mV"] : [1, unit || ""]; }
-function decimals(res, k) { return Math.max(0, Math.min(7, Math.ceil(-Math.log10(res * k) - 1e-9))); }
-function show(v, src) { if (v == null || !isFinite(v)) return "—"; const [k] = scaleOf(src.unit);
-  return (v * k).toFixed(decimals(src.resolution || 1e-6, k)); }
+function scaleOf(unit) { return unit === "A" ? [1e3, "mA"] : unit === "V" ? [1, "V"] : [1, unit || ""]; }
+function decimals(res, k) { return Math.max(0, Math.min(6, Math.round(-Math.log10(res * k)))); }
+function fmt(v, src, extra = 0) { if (v == null || !isFinite(v)) return "—"; const [k] = scaleOf(src.unit);
+  return (v * k).toFixed(decimals(src.resolution || 1e-6, k) + extra); }
+function locked() { return !DATA || DATA.locked || !DATA.allow_set; }
 
 // ---- 量測電腦 ---------------------------------------------------------------------
 async function loadNodes() {
@@ -116,7 +164,7 @@ async function loadNodes() {
 }
 $("tabs").addEventListener("click", e => {
   const t = e.target.closest(".tab"); if (!t) return;
-  CUR = t.dataset.n; DATA = null; JOBS = {};
+  CUR = t.dataset.n; DATA = null; JOBS = {}; for (const k in TG) delete TG[k];
   try { localStorage.setItem("qel-magnet-node", CUR); } catch (e) {}
   [...document.querySelectorAll(".tab")].forEach(x => x.classList.toggle("on", x.dataset.n === CUR));
   $("groups").innerHTML = '<div class="empty">讀取中…</div>'; refresh(true);
@@ -131,114 +179,191 @@ async function refresh(force) {
     DATA = d; FAILS = 0;
     $("upd").textContent = new Date().toTimeString().slice(0, 8);
     $("memrate").textContent = ((d.memory_rate || 5e-5) * 1e3).toPrecision(2);
+    $("glob").innerHTML = d.max_rate ? `全域最大調整速率 <b>${+(d.max_rate * 1e3).toPrecision(3)}</b> mA/s` : "";
     render();
   } catch (e) {
     if (++FAILS >= 2) $("groups").innerHTML = `<div class="empty err">${esc(e.message)}</div>`;
   }
 }
 
-function locked() { return !DATA || DATA.locked || !DATA.allow_set; }
+function srcMap() { const m = {}; (DATA.sources || []).forEach(s => m[s.ref] = s); return m; }
+function group(i) { return (DATA.groups || []).find(g => g.index === i); }
+function dialInfo(g, src) {
+  const s0 = src[g.members[0]] || {}, [k, u] = scaleOf(s0.unit);
+  let lim = DATA.dial_range || 0.2;
+  g.members.forEach(r => ((src[r] || {}).limits || []).forEach(x => { if (x != null && Math.abs(x) > 0) lim = Math.min(lim, Math.abs(x)); }));
+  const dec = decimals(s0.resolution || 1e-6, k), limD = lim * k;
+  const ints = Math.max(1, Math.floor(Math.log10(Math.max(limD, 1))) + 1);
+  return { s0, k, u, lim, limD, dec, ints };
+}
+function target(g, info) {
+  const t = TG[g.index], job = JOBS[g.index];
+  if (t && (t.touched || (job && !job.done))) return t.v;
+  const v = info.s0.level == null ? 0 : info.s0.level * info.k;
+  TG[g.index] = { v, touched: false };
+  return v;
+}
 
 function render() {
-  const d = DATA, src = {};
-  (d.sources || []).forEach(s => src[s.ref] = s);
+  const d = DATA, src = srcMap();
   const lock = $("lock");
   if (d.locked) { lock.textContent = `🔒 量測進行中（${(d.run && d.run.name) || "量測"}）：不能調整電磁鐵，避免跟量測的指令衝突。顯示的是最後讀到的值。`; lock.classList.add("show"); }
   else if (!d.allow_set) { lock.textContent = "🔒 這台量測電腦不允許遠端設定儀器（settings.yaml remote.node.allow_remote_set）"; lock.classList.add("show"); }
   else lock.classList.remove("show");
   const groups = d.groups || [];
   if (!groups.length) { $("groups").innerHTML = '<div class="empty">這台量測電腦沒有已連線的電源</div>'; return; }
-  const active = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.keep : null;
-  const kept = {}; document.querySelectorAll("input[data-keep]").forEach(i => kept[i.dataset.keep] = i.value);
-  (d.ramps || []).forEach(j => { const g = groups.find(g => g.members.includes((j.refs || [])[0])); if (g) JOBS[g.index] = j; });
+  const kept = {}; document.querySelectorAll("[data-keep]").forEach(i => kept[i.dataset.keep] = i.value);
+  const focus = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.keep : null;
+  (d.ramps || []).forEach(j => { const g = groups.find(g => g.members.includes((j.refs || [])[0])); if (g && !JOBS[g.index]) JOBS[g.index] = j; });
   $("groups").innerHTML = groups.map(g => card(g, src)).join("");
-  document.querySelectorAll("input[data-keep]").forEach(i => { if (kept[i.dataset.keep] != null) i.value = kept[i.dataset.keep]; });
-  if (active) { const el = document.querySelector(`input[data-keep="${active}"]`); if (el) el.focus(); }
+  document.querySelectorAll("[data-keep]").forEach(i => { if (kept[i.dataset.keep] != null) i.value = kept[i.dataset.keep]; });
+  if (focus) { const el = document.querySelector(`[data-keep="${focus}"]`); if (el) el.focus(); }
+}
+
+function dialHtml(g, info, dis) {
+  const v = target(g, info), neg = v < 0, a = Math.abs(v);
+  const txt = a.toFixed(info.dec).padStart(info.ints + (info.dec ? info.dec + 1 : 0), "0");
+  const cols = [`<div class="col"><button data-a="sgn" data-g="${g.index}"${dis} aria-label="正負號">▲</button>
+      <span class="d" data-a="type" data-g="${g.index}">${neg ? "−" : "+"}</span>
+      <button data-a="sgn" data-g="${g.index}"${dis} aria-label="正負號">▼</button></div>`];
+  let pos = info.ints - 1;
+  for (const ch of txt) {
+    if (ch === ".") { cols.push(`<div class="col pt"><span class="sp"></span><span class="d">.</span><span class="sp"></span></div>`); continue; }
+    const step = Math.pow(10, pos--);
+    cols.push(`<div class="col"><button data-a="up" data-g="${g.index}" data-s="${step}"${dis} aria-label="加 ${step}">▲</button>
+      <span class="d" data-a="type" data-g="${g.index}">${ch}</span>
+      <button data-a="dn" data-g="${g.index}" data-s="${step}"${dis} aria-label="減 ${step}">▼</button></div>`);
+  }
+  const t = TG[g.index];
+  return `<div class="dial${t && t.touched ? " edit" : ""}">${cols.join("")}</div>`;
 }
 
 function card(g, src) {
-  const m0 = src[g.members[0]] || {}, [k, u] = scaleOf(m0.unit), dis = locked() ? " disabled" : "";
-  const vals = g.members.map((r, i) => { const s = src[r] || {};
-    return `<div class="v"><span class="k">${esc(s.label || r)}${i === 0 && g.members.length > 1 ? "（主控）" : ""}</span>
-      <span class="n">${show(s.level, s)}<small>${esc(u)}</small></span>${s.error ? `<span class="small err">${esc(s.error)}</span>` : ""}</div>`; }).join("");
+  const info = dialInfo(g, src), { s0, k, u } = info, dis = locked() ? " disabled" : "";
+  const mems = (g.memory || []).map((v, i) => `<button class="btn mem${v == null ? "" : " set"}" data-a="mem" data-g="${g.index}" data-i="${i}"${dis}
+      title="${v == null ? "點一下：記住 master 目前值；按住：選單" : "點一下：斜坡到記憶值；按住：重記 / 清除"}">
+      M${i + 1}${v == null ? "" : `<small>${(v * k).toFixed(4)}</small>`}</button>`).join("");
+  const rows = g.members.map((r, i) => { const s = src[r] || {};
+    const cls = s.error ? "err" : s.output ? "on" : "";
+    return `<div class="mbr"><span class="lb">${esc(s.label || r)}</span><span class="tg${i === 0 ? " m" : ""}">${i === 0 ? "master" : "跟隨"}</span>
+      <span class="sp"></span>${s.error ? `<span class="e" title="${esc(s.error)}">讀取錯誤</span>` : ""}
+      <span class="v">${fmt(s.level, s, 1)} ${esc(u)}</span><span class="dot ${cls}"></span></div>`; }).join("");
   const outs = g.members.map(r => (src[r] || {}).output).filter(o => o != null);
   const on = outs.length && outs.every(Boolean);
-  const pill = outs.length ? `<span class="pill${on ? " on" : ""}">輸出 ${on ? "ON" : outs.some(Boolean) ? "部分" : "OFF"}</span>` : "";
-  const res = m0.resolution || 1e-6, steps = [1, 10, 100, 1000].map(n => n * res);
-  const fine = g.members.length <= 2 ? `<div class="row"><span class="lb">微調</span>
-      <select data-keep="st${g.index}" id="st${g.index}">${steps.map((s, i) => `<option value="${s}"${i === 1 ? " selected" : ""}>${(s * k).toPrecision(1)} ${u}</option>`).join("")}</select>
-      <button class="btn pm" data-a="fine" data-g="${g.index}" data-d="-1"${dis}>−</button>
-      <button class="btn pm" data-a="fine" data-g="${g.index}" data-d="1"${dis}>＋</button>
-      ${g.members.length === 2 ? '<span class="small muted">兩台時動比較低／高的那台</span>' : ""}</div>` : "";
-  const mem = (g.memory || []).map((v, i) => `<button class="btn mem" data-a="mem" data-g="${g.index}" data-i="${i}"${v == null || dis ? " disabled" : ""}>
-      M${i + 1}<small>${v == null ? "—" : (v * k).toFixed(decimals(res, k)) + " " + u}</small></button>`).join("");
-  const job = JOBS[g.index];
-  const ramp = job && !job.done ? `<div class="row"><span class="ramp">↗ 斜坡中 → ${(job.target * k).toFixed(decimals(res, k))} ${u}
-      ${job.actual_rate ? `（${(job.actual_rate * k).toPrecision(2)} ${u}/s）` : ""}</span>
-      <button class="btn stop" data-a="stop" data-g="${g.index}">■ 停止</button></div>` : "";
-  return `<div class="card"><div class="hd"><span class="nm">${esc(g.name)}</span><span class="sp"></span>${pill}</div>
-    <div class="vals">${vals}</div>${ramp}
-    <div class="row"><span class="lb">目標</span>
-      <input class="tg" inputmode="decimal" data-keep="tg${g.index}" id="tg${g.index}" placeholder="${show(m0.level, m0)}"${dis}>
-      <span class="muted">${esc(u)}</span>
-      <button class="btn primary" data-a="go" data-g="${g.index}"${dis}>前往</button></div>
-    ${fine}
-    <div class="row"><span class="lb">記憶</span>${mem}
-      <button class="btn" data-a="save" data-g="${g.index}"${dis} title="把目前的值存到一個記憶">存目前值…</button></div>
-    ${outs.length ? `<div class="row"><span class="lb">輸出</span>
-      <button class="btn" data-a="out" data-g="${g.index}" data-on="${on ? 0 : 1}"${dis}>${on ? "關閉輸出" : "打開輸出"}</button></div>` : ""}
+  const outBtn = outs.length ? `<button class="btn out${on ? " on" : ""}" data-a="out" data-g="${g.index}" data-on="${on ? 0 : 1}"${dis}>
+      輸出 ${on ? "ON" : outs.some(Boolean) ? "部分" : "OFF"}</button>` : "";
+  const res = s0.resolution || 1e-6, steps = [1, 10, 100, 1000].map(n => n * res);
+  const fineOk = g.members.length <= 2;
+  const fine = fineOk ? `<button class="btn" data-a="fine" data-g="${g.index}" data-d="1"${dis} title="${g.members.length === 2 ? "兩台：目前較低的那台升一步" : "升一步"}">＋</button>
+      <button class="btn" data-a="fine" data-g="${g.index}" data-d="-1"${dis} title="${g.members.length === 2 ? "兩台：目前較高的那台降一步" : "降一步"}">−</button>
+      <select class="st" data-keep="st${g.index}" id="st${g.index}"${dis}>${steps.map(s => `<option value="${s}">${+(s * k).toPrecision(1)} ${u}</option>`).join("")}</select>`
+    : `<span class="small muted">微調只適用一或兩台的群組</span>`;
+  const job = JOBS[g.index], ramping = job && !job.done;
+  const ramp = ramping ? `<div class="ramp">↗ 斜坡中 → ${(job.target * k).toFixed(info.dec)} ${u}${job.actual_rate ? `（${+(job.actual_rate * k).toPrecision(2)} ${u}/s）` : ""}</div>` : "";
+  return `<div class="card">
+    <div class="mem">${mems}</div>
+    <div class="main">
+      <div class="hd"><span class="nm">${esc(g.name)}</span><span class="cnt">${g.members.length} 台</span><span class="sp"></span>${outBtn}</div>
+      ${rows}
+      <div class="dialrow"><span class="k">目標</span>${dialHtml(g, info, dis)}<span class="unit">${esc(u)}</span></div>
+      <div class="now"><span class="k">目前值</span><span class="v">${s0.level == null ? "—" : (s0.level >= 0 ? "+" : "") + (s0.level * k).toFixed(info.dec)} ${esc(u)}</span>
+        <span class="badge" title="目標值的範圍（settings.yaml live.dial_range_mA 與儀器上下限取小的）">Range: ${+info.lim.toPrecision(3)} ${esc(s0.unit || "")}</span></div>
+      <div class="act"><input class="rt" inputmode="decimal" data-keep="rt${g.index}" id="rt${g.index}" placeholder="速率 ${esc(u)}/s"${dis}>
+        <button class="btn go" data-a="go" data-g="${g.index}"${dis}>▸ 前往</button>
+        <button class="btn stop" data-a="stop" data-g="${g.index}"${ramping ? "" : " disabled"}>■ 停止</button></div>
+      ${ramp}
+    </div>
+    <div class="fine">${fine}</div>
   </div>`;
 }
 
 // ---- 操作 ----------------------------------------------------------------------
-function group(i) { return (DATA.groups || []).find(g => g.index === i); }
-function srcOf(ref) { return (DATA.sources || []).find(s => s.ref === ref) || {}; }
 async function act(fn, what) {
   if (BUSY) return; BUSY = true;
   try { await fn(); } catch (e) { toast(`${what}失敗：${e.message}`); }
   BUSY = false; refresh(true);
 }
+function cappedRate(g, rate) {
+  const src = srcMap(), units = new Set(g.members.map(r => (src[r] || {}).unit || "A"));
+  if (units.size !== 1 || !units.has("A")) return rate || null;
+  const cands = rate ? [rate] : g.members.map(r => (src[r] || {}).rate).filter(Boolean);
+  if (DATA.max_rate) cands.push(DATA.max_rate);
+  return cands.length ? Math.min(...cands) : null;
+}
 async function startRamp(g, target, rate) {
-  const jid = await cmd("group_ramp", Object.assign({ refs:g.members, target }, rate ? { rate } : {}), 20);
+  const r = cappedRate(g, rate);
+  const jid = await cmd("group_ramp", Object.assign({ refs:g.members, target }, r ? { rate:r } : {}), 20);
   JOBS[g.index] = { id:jid, target, done:false }; followRamp(g.index, jid);
 }
 async function followRamp(gi, jid) {
   for (;;) {
     await new Promise(r => setTimeout(r, 900));
     let st; try { st = await cmd("ramp_status", { job:jid }, 8); } catch (e) { continue; }
+    if (!JOBS[gi] || JOBS[gi].id !== jid) return;
     JOBS[gi] = st;
     if (DATA) render();
-    if (st.done) { delete JOBS[gi]; if (st.error) toast(`斜坡停止：${st.error}`); refresh(true); return; }
+    if (st.done) { delete JOBS[gi]; if (TG[gi]) TG[gi].touched = false; if (st.error) toast(`斜坡停止：${st.error}`); refresh(true); return; }
   }
 }
+function nudge(gi, delta) {
+  const g = group(gi); if (!g || locked()) return;
+  const info = dialInfo(g, srcMap()), cur = target(g, info);
+  const v = Math.max(-info.limD, Math.min(info.limD, +(cur + delta).toFixed(info.dec)));
+  TG[gi] = { v, touched: true }; render();
+}
+function memMenu(g, i) {
+  const src = srcMap(), s0 = src[g.members[0]] || {}, [k, u] = scaleOf(s0.unit), v = g.memory[i];
+  if (s0.level != null && confirm(`把 ${g.name} 目前的值 ${(s0.level * k).toFixed(4)} ${u} 記到 M${i + 1}？`))
+    return act(() => cmd("magnet_memory", { group:g.index, slot:i, value:s0.level }, 10), "記憶");
+  if (v != null && confirm(`清除 M${i + 1}（${(v * k).toFixed(4)} ${u}）？`))
+    return act(() => cmd("magnet_memory", { group:g.index, slot:i, value:null }, 10), "清除記憶");
+}
+let PRESS = null;                       // 按住記憶鈕 = 選單
+document.addEventListener("pointerdown", e => {
+  const b = e.target.closest("button[data-a=mem]"); if (!b || b.disabled) return;
+  PRESS = { b, fired:false, t:setTimeout(() => { PRESS.fired = true; const g = group(+b.dataset.g); if (g) memMenu(g, +b.dataset.i); }, 650) };
+});
+["pointerup", "pointercancel", "pointerleave"].forEach(ev => document.addEventListener(ev, () => { if (PRESS) clearTimeout(PRESS.t); }));
+document.addEventListener("contextmenu", e => {
+  const b = e.target.closest("button[data-a=mem]"); if (!b) return;
+  e.preventDefault(); if (PRESS) { clearTimeout(PRESS.t); PRESS.fired = true; }
+  const g = group(+b.dataset.g); if (g && !b.disabled) memMenu(g, +b.dataset.i);
+});
 document.addEventListener("click", e => {
-  const b = e.target.closest("button[data-a]"); if (!b || !DATA) return;
+  const b = e.target.closest("[data-a]"); if (!b || !DATA || b.disabled) return;
   const gi = +b.dataset.g, g = group(gi); if (!g) return;
-  const s0 = srcOf(g.members[0]), [k, u] = scaleOf(s0.unit);
-  if (b.dataset.a === "go") {
-    const v = parseFloat(($("tg" + gi).value || "").replace(",", "."));
-    if (!isFinite(v)) { toast(`輸入目標值（${u}）`); return; }
-    act(() => startRamp(g, v / k, null), "前往");
-  } else if (b.dataset.a === "mem") {
-    const v = g.memory[+b.dataset.i]; if (v == null) return;
-    act(() => startRamp(g, v, DATA.memory_rate || null), "記憶");
-  } else if (b.dataset.a === "fine") {
+  const src = srcMap(), s0 = src[g.members[0]] || {}, [k, u] = scaleOf(s0.unit), a = b.dataset.a;
+  if (a === "up" || a === "dn") { nudge(gi, (a === "up" ? 1 : -1) * +b.dataset.s); }
+  else if (a === "sgn") { if (locked()) return; const info = dialInfo(g, src); TG[gi] = { v: -target(g, info), touched: true }; render(); }
+  else if (a === "type") {
+    if (locked()) return;
+    const info = dialInfo(g, src), s = prompt(`${g.name} 的目標（${u}，範圍 ±${+info.limD.toPrecision(4)}）`, target(g, info).toFixed(info.dec));
+    if (s == null) return;
+    const v = parseFloat(String(s).replace(",", "."));
+    if (!isFinite(v) || Math.abs(v) > info.limD + 1e-12) { toast(`超出範圍 ±${+info.limD.toPrecision(4)} ${u}`); return; }
+    TG[gi] = { v, touched: true }; render();
+  } else if (a === "go") {
+    const info = dialInfo(g, src), v = target(g, info), rt = parseFloat(($("rt" + gi).value || "").replace(",", "."));
+    act(() => startRamp(g, v / k, isFinite(rt) && rt > 0 ? rt / k : null), "前往");
+  } else if (a === "mem") {
+    if (PRESS && PRESS.b === b && PRESS.fired) { PRESS = null; return; }
+    const v = g.memory[+b.dataset.i];
+    if (v == null) { if (s0.level != null) act(() => cmd("magnet_memory", { group:gi, slot:+b.dataset.i, value:s0.level }, 10), "記憶"); }
+    else { TG[gi] = { v: v * k, touched: true }; act(() => startRamp(g, v, DATA.memory_rate || null), "記憶"); }
+  } else if (a === "fine") {
     const step = parseFloat($("st" + gi).value);
     act(() => cmd("fine_step", { refs:g.members, direction:+b.dataset.d, step }, 15), "微調");
-  } else if (b.dataset.a === "stop") {
+  } else if (a === "stop") {
     const j = JOBS[gi]; act(() => cmd("group_stop", j ? { job:j.id } : {}, 8), "停止");
-  } else if (b.dataset.a === "out") {
+    if (TG[gi]) TG[gi].touched = false;
+  } else if (a === "out") {
     const on = b.dataset.on === "1";
     if (!confirm(`${on ? "打開" : "關閉"}「${g.name}」的輸出？`)) return;
     act(() => cmd("output", { refs:g.members, on }, 15), "輸出切換");
-  } else if (b.dataset.a === "save") {
-    const slot = prompt(`把 ${g.name} 目前的值（${show(s0.level, s0)} ${u}）存到哪個記憶？輸入 1、2 或 3`, "1");
-    const i = parseInt(slot, 10); if (!(i >= 1 && i <= 3)) return;
-    act(() => cmd("magnet_memory", { group:gi, slot:i - 1, value:s0.level }, 10), "存記憶");
   }
 });
 
-// 只在畫面看得到時讀（手機鎖螢幕 / 換分頁時停）
+// 只在畫面看得到時讀（手機鎖螢幕 / 換分頁時停）；正在按 ▲▼ 時先不重畫
 function loop() { clearInterval(TIMER); TIMER = setInterval(() => { if (!document.hidden) refresh(false); }, 2500); }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadNodes(); refresh(true); } });
 setInterval(() => { if (!document.hidden) loadNodes(); }, 15000);
