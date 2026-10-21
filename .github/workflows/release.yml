@@ -1,5 +1,5 @@
 # 把某次打包（Build Lab Control / Build LabLogViewer）產生的 .exe / .dmg 放到 GitHub Releases：
-# 不用登入就能下載、不會被包成 zip，下載後直接拖進平台網頁「控制台」→「全部發佈」。
+# 不用登入就能下載、不會被包成 zip；平台網頁「控制台 → 從 GitHub 取得新版」由 NAS 直接下載並發佈（1.0.13）。
 # Actions → Publish release → Run workflow：填打包那次的 run id 與 tag（例如 labcontrol-v0.0.27）。
 name: Publish release
 
@@ -30,6 +30,25 @@ jobs:
           github-token: ${{ github.token }}
           path: artifacts
           merge-multiple: true
+      # 1.0.13：量測（labcontrol-v*）的發佈也附上 Hub 更新包與量測 / Monitor 的程式 zip（從打包那次的 commit 產生），
+      # 平台網頁「控制台 → 從 GitHub 取得新版」由 NAS 直接下載全部，不用站長先下載再上傳。
+      - name: Find the build commit
+        id: build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "sha=$(gh api repos/$GITHUB_REPOSITORY/actions/runs/${{ inputs.run_id }} --jq .head_sha)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: startsWith(inputs.tag, 'labcontrol-')
+        with:
+          ref: ${{ steps.build.outputs.sha }}
+          path: src
+      - name: Module zips (Hub, Lab Control, Monitor)
+        if: startsWith(inputs.tag, 'labcontrol-')
+        run: |
+          python3 src/LabControl/tools/make_release.py "$PWD/zips"
+          mkdir -p artifacts/zips
+          cp zips/LabControlHub_v*.zip zips/LabControl_v*.zip zips/LabControlMonitor_v*.zip artifacts/zips/
+          ls -la artifacts/zips
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -38,11 +57,12 @@ jobs:
         run: |
           ls -la artifacts
           mkdir files
-          find artifacts -type f \( -name "*.exe" -o -name "*.dmg" -o -name "LabLogViewerPets_v*.zip" \) -exec cp {} files/ \;
+          find artifacts -type f \( -name "*.exe" -o -name "*.dmg" -o -name "LabLogViewerPets_v*.zip" \
+            -o -name "LabControlHub_v*.zip" -o -name "LabControl_v*.zip" -o -name "LabControlMonitor_v*.zip" \) -exec cp {} files/ \;
           ls -la files
           test -n "$(ls files)"
           {
-            echo "下載後直接拖進平台網頁「控制台」→「全部發佈」。"
+            echo "平台網頁「控制台 → 從 GitHub 取得新版」會直接下載這些檔案並發佈；也可以下載後拖進控制台。"
             echo
             echo "| 檔案 | 大小 | sha256 |"
             echo "|---|---|---|"

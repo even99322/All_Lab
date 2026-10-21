@@ -433,6 +433,31 @@ def _console_clear(h: Handler) -> None:
     h._json({"ok": True})
 
 
+@route("GET", C + r"/github", auth="owner")
+def _console_github(h: Handler) -> None:
+    """1.0.13：GitHub 上最新的發佈、線上缺哪些檔、下載工作進度。"""
+    h._json(h.hub.console.github.view(force=h._query().get("refresh") == "1"))
+
+
+@route("POST", C + r"/github/fetch", auth="owner")
+def _console_github_fetch(h: Handler) -> None:
+    b = h._json_body() if int(h.headers.get("Content-Length") or 0) else {}
+    b = b if isinstance(b, dict) else {}
+    from .github_sync import GithubError
+
+    try:
+        job = h.hub.console.github.fetch(_by(h), publish=bool(b.get("publish")), names=b.get("names") or None)
+    except GithubError as e:
+        raise HubHTTPError(502, str(e)) from None
+    h._json({"ok": True, "job": job})
+
+
+@route("PUT", C + r"/github/auto", auth="owner")
+def _console_github_auto(h: Handler) -> None:
+    b = h._json_body() or {}
+    h._json(dict(h.hub.console.github.set_auto(bool(b.get("auto")), _by(h)), ok=True))
+
+
 @route("GET", C + r"/paperlib-service", auth="owner")
 def _console_service_get(h: Handler) -> None:
     h._json(_plat(h).service_info())

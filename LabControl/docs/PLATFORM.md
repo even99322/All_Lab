@@ -245,6 +245,13 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 - 手動步進：`run_defaults.manual_loop: true` → 每一點自動循環量測，直到「記錄並下一點」。
 - 子專案需要論文庫 1.8.0（`projects.parent_id`、schema 8；專案專區「新增子專案」、編輯專案改「上層專案」、同一層名稱不重複、刪除時子專案移到上一層）；舊版論文庫一切照舊（都是最上層）。
 
+### 0o. 1.0.13：控制台從 GitHub 取得新版
+
+- 雲端打包（GitHub Actions）→ Publish release 把 .exe / .dmg（量測的發佈另附 Hub、量測、Monitor 的 zip）放到 GitHub Releases。
+- 控制台「從 GitHub 取得新版」：Hub 查 `api.github.com/repos/even99322/All_Lab/releases`，取 `labcontrol-v*`、`lablogviewer-v*` 最新的一版，
+  線上沒有的檔下載到 `data/staging/_github` → 暫存（跟上傳的一樣）→ 發佈（Hub 最後）。自動模式每 30 分鐘一次（`data/github_sync.json`）。
+- NAS 要能連到 github.com（下載會轉到 objects.githubusercontent.com）。repo 公開，不需要 token。
+
 ### 0n. 1.0.12：手機控制電磁鐵、常用設定
 
 - `/magnet`（導覽「電磁鐵」）→ `POST /api/nodes/<節點>/commands {cmd: "magnets"}`：節點回傳這台電腦即時數據的電源群組

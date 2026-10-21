@@ -83,6 +83,11 @@ class Console:
         self.dir.mkdir(parents=True, exist_ok=True)
         self.lock = threading.Lock()
         self.agent = AgentLink(getattr(hub.cfg, "agent_url", ""), hub.cfg.token)
+        try:                                         # 1.0.13：自動從 GitHub 更新 → Hub 啟動時就開始
+            if json.loads((self.dir.parent / "github_sync.json").read_text(encoding="utf-8")).get("auto"):
+                _ = self.github
+        except (OSError, ValueError):
+            pass
 
     # ---- 上傳暫存 ------------------------------------------------------------
     def _meta(self, sid: str) -> Path:
@@ -91,6 +96,8 @@ class Console:
     def _cleanup(self) -> None:
         now = time.time()
         for d in self.dir.iterdir():
+            if d.name.startswith("_"):              # _github：下載中的檔案
+                continue
             try:
                 if d.is_dir() and now - d.stat().st_mtime > KEEP_S:
                     shutil.rmtree(d, ignore_errors=True)
@@ -116,6 +123,39 @@ class Console:
                     time=time.time(), status="待發佈", done=False)
         self._meta(sid).write_text(json.dumps(item, ensure_ascii=False), encoding="utf-8")
         return self.decorate([item])[0]
+
+    def stage_path(self, path: Path, filename: str, by: str, version: str = "") -> Dict[str, Any]:
+        """1.0.13：已經在 NAS 上的檔案（從 GitHub 下載的）放進暫存——不整個讀進記憶體（安裝檔可能幾百 MB）。"""
+        import hashlib
+
+        path = Path(path)
+        name = Path(filename or path.name).name
+        try:
+            info = identify(path, name, version=(version or "").strip())
+        except PackageError as e:
+            raise ConsoleError(400, str(e)) from None
+        self._cleanup()
+        sid = secrets.token_hex(6)
+        d = self.dir / sid
+        d.mkdir(parents=True)
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        size = path.stat().st_size
+        shutil.move(str(path), d / name)
+        item = dict(info, id=sid, file=name, size=size, sha256=h.hexdigest(), by=by,
+                    time=time.time(), status="待發佈", done=False)
+        self._meta(sid).write_text(json.dumps(item, ensure_ascii=False), encoding="utf-8")
+        return self.decorate([item])[0]
+
+    @property
+    def github(self):
+        if getattr(self, "_github", None) is None:
+            from .github_sync import GithubSync
+
+            self._github = GithubSync(self)
+        return self._github
 
     def items(self) -> List[Dict[str, Any]]:
         out = []
@@ -197,8 +237,8 @@ class Console:
             path = self.dir / sid / it["file"]
             if not path.is_file():
                 raise ConsoleError(404, "上傳的檔案不見了，請重新上傳")
-            data = path.read_bytes()
             if it["kind"] == "web":
+                data = path.read_bytes()
                 action = "update" if it["target"] == "hub" else "paperlib_update"
                 job = self.agent.submit(action, data, by=f"{by}（控制台）")
                 it.update(status="更新中…", job=job.get("id"))
@@ -209,7 +249,8 @@ class Console:
                 merged = self._merge_patch(it, path)
                 self.hub.platform.add_release(it["target"], it["version"], merged.name, merged, by, it.get("notes", ""))
             else:
-                self.hub.platform.add_release(it["target"], it["version"], it["file"], data, by, it.get("notes", ""))
+                # 1.0.13：大檔（.exe / .dmg）不整個讀進記憶體，直接把暫存的檔案搬過去
+                self.hub.platform.add_release(it["target"], it["version"], it["file"], path, by, it.get("notes", ""))
             self._cur_at = 0
             msg = ("已發佈：平台網頁的下載按鈕會給這個檔" if it.get("platform") else
                    "已發佈：各電腦的 App 會自動更新")

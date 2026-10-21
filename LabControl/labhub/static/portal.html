@@ -431,6 +431,8 @@ const STATE_ZH = {idle: "閒置", running: "量測中", paused: "暫停", updati
 async function viewConsole() {
   if (!(ME.user && ME.user.owner)) { $("#main").innerHTML = `<div class="empty">只有站長可以使用</div>`; return; }
   $("#main").innerHTML = `
+    <h2>從 GitHub 取得新版 <span class="n">雲端打包好的安裝檔與 Hub 更新包，NAS 直接下載，不用先下載到電腦再上傳</span></h2>
+    <div class="card" id="gh"><div class="muted small">讀取中…</div></div>
     <h2>發佈更新 <span class="n">把新版檔案拖進來：Hub、論文庫、量測、讀檔、Monitor、App（zip、.exe、.dmg）</span></h2>
     <div class="drop" id="drop">把檔案拖到這裡，或<u>點這裡選檔</u><input type="file" id="pick" multiple hidden accept=".zip,.exe,.msi,.dmg,.pkg"></div>
     <div class="upl" id="upl"><div class="row"><b id="uplname"></b><span class="muted" id="uplinfo"></span></div>
@@ -454,13 +456,57 @@ async function viewConsole() {
   $("#clear").onclick = async () => { await api("/api/platform/console/clear", {method: "POST"}); loadItems(); };
   $("#pubs").onclick = async e => { const b = e.target.closest("[data-del]"); if (!b) return;
     await api("/api/platform/console/items/" + b.dataset.del, {method: "DELETE"}); loadItems(); };
-  loadItems(); loadStatus();
+  loadItems(); loadStatus(); loadGithub();
   const svcShow = r => { $("#svcuser").value = r.user || ""; $("#svcstate").textContent = r.configured ? `✔ 已設定（${r.user}）` + (r.from_env ? "，來自 docker-compose" : "") : "尚未設定"; };
   api("/api/platform/console/paperlib-service").then(svcShow).catch(() => {});
   $("#svcsave").onclick = async () => {
     try { svcShow(await api("/api/platform/console/paperlib-service", {method: "PUT", json: {user: $("#svcuser").value, password: $("#svcpw").value}}));
       $("#svcpw").value = ""; toast("已儲存，登入論文庫成功"); }
     catch (e) { toast(`無法使用這個帳號：${e.message}`); }
+  };
+}
+// ---- 1.0.13：從 GitHub 取得新版（Hub 自己下載雲端打包好的檔案）------------------------------------------
+const GH = {timer: null, data: null};
+async function loadGithub(refresh) {
+  const el = $("#gh"); if (!el) return;
+  try { GH.data = await api("/api/platform/console/github" + (refresh ? "?refresh=1" : "")); }
+  catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  renderGithub();
+  const j = GH.data.job;
+  clearTimeout(GH.timer);
+  if (j && !j.done) GH.timer = setTimeout(() => loadGithub(), 1500);
+  else if (j && j.done && GH.wasRunning) { GH.wasRunning = false; loadItems(); loadStatus();
+    if (GH.publishAfter) { GH.publishAfter = false; publishAll(); } }
+}
+function renderGithub() {
+  const el = $("#gh"), d = GH.data; if (!el || !d) return;
+  const j = d.job, running = j && !j.done;
+  const rows = (d.releases || []).map(r => `<div style="margin:6px 0"><b>${esc(r.name)}</b>
+      <span class="small muted">${r.date ? when(Date.parse(r.date) / 1000) : ""} · <a href="${esc(r.url)}" target="_blank" rel="noopener">GitHub</a></span>
+      <div class="small">${r.files.map(f => `<span style="display:inline-block;margin:2px 10px 2px 0">${f.online ? "✔" : f.staged ? "⏳" : f.older ? "↩" : "●"}
+        ${esc(f.name)} <span class="muted">${size(f.size)}${f.online ? "（線上已有）" : f.staged ? "（已在下面待發佈）" : f.older ? "（比線上舊，略過）" : ""}</span></span>`).join("")}</div></div>`).join("");
+  const prog = j ? `<div class="small" style="margin-top:6px">${j.files.map(f => `<div>${esc(f.name)}：${esc(f.status)}${f.size && f.status === "下載中" ? ` ${(100 * f.got / f.size).toFixed(0)}%` : ""}</div>`).join("")}
+      ${j.done ? `<div class="muted">${esc(j.message || "")}</div>` : ""}</div>` : "";
+  const n = (d.wanted || []).length;
+  el.innerHTML = `${d.error ? `<div class="err">${esc(d.error)}</div>` : rows || '<div class="small muted">GitHub 上還沒有發佈</div>'}
+    <div class="bar" style="margin-top:8px">
+      <button class="btn primary" id="ghgo"${running || !n ? " disabled" : ""}>⬇ 下載 ${n} 個新檔案並發佈</button>
+      <button class="btn small" id="ghonly"${running || !n ? " disabled" : ""}>只下載（之後再發佈）</button>
+      <button class="btn small" id="ghcheck"${running ? " disabled" : ""}>重新檢查</button>
+      <label class="small"><input type="checkbox" id="ghauto"${d.auto ? " checked" : ""}> 自動：每 30 分鐘檢查，有新版就下載並發佈</label>
+      ${d.last_auto ? `<span class="small muted">上次自動檢查 ${when(d.last_auto)}：${esc(d.last_auto_result || "")}</span>` : ""}</div>${prog}`;
+  const go = async publish => {
+    try { GH.wasRunning = true; GH.publishAfter = publish;
+      await api("/api/platform/console/github/fetch", {method: "POST", json: {publish: false}}); loadGithub(); }
+    catch (e) { toast(e.message); }
+  };
+  $("#ghgo").onclick = () => go(true);
+  $("#ghonly").onclick = () => go(false);
+  $("#ghcheck").onclick = () => loadGithub(true);
+  $("#ghauto").onchange = async e => {
+    try { await api("/api/platform/console/github/auto", {method: "PUT", json: {auto: e.target.checked}});
+      toast(e.target.checked ? "已開啟自動更新：有新版會自動下載並發佈到各電腦" : "已關閉自動更新"); }
+    catch (err) { e.target.checked = !e.target.checked; toast(err.message); }
   };
 }
 function conLog(m) { const el = $("#publog"); if (el) el.textContent = m; }
