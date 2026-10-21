@@ -122,7 +122,8 @@ def _me(h: Handler) -> None:
         mods = [dict(m, allowed=not m.get("owner_only")) for m in plat.modules().values()]
     h._json({"kind": p["kind"], "user": u, "modules": mods, "paperlib_url": plat.paperlib_public,
              "paperlib": plat.paperlib is not None, "hub": __version__,
-             "projects_share": h.hub.cfg.projects_share})
+             "projects_share": h.hub.cfg.projects_share,
+             "https_url": h.hub.tls.url("hub"), "scheme": h.scheme})
 
 
 @route("GET", P + r"/status", auth="any")
@@ -458,6 +459,19 @@ def _console_github_auto(h: Handler) -> None:
     h._json(dict(h.hub.console.github.set_auto(bool(b.get("auto")), _by(h)), ok=True))
 
 
+@route("GET", C + r"/tls", auth="owner")
+def _console_tls(h: Handler) -> None:
+    """1.0.15：內網 https 的憑證（還剩幾天、哪裡來的、兩個埠有沒有開）。"""
+    h._json(h.hub.tls.status())
+
+
+@route("POST", C + r"/tls/check", auth="owner")
+def _console_tls_check(h: Handler) -> None:
+    """立即向 Tailscale 取憑證（快到期它會續約）並重新載入。"""
+    _plat(h).audit(_by(h), "tls-check", h.hub.tls.domain)
+    h._json(dict(h.hub.tls.check(), ok=True))
+
+
 @route("GET", C + r"/paperlib-service", auth="owner")
 def _console_service_get(h: Handler) -> None:
     h._json(_plat(h).service_info())
@@ -535,7 +549,7 @@ def _get_mac_script(h: Handler) -> None:
     from .appupdates import mac_script
 
     host = h.headers.get("Host") or f"{h.server.server_address[0]}:{h.server.server_address[1]}"
-    body = mac_script(f"http://{host}").encode("utf-8")
+    body = mac_script(f"{h.scheme}://{host}").encode("utf-8")
     h.send_response(200)
     h.send_header("Content-Type", "text/x-shellscript; charset=utf-8")
     h.send_header("Content-Length", str(len(body)))

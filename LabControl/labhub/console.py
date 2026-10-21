@@ -346,6 +346,10 @@ class Console:
         except OSError:
             out["disk"] = None
         out["platform"] = self.hub.platform.status()
+        tls = getattr(self.hub, "tls", None)                 # 1.0.15：內網 https 憑證還剩幾天
+        if tls is not None:
+            t = tls.status()
+            out["tls"] = {k: t.get(k) for k in ("level", "message", "days_left", "domain", "source", "last_error")}
         try:                                              # 1.0.4 數據索引
             from .index_routes import index_summary
 

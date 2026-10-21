@@ -14,6 +14,11 @@ services:
     command: ["python", "-m", "labhub"]
     ports:
       - "8765:8765"                 # 網站與 API：http://NAS:8765/
+      # 1.0.15 內網 https：內網跟 VPN 同一個網址 https://<NAS>.<tailnet>.ts.net:8443（Hub）、:8444（論文庫），
+      # 同一張 Tailscale 憑證（Hub 自己向 Tailscale 取、自己換新）。只開在內網 IP，不跟 tailscale serve 搶。
+      # 實驗室 DNS 還要把 ts.net 網址指到 192.168.50.2（說明文件 0p）。不用內網 https 就把這兩行註解掉。
+      - "192.168.50.2:8443:8443"
+      - "192.168.50.2:8444:8444"
     environment:
       LABHUB_DATA: /data
       LABHUB_RELEASES: /releases
@@ -25,10 +30,14 @@ services:
       # 0.0.31：論文庫服務帳號（量測電腦沒登入時查專案）。也可以在網頁「控制台 → 論文庫服務帳號」設定
       LABHUB_PAPERLIB_SERVICE_USER: ""      # 論文庫帳號
       LABHUB_PAPERLIB_SERVICE_PASSWORD: ""  # 在 NAS 上填，不要提交到 git
+      # 1.0.15 內網 https（不寫 = 自動）：LABHUB_TLS: "off" 關掉；LABHUB_TLS_PAPERLIB_PORT: "0" 不開論文庫的 https
+      # LABHUB_TLS_WARN_DAYS: "20"             # 憑證剩幾天以內在控制台與首頁警告
       TZ: Asia/Taipei
     volumes:
       - ./labhub:/app/labhub:ro
       - ./data:/data
+      # 1.0.15 內網 https：Tailscale 套件的 socket 資料夾（Hub 用它取憑證；Synology DSM 7 的位置）
+      - /var/packages/Tailscale/var:/tailscale:ro
       # ↓ 節點自動更新用：Lab APP 發佈資料夾。資料夾必須已存在，確認後拿掉開頭的 #
       # - /volume1/ccuqel/Releases:/releases:ro
 

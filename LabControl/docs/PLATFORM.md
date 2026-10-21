@@ -245,6 +245,25 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 - 手動步進：`run_defaults.manual_loop: true` → 每一點自動循環量測，直到「記錄並下一點」。
 - 子專案需要論文庫 1.8.0（`projects.parent_id`、schema 8；專案專區「新增子專案」、編輯專案改「上層專案」、同一層名稱不重複、刪除時子專案移到上一層）；舊版論文庫一切照舊（都是最上層）。
 
+### 0p. 1.0.15：內網 https（跟 VPN 同一個網址）、憑證監測
+
+```
+VPN： 瀏覽器 ─ MagicDNS → 100.114.33.20 ─ tailscale serve ─ :8443 → Hub、:8444（與舊的 :443）→ 論文庫
+內網：瀏覽器 ─ 實驗室 DNS → 192.168.50.2 ─ Hub（labhub/lan_tls.py）─ :8443 → Hub 本身、:8444 → 論文庫（TLS 後轉送 paperlib:8080）
+                                              └ 憑證：tailscaled LocalAPI /localapi/v0/cert/<網域>?type=pair（socket 掛在 /tailscale）
+```
+
+- 憑證存在 `data/tls/cert.pem`、`key.pem`、`state.json`；每 12 小時（出錯或快到期時每小時）向 Tailscale 取一次，內容不同就寫檔、
+  換新的 SSLContext（下一條連線就用新的，不用重開），稽核紀錄 `tls-renew`。沒有 socket 時可以手動放這兩個檔。
+- 網域：`LABHUB_TLS_DOMAIN`，不寫就用 Tailscale status 的 `CertDomains[0]`。埠：`LABHUB_TLS_PORT`（8443）、`LABHUB_TLS_PAPERLIB_PORT`（8444，0 = 不開）。
+  論文庫不用 443：Synology DSM 的 nginx 佔著 443。docker-compose 只在 192.168.50.2 上開這兩個埠，不跟 tailscale serve 搶。
+- 狀態 `level`：ok / warn（剩 ≤ `LABHUB_TLS_WARN_DAYS` 天，預設 20；或上次取憑證出錯、埠開不起來）/ bad（≤ 7 天、過期、沒有憑證）/ off。
+  控制台「內網 https」卡片、系統狀態「HTTPS 憑證」、站長首頁的警告；卡片會在瀏覽器裡試連兩個網址（`fetch no-cors`）顯示「這台裝置打不打得開」。
+- 用 https 網域連 Hub 時 `paperlib_public` 給 `https://<網域>:8444`（`LABHUB_PAPERLIB_PUBLIC` 有同主機的網址時用那個）。
+  `/api/platform/me` 的 `https_url`：用 http 開的首頁試連得到就提示改用 https。
+- DNS：實驗室 DNS 把 `<NAS>.<tailnet>.ts.net` 指到 192.168.50.2（Synology「DNS Server」套件的主要區域＋A 記錄，路由器 DHCP 的 DNS 只給 NAS；
+  或路由器自己的自訂記錄）。步驟見 `deploy/platform/README.md`。開著 Tailscale 的裝置用 MagicDNS，不受影響。
+
 ### 0o. 1.0.13：控制台從 GitHub 取得新版
 
 - 雲端打包（GitHub Actions）→ Publish release 把 .exe / .dmg（量測的發佈另附 Hub、量測、Monitor 的 zip）放到 GitHub Releases。

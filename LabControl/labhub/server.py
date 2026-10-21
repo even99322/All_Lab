@@ -201,6 +201,10 @@ class HubState:
         from .console import Console
 
         self.console = Console(self)
+        from .lan_tls import LanTLS                      # 1.0.15：內網 https（同一張 Tailscale 憑證）
+
+        self.tls = LanTLS(cfg, audit=self.platform.audit)
+        self.platform.paperlib_for_host = self.tls.paperlib_url_for
         self._load()
 
     # ---- 保存（重開 Hub 後仍記得有哪些電腦 / 節點）------------------------------
@@ -732,6 +736,13 @@ class Handler(BaseHTTPRequestHandler):
     @property
     def ip(self) -> str:
         return self.client_address[0]
+
+    @property
+    def scheme(self) -> str:
+        """1.0.15：內網 https 的連線是 https。"""
+        import ssl
+
+        return "https" if isinstance(self.connection, ssl.SSLSocket) else "http"
 
     def _query(self) -> Dict[str, str]:
         q = urllib.parse.urlsplit(self.path).query
@@ -1302,12 +1313,14 @@ def serve(cfg: Config, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> None:
         selfupdate.mark_healthy(cfg.data_dir)
     except OSError as e:
         log.warning("無法記錄啟動狀態：%s", e)
+    state.tls.start(srv.RequestHandlerClass, host)       # 1.0.15：內網 https（:8443 Hub、:8444 論文庫）
     try:
         srv.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:
         pass
     finally:
         stop.set()
+        state.tls.stop()
         state.save(force=True)
         srv.server_close()
 

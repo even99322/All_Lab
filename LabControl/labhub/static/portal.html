@@ -101,6 +101,8 @@
   .upl .row { display:flex; justify-content:space-between; gap:12px; font-size:13px; margin-bottom:4px; }
   .upl .bar2 { height:10px; border-radius:6px; background:var(--border); overflow:hidden; }
   .upl .bar2 > i { display:block; height:100%; width:0; background:var(--accent); transition:width .15s; }
+  .tlsbar { height:8px; border-radius:6px; background:var(--border); overflow:hidden; margin:8px 0; max-width:420px; }
+  .tlsbar > i { display:block; height:100%; }
   .upl .bar2.wait > i { width:100% !important; opacity:.45; animation:uplpulse 1.2s ease-in-out infinite; }
   @keyframes uplpulse { 50% { opacity:.15; } }
   .pub td { vertical-align:middle; }
@@ -200,7 +202,7 @@ function viewHome() {
   const banner = (window.qelApp && (window.qelApp.standalone || window.qelApp.installed)) || hideBanner ? "" :
     `<div class="appbar" id="appbar"><img src="/app-icon-192.png" alt=""><div><b>把平台裝成 App</b><br><span>跟論文庫一樣，從桌面或主畫面直接開。</span></div>
      <a class="btn primary" href="/install" id="appbar-go">安裝</a><button class="x" id="appbar-x" title="不再顯示">✕</button></div>`;
-  $("#main").innerHTML = banner + `<h2>模塊下載 <span class="n">${shown.filter(m => m.allowed).length} 個可用</span></h2>
+  $("#main").innerHTML = `<div id="homenote"></div>` + banner + `<h2>模塊下載 <span class="n">${shown.filter(m => m.allowed).length} 個可用</span></h2>
     <div class="tiles">${shown.map(tile).join("")}</div>
     <h2>網頁</h2><div class="tiles">
       <div class="tile"><div class="t">數據查看</div><div class="d">瀏覽數據集散地、看預覽與量測參數；電腦上可以直接用讀檔程式開啟。</div><div><a class="btn primary" href="/data">開啟</a></div></div>
@@ -212,6 +214,35 @@ function viewHome() {
   if (x) x.onclick = () => { try { localStorage.setItem("qel.installBanner", "off"); } catch (e) { /* 無痕視窗 */ } $("#appbar").remove(); };
   const go = document.getElementById("appbar-go");
   if (go) go.onclick = ev => { if (window.qelApp && window.qelApp.prompt) { ev.preventDefault(); window.qelApp.install(); } };
+  homeNotes();
+}
+// ---- 1.0.15：內網 https —— 站長看到憑證快到期的警告；用 http 開的人，這台裝置連得到 https 網址就提示改用 ----------
+async function probeHttps(base) {
+  const c = new AbortController(), t = setTimeout(() => c.abort(), 4000);
+  try { await fetch(base + "/api/ping?probe=" + Date.now(), {mode: "no-cors", cache: "no-store", signal: c.signal}); return true; }
+  catch (e) { return false; } finally { clearTimeout(t); }
+}
+async function homeNotes() {
+  const el = $("#homenote"); if (!el || !ME) return;
+  let html = "";
+  if (ME.user && ME.user.owner) {
+    try {
+      const t = await api("/api/platform/console/tls");
+      if (t.level === "warn" || t.level === "bad")
+        html += `<div class="appbar" style="border-color:var(--${t.level === "bad" ? "err" : "warn"})"><div><b class="${t.level === "bad" ? "err" : "warn"}">⚠ 內網 https 憑證：${esc(t.message)}</b>
+          <br><span>${esc(t.domain || "")}${t.last_error ? "　" + esc(t.last_error) : ""}</span></div><a class="btn" href="#/console">控制台</a></div>`;
+    } catch (e) { /* 舊版 Hub */ }
+  }
+  el.innerHTML = html;                                   // 警告先顯示，不用等下面的連線測試
+  let hide = false;
+  try { hide = localStorage.getItem("qel.httpsBanner") === "off"; } catch (e) { /* 無痕視窗 */ }
+  if (location.protocol === "http:" && ME.https_url && !hide && await probeHttps(ME.https_url))
+    html += `<div class="appbar" id="httpsbar"><div style="font-size:26px;flex:none">🔒</div><div><b>這台裝置可以用 https 網址了</b><br><span>${esc(ME.https_url)} —— 內網、VPN 都是同一個網址；裝成 App 也請用這個網址。</span></div>
+      <a class="btn primary" href="${esc(ME.https_url + location.pathname + location.hash)}">改用 https</a><button class="x" id="httpsbar-x" title="不再顯示">✕</button></div>`;
+  if (!document.body.contains(el)) return;
+  el.innerHTML = html;
+  const x = document.getElementById("httpsbar-x");
+  if (x) x.onclick = () => { try { localStorage.setItem("qel.httpsBanner", "off"); } catch (e) { /* 無痕視窗 */ } $("#httpsbar").remove(); };
 }
 
 // ---- 數據目錄 -----------------------------------------------------------------
@@ -433,6 +464,8 @@ async function viewConsole() {
   $("#main").innerHTML = `
     <h2>從 GitHub 取得新版 <span class="n">雲端打包好的安裝檔與 Hub 更新包，NAS 直接下載，不用先下載到電腦再上傳</span></h2>
     <div class="card" id="gh"><div class="muted small">讀取中…</div></div>
+    <h2>內網 https <span class="n">內網跟 VPN 用同一個 https 網址、同一張 Tailscale 憑證；Hub 每 12 小時檢查，快到期會警告</span></h2>
+    <div class="card" id="tls"><div class="muted small">讀取中…</div></div>
     <h2>發佈更新 <span class="n">把新版檔案拖進來：Hub、論文庫、量測、讀檔、Monitor、App（zip、.exe、.dmg）</span></h2>
     <div class="drop" id="drop">把檔案拖到這裡，或<u>點這裡選檔</u><input type="file" id="pick" multiple hidden accept=".zip,.exe,.msi,.dmg,.pkg"></div>
     <div class="upl" id="upl"><div class="row"><b id="uplname"></b><span class="muted" id="uplinfo"></span></div>
@@ -456,7 +489,7 @@ async function viewConsole() {
   $("#clear").onclick = async () => { await api("/api/platform/console/clear", {method: "POST"}); loadItems(); };
   $("#pubs").onclick = async e => { const b = e.target.closest("[data-del]"); if (!b) return;
     await api("/api/platform/console/items/" + b.dataset.del, {method: "DELETE"}); loadItems(); };
-  loadItems(); loadStatus(); loadGithub();
+  loadItems(); loadStatus(); loadGithub(); loadTls();
   const svcShow = r => { $("#svcuser").value = r.user || ""; $("#svcstate").textContent = r.configured ? `✔ 已設定（${r.user}）` + (r.from_env ? "，來自 docker-compose" : "") : "尚未設定"; };
   api("/api/platform/console/paperlib-service").then(svcShow).catch(() => {});
   $("#svcsave").onclick = async () => {
@@ -508,6 +541,40 @@ function renderGithub() {
       toast(e.target.checked ? "已開啟自動更新：有新版會自動下載並發佈到各電腦" : "已關閉自動更新"); }
     catch (err) { e.target.checked = !e.target.checked; toast(err.message); }
   };
+}
+// ---- 1.0.15：內網 https 憑證 ------------------------------------------------------------------------------
+const TLS_SRC = {tailscale: "Tailscale（自動續約）", files: "手動放的檔案（data/tls）", none: "還沒設定", off: "已關閉"};
+const day = t => t ? new Date(t * 1000).toLocaleDateString("zh-TW") : "—";
+async function loadTls(t) {
+  const el = $("#tls"); if (!el) return;
+  try { t = t || await api("/api/platform/console/tls"); } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
+  const cls = {ok: "ok", warn: "warn", bad: "err"}[t.level] || "muted";
+  const L = t.listeners || {}, U = t.urls || {};
+  const port = (k, label) => L[k] ? `<div>${label} :${L[k].port}　${L[k].ok ? `<span class="ok">✔ 已開</span>` : `<span class="err">✘ ${esc(L[k].error)}</span>`}
+      ${U[k] ? `　<a href="${esc(U[k])}" target="_blank" rel="noopener">${esc(U[k])}</a>　<span class="small muted" data-probe="${esc(U[k])}">這台裝置：檢查中…</span>` : ""}</div>` : "";
+  const pct = t.days_left != null ? Math.max(0, Math.min(100, t.days_left / 90 * 100)) : 0;
+  el.innerHTML = `<div style="display:flex;gap:16px;flex-wrap:wrap;align-items:baseline">
+      <div style="font-size:26px;font-weight:700" class="${cls}">${t.days_left != null ? `剩 ${Math.max(0, Math.floor(t.days_left))} 天` : "—"}</div>
+      <div><b class="${cls}">● ${esc(t.message || "")}</b><div class="small muted">${esc(t.domain || "（還不知道網域）")}</div></div></div>
+    ${t.days_left != null ? `<div class="tlsbar"><i style="width:${pct}%;background:var(--${cls === "err" ? "err" : cls === "warn" ? "warn" : "ok"})"></i></div>` : ""}
+    <div class="small" style="display:grid;gap:3px">
+      <div>到期：<b>${day(t.not_after)}</b>　開始：${day(t.not_before)}　簽發：${esc(t.issuer || "—")}</div>
+      <div>來源：${esc(TLS_SRC[t.source] || t.source || "—")}${t.socket ? `<span class="muted">（${esc(t.socket)}）</span>` : ""}　上次檢查：${t.last_check ? when(t.last_check) : "—"}${t.renewed_at ? `　上次換新：${when(t.renewed_at)}` : ""}</div>
+      ${port("hub", "Hub") + port("paperlib", "論文庫")}
+      ${t.last_error ? `<div class="err">${esc(t.last_error)}</div>` : ""}
+      ${t.source === "none" ? `<div class="muted">設定方式（一次）：docker-compose 的 labhub 加上 Tailscale socket 與 8443、8444 埠，實驗室 DNS 把 ${esc(t.domain || "<NAS>.<tailnet>.ts.net")} 指到 NAS 的內網 IP。步驟見說明文件「0p. 內網 https」。</div>` : ""}
+    </div>
+    <div class="bar" style="margin-top:8px"><button class="btn small" id="tlscheck">立即檢查／取新憑證</button>
+      <span class="small muted">Tailscale 憑證 90 天，剩 30 天左右它會自己續約；剩 ${esc(t.warn_days)} 天以內這裡和首頁會警告。</span></div>`;
+  $("#tlscheck").onclick = async e => {
+    e.target.disabled = true; e.target.textContent = "檢查中…";
+    try { loadTls(await api("/api/platform/console/tls/check", {method: "POST"})); toast("已檢查"); }
+    catch (err) { toast(err.message); e.target.disabled = false; e.target.textContent = "立即檢查／取新憑證"; }
+  };
+  el.querySelectorAll("[data-probe]").forEach(async s => {
+    const ok = await probeHttps(s.dataset.probe);
+    s.innerHTML = ok ? `<span class="ok">這台裝置：✔ 打得開</span>` : `<span class="err">這台裝置：✘ 打不開</span>（DNS 還沒指到 NAS，或這台沒開 VPN）`;
+  });
 }
 function conLog(m) { const el = $("#publog"); if (el) el.textContent = m; }
 // 上傳到 Hub：XMLHttpRequest 才拿得到上傳進度（fetch 沒有）。進度條、速度、剩餘時間；上傳完 Hub 還要檢查檔案。
@@ -656,6 +723,12 @@ function indexCard(ix, c) {
   const ago = ix.last_pass ? Math.max(0, Math.round((Date.now() / 1000 - ix.last_pass) / 60)) : null;
   return [k, `${esc(ix.indexed ?? 0)}`, `個檔已索引${ix.errors ? `（${esc(ix.errors)} 個讀不了）` : ""}${ago != null ? ` · ${ago} 分鐘前檢查` : ""}` + key];
 }
+function tlsCard(t) {
+  if (!t) return ["HTTPS 憑證", "—", ""];
+  const cls = {ok: "ok", warn: "warn", bad: "err"}[t.level] || "muted";
+  return ["HTTPS 憑證", t.days_left != null ? `<span class="${cls}">● 剩 ${Math.max(0, Math.floor(t.days_left))} 天</span>` : `<span class="muted">未設定</span>`,
+          esc(t.level === "ok" ? (t.domain || "") : (t.message || ""))];
+}
 async function loadStatus() {
   let s;
   try { s = await api("/api/platform/console/status"); } catch (e) { $("#sys").innerHTML = `<div class="err">${esc(e.message)}</div>`; return; }
@@ -671,6 +744,7 @@ async function loadStatus() {
     ["數據", esc(p.catalog ?? "—"), "筆"],
     ["登入中", esc(p.users_logged_in ?? "—"), "人"],
     indexCard(s.index || {}, a.online ? (a.indexer || null) : undefined),
+    tlsCard(s.tls),
   ].map(([k, v, sub]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div><div class="k">${sub}</div></div>`).join("");
   const ns = s.nodes || [];
   $("#nodes").innerHTML = ns.length ? `<table><tr><th>名稱</th><th>狀態</th><th>電腦</th><th>版本</th><th>量測</th></tr>${ns.map(n => {

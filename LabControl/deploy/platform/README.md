@@ -48,6 +48,62 @@ docker/
    接著開始索引：新的檔先做；幾千個檔第一次要一段時間，之後每 5 分鐘只做新增 / 改過的。
 5. 看進度：登入 Hub 後開 `http://192.168.50.2:8765/api/index/status`（`todo`、`done`、`state`）。
 
+## 加上內網 https（1.0.15，只做一次）
+
+目標：實驗室裡不開 VPN 也能用 https，而且跟 VPN 是**同一個網址**：
+
+| | 網址 |
+|---|---|
+| 平台（Hub） | `https://<NAS>.<tailnet>.ts.net:8443` |
+| 論文庫 | `https://<NAS>.<tailnet>.ts.net:8444` |
+
+`<NAS>.<tailnet>.ts.net` 是 Tailscale 給 NAS 的名稱（Tailscale 管理頁 Machines 看得到；Hub 控制台「內網 https」也會顯示）。
+Hub 會自己向 NAS 上的 Tailscale 取憑證、到期前自動換新，控制台顯示還剩幾天。
+
+1. **更新 Hub 到 1.0.15**（控制台「從 GitHub 取得新版」或丟 `LabControlHub_v1.0.15.zip`）。
+2. **docker-compose**：把這個資料夾 `docker-compose.yml` 裡 `labhub:` 新增的三行抄到 `docker/QELPlatform/docker-compose.yml`：
+   ```yaml
+       ports:
+         - "8765:8765"
+         - "192.168.50.2:8443:8443"
+         - "192.168.50.2:8444:8444"
+       volumes:
+         - /var/packages/Tailscale/var:/tailscale:ro     # Tailscale 套件的 socket（DSM 7）
+   ```
+   Container Manager → 專案 `qelplatform` →「停止」→「YAML 設定」貼上 → 儲存 →「建置」（或「啟動」）。
+   打開控制台「內網 https」：應該是「剩 xx 天」、Hub :8443 ✔、論文庫 :8444 ✔。
+   - 來源顯示「還沒設定」→ socket 不在 `/var/packages/Tailscale/var/tailscaled.sock`：用 SSH `ls /var/packages/Tailscale/var/` 確認位置。
+   - NAS 防火牆有開的話：允許內網 TCP 8443、8444（以及下面 DNS 的 53）。
+3. **VPN 那邊也開 8444**（論文庫在 VPN 上也用同一個網址；原本的 443 留著，舊書籤照用）。SSH 到 NAS：
+   ```sh
+   sudo tailscale serve --bg --https=8444 http://127.0.0.1:8080
+   sudo tailscale serve status          # 應該有 :443、:8443、:8444
+   ```
+   （找不到 `tailscale` 指令時用 `/var/packages/Tailscale/target/bin/tailscale`。）
+4. **實驗室 DNS：把 ts.net 網址指到 192.168.50.2**（只有這個名稱，其他網址照常）。用 NAS 的 DNS Server 套件：
+   1. 套件中心安裝「DNS Server」。
+   2. DNS Server →「區域」→「新增」→「主要區域」：網域類型「正向區域」、網域名稱 `<NAS>.<tailnet>.ts.net`、主要 DNS 伺服器 `192.168.50.2` → 確定。
+   3. 選這個區域 →「編輯」→「資源記錄」→「新增」→「A 類型」：名稱**留空**（就是網域本身）、IP `192.168.50.2`、TTL 預設 → 確定。
+   4. 「解析服務」：勾「啟用解析服務」與「啟用轉發器」，轉發器 1 `192.168.50.1`（路由器）、轉發器 2 `1.1.1.1` → 套用。
+      （這樣其他網址都照常查得到，NAS 就是實驗室的 DNS。）
+   5. 路由器：區域網路 → DHCP 伺服器 →「DNS 伺服器 1」填 `192.168.50.2`、「DNS 伺服器 2」留空；
+      「通告路由器 IP 為 DNS」（Advertise router's IP in addition to user-specified DNS）選「否」→ 套用。
+      DNS 2 不要填別的：別的 DNS 查不到 ts.net 名稱，裝置有時候會打不開。
+   6. 各裝置重新連一次 Wi-Fi / 網路線（或等 DHCP 更新）。
+
+   路由器本身能加自訂 DNS 記錄（例如 Asuswrt-Merlin 的 dnsmasq：`address=/<NAS>.<tailnet>.ts.net/192.168.50.2`）時，也可以只在路由器加、不用 DNS Server 套件。
+5. **確認**：在沒開 VPN 的電腦上
+   - `nslookup <NAS>.<tailnet>.ts.net` → `192.168.50.2`；
+   - 開 `https://<NAS>.<tailnet>.ts.net:8443`，網址列是鎖頭、不會跳警告；
+   - 控制台「內網 https」兩個網址後面是「這台裝置：✔ 打得開」。之後大家改用這個網址（App 也用這個網址重裝一次）。
+
+打不開時：iPhone「設定 → Wi-Fi → 這個網路 →（i）→ 限制 IP 位址追蹤」與 iCloud 私密轉送、Android「私人 DNS」、瀏覽器「安全 DNS」會繞過實驗室 DNS，
+在實驗室 Wi-Fi 關掉；或在那台裝置開 Tailscale（走 VPN 一樣是這個網址）。
+
+**憑證監測**：Tailscale 憑證 90 天，剩 30 天左右它會自己續約；Hub 每 12 小時取一次，換新會自動套用。
+剩 20 天以內控制台、系統狀態與站長首頁會警告——通常是 NAS 上的 Tailscale 停了或登出，到套件中心確認 Tailscale 在執行、已登入，
+再按控制台「立即檢查／取新憑證」。
+
 ## 之後的更新
 
 全部在 Monitor「發佈中心」：把 zip 拖進去 →「▶ 全部發佈」。

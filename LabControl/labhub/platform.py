@@ -286,13 +286,15 @@ class Platform:
     @property
     def paperlib_public(self) -> str:
         """這次請求要用的論文庫網址：和使用者連 Hub 的主機相同的那個（內網進來給內網、VPN 進來給 VPN）。"""
-        if not self.paperlib_publics:
-            return ""
         host = getattr(REQUEST, "host", "") or ""
         for u in self.paperlib_publics:
             if urllib.parse.urlsplit(u).hostname == host:
                 return u
-        return self.paperlib_publics[0]
+        fn = getattr(self, "paperlib_for_host", None)    # 1.0.15：用 https 網域進來 → 論文庫也給 https
+        u = fn(host) if fn else ""
+        if u:
+            return u
+        return self.paperlib_publics[0] if self.paperlib_publics else ""
 
     # ---- 共用 ------------------------------------------------------------------
     def _con(self) -> sqlite3.Connection:
