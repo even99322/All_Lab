@@ -12,6 +12,10 @@ DXF 單位是 mm（建模時以 Scale 0.001 匯入）。圖層照 README「DXF �
 """
 from __future__ import annotations
 
+import os
+
+os.environ.setdefault("EZDXF_DISABLE_C_EXT", "1")      # 見 main.py：打包後 C 加速模組會當掉
+
 import copy
 import json
 import math

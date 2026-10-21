@@ -31,6 +31,8 @@ a = Analysis(
     excludes=["tkinter", "PyQt5", "PySide2", "PySide6", "IPython", "jupyter", "notebook", "pytest"],
     noarchive=False,
 )
+# ezdxf 的 C 加速模組（.pyd）不打包：在 exe 裡 import 就會當掉（0xC0000409）；main.py 也設了 EZDXF_DISABLE_C_EXT
+a.binaries = [b for b in a.binaries if not ("ezdxf" in b[0].replace("\\", "/").split("/")[0] and "/acc/" in b[0].replace("\\", "/"))]
 # 執行環境 DLL 有好幾份時（不同套件各帶一份），印出來看用的是哪一份
 for name, src, kind in a.binaries:
     low = os.path.basename(name).lower()

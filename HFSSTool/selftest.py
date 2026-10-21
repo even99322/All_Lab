@@ -77,7 +77,7 @@ def run() -> int:
         if QApplication.instance() is None:
             keep.append(QApplication(sys.argv[:1]))
 
-    step("ezdxf", lambda: __import__("ezdxf").__version__)
+    step("ezdxf", lambda: f'{__import__("ezdxf").__version__}（C 加速：{__import__("ezdxf").options.use_c_ext}）')
     step("shapely", lambda: __import__("shapely").__version__)
 
     def buf():

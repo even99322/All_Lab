@@ -1,5 +1,7 @@
 import sys
 import os
+# ezdxf 的 C 加速模組在打包好的 exe 裡會讓程式直接結束（執行環境 DLL 版本不合）：用純 Python 版（DXF 都很小，沒差）
+os.environ.setdefault("EZDXF_DISABLE_C_EXT", "1")
 import warnings
 import multiprocessing
 from PyQt6.QtWidgets import QApplication
