@@ -59,9 +59,12 @@ jobs:
           $p = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru
           $log = Get-Content "$env:TEMP/hfss_selftest.log" -Raw -Encoding utf8 -ErrorAction SilentlyContinue
           Write-Output $log
+          Write-Output "::notice title=self-test exit::$($p.ExitCode)"
+          $i = 0
+          foreach ($line in ("$log" -split "`n")) {
+            $t = $line.Trim()
+            if ($t -and $i -lt 60) { Write-Output "::notice title=self-test $i::$($t -replace '%', '%25')"; $i++ } }
           if ($p.ExitCode -ne 0) {
-            $msg = ($log -replace "%", "%25" -replace "`r", "" -replace "`n", "%0A")
-            Write-Output "::error title=self-test::$msg"
             throw "self-test 失敗（$($p.ExitCode)）" }
       - uses: actions/upload-artifact@v5
         with:

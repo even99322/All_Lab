@@ -18,14 +18,21 @@ def run() -> int:
     lines = []
     ok = True
 
+    def write():
+        with open(log, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
     def step(name, fn):
         nonlocal ok
+        lines.append(f"...  {name}")                # 當掉的話，log 停在這一步
+        write()
         try:
             r = fn()
-            lines.append(f"OK   {name}{'' if r is None else ': ' + str(r)}")
+            lines[-1] = f"OK   {name}{'' if r is None else ': ' + str(r)}"
         except BaseException:
             ok = False
-            lines.append(f"FAIL {name}\n{traceback.format_exc()}")
+            lines[-1] = f"FAIL {name}\n{traceback.format_exc()}"
+        write()
 
     step("ansys.aedt.core", lambda: __import__("ansys.aedt.core", fromlist=["Hfss", "Desktop"]).__version__)
     step("Hfss / Desktop", lambda: [getattr(__import__("ansys.aedt.core", fromlist=["x"]), n) for n in ("Hfss", "Desktop")] and None)
@@ -86,7 +93,6 @@ def run() -> int:
         return r
     step("獨立程序", spawn)
 
-    with open(log, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
+    write()
     print("\n".join(lines))
     return 0 if ok else 1
