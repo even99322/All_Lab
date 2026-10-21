@@ -261,8 +261,8 @@ VPN： 瀏覽器 ─ MagicDNS → 100.114.33.20 ─ tailscale serve ─ :8443 �
   控制台「內網 https」卡片、系統狀態「HTTPS 憑證」、站長首頁的警告；卡片會在瀏覽器裡試連兩個網址（`fetch no-cors`）顯示「這台裝置打不打得開」。
 - 用 https 網域連 Hub 時 `paperlib_public` 給 `https://<網域>:8444`（`LABHUB_PAPERLIB_PUBLIC` 有同主機的網址時用那個）。
   `/api/platform/me` 的 `https_url`：用 http 開的首頁試連得到就提示改用 https。
-- DNS：實驗室 DNS 把 `<NAS>.<tailnet>.ts.net` 指到 192.168.50.2（Synology「DNS Server」套件的主要區域＋A 記錄，路由器 DHCP 的 DNS 只給 NAS；
-  或路由器自己的自訂記錄）。步驟見 `deploy/platform/README.md`。開著 Tailscale 的裝置用 MagicDNS，不受影響。
+- DNS：實驗室 DNS 把 `<NAS>.<tailnet>.ts.net` 指到 192.168.50.2（Synology「DNS Server」套件的主要區域＋A 記錄、轉發器 8.8.8.8 / 1.1.1.1；
+  NETGEAR 路由器把 Internet Setup 的 Primary DNS 設成 NAS、Secondary 留空，其他路由器讓 DHCP 只發 NAS；或路由器自己的自訂記錄）。步驟見 `deploy/platform/README.md`。開著 Tailscale 的裝置用 MagicDNS，不受影響。
 
 ### 0o. 1.0.13：控制台從 GitHub 取得新版
 

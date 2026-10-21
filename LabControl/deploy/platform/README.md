@@ -84,12 +84,17 @@ Hub 會自己向 NAS 上的 Tailscale 取憑證、到期前自動換新，控制
    1. 套件中心安裝「DNS Server」。
    2. DNS Server →「區域」→「新增」→「主要區域」：網域類型「正向區域」、網域名稱 `<NAS>.<tailnet>.ts.net`、主要 DNS 伺服器 `192.168.50.2` → 確定。
    3. 選這個區域 →「編輯」→「資源記錄」→「新增」→「A 類型」：名稱**留空**（就是網域本身）、IP `192.168.50.2`、TTL 預設 → 確定。
-   4. 「解析服務」：勾「啟用解析服務」與「啟用轉發器」，轉發器 1 `192.168.50.1`（路由器）、轉發器 2 `1.1.1.1` → 套用。
-      （這樣其他網址都照常查得到，NAS 就是實驗室的 DNS。）
-   5. 路由器：區域網路 → DHCP 伺服器 →「DNS 伺服器 1」填 `192.168.50.2`、「DNS 伺服器 2」留空；
-      「通告路由器 IP 為 DNS」（Advertise router's IP in addition to user-specified DNS）選「否」→ 套用。
-      DNS 2 不要填別的：別的 DNS 查不到 ts.net 名稱，裝置有時候會打不開。
-   6. 各裝置重新連一次 Wi-Fi / 網路線（或等 DHCP 更新）。
+   4. 「解析服務」：勾「啟用解析服務」與「啟用轉發器」，轉發器 1 `8.8.8.8`、轉發器 2 `1.1.1.1` → 套用。
+      **不要填路由器 192.168.50.1**：下一步路由器會把查詢轉給 NAS，兩邊互轉會變成迴圈。
+   5. 路由器：讓大家的查詢經過 NAS。
+      - **NETGEAR（例如 Nighthawk RAX200）**：DHCP 一律把路由器 192.168.50.1 當 DNS 發給裝置、不能改，所以改的是路由器自己往外查的 DNS：
+        ADVANCED → Setup → **Internet Setup** →「Domain Name Server (DNS) Address」選「Use These DNS Servers」→
+        Primary DNS `192.168.50.2`、Secondary DNS **留空** → Apply（網路會斷幾秒）。LAN Setup 那頁不用動。
+      - ASUS 等可以設定 DHCP 發的 DNS 的路由器：區域網路 → DHCP 伺服器 →「DNS 伺服器 1」`192.168.50.2`、「DNS 伺服器 2」留空、
+        「通告路由器 IP 為 DNS」選「否」。
+      Secondary / DNS 2 不要填別的：別的 DNS 查不到 ts.net 名稱，裝置有時候會打不開。
+      注意：之後 NAS 關機時整個實驗室查不到網址（恢復方法：把 DNS 改回自動取得）。
+   6. NETGEAR 那種做法裝置的 DNS 本來就是路由器，不用重新連線，最多等幾分鐘快取過期；ASUS 那種要重新連一次 Wi-Fi / 網路線。
 
    路由器本身能加自訂 DNS 記錄（例如 Asuswrt-Merlin 的 dnsmasq：`address=/<NAS>.<tailnet>.ts.net/192.168.50.2`）時，也可以只在路由器加、不用 DNS Server 套件。
 5. **確認**：在沒開 VPN 的電腦上
