@@ -62,11 +62,16 @@ jobs:
           Write-Output "::notice title=self-test exit::$($p.ExitCode)"
           $crash = Get-Content "$env:TEMP/hfss_selftest.log.crash" -Raw -Encoding utf8 -ErrorAction SilentlyContinue
           $k = 0
-          foreach ($line in ("$crash" -split "`n")) { $t = $line.Trim(); if ($t -and $k -lt 40) { Write-Output "::notice title=crash $k::$($t -replace '%', '%25')"; $k++ } }
-          $i = 0
+          $cl = @(("$crash" -split "`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch 'font' })
+          if ($cl.Count) { Write-Output "::warning title=crash::$((($cl | Select-Object -Last 30) -join ' | ') -replace '%', '%25')" }
+          # GitHub 每一步最多 10 個 notice / 10 個 error：沒過的那幾行用 error，其他的合成一個 notice
+          $ok = @(); $bad = @()
           foreach ($line in ("$log" -split "`n")) {
             $t = $line.Trim()
-            if ($t -and $i -lt 60) { Write-Output "::notice title=self-test $i::$($t -replace '%', '%25')"; $i++ } }
+            if (-not $t) { continue }
+            if ($t.StartsWith("OK")) { $ok += $t } else { $bad += $t } }
+          Write-Output "::notice title=self-test passed::$(($ok -join ' | ') -replace '%', '%25')"
+          foreach ($t in ($bad | Select-Object -First 9)) { Write-Output "::error title=self-test::$($t -replace '%', '%25')" }
           if ($p.ExitCode -ne 0) {
             throw "self-test 失敗（$($p.ExitCode)）" }
       - uses: actions/upload-artifact@v5

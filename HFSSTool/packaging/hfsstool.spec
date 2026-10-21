@@ -35,7 +35,7 @@ a = Analysis(
 for name, src, kind in a.binaries:
     low = os.path.basename(name).lower()
     if low.startswith(("msvcp140", "vcruntime140", "concrt140")):
-        print(f"::notice title=dll {low}::{src}")
+        print(f"dll {low}: {src}")
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
