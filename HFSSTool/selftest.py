@@ -18,6 +18,10 @@ def run() -> int:
     import faulthandler
     crash = open(log + ".crash", "w", encoding="utf-8")
     faulthandler.enable(file=crash, all_threads=True)          # 原生程式當掉時留下 Python 的位置
+    def hook(t, v, tb):
+        crash.write("Python 例外：" + "".join(traceback.format_exception(t, v, tb)) + "\n")
+        crash.flush()
+    sys.excepthook = hook
     try:
         from PyQt6.QtCore import qInstallMessageHandler
 
@@ -67,7 +71,13 @@ def run() -> int:
         keep.append(app)                       # 留著：不然 QApplication 被回收，下一步建視窗會讓程式直接結束
         from ui_main import MainWindow
         w = MainWindow()
+        w.show()
+        app.processEvents()
         w.close()
+        w.deleteLater()                        # 真的刪掉視窗：關閉時的問題在這一步就會出現
+        from PyQt6.QtCore import QCoreApplication, QEvent
+        QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete.value)
+        app.processEvents()
         from mode_help import ModeHelpDialog  # noqa: F401
         return app.platformName()
     step("介面", gui)
@@ -101,8 +111,10 @@ def run() -> int:
         need_app()
         from dxf_editor import DxfEditor
         w = DxfEditor(mode="MS")
+        w.show()
         w.dirty = False
         w.close()
+        w.deleteLater()
         return "ok"
     step("DXF 編輯器", editor)
 

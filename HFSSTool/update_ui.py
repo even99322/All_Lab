@@ -33,6 +33,7 @@ class UpdateToast(QFrame):
     def __init__(self, ctl: "UpdateController") -> None:
         super().__init__(ctl.win)
         self.ctl = ctl
+        self._win = ctl.win
         self.setObjectName("updToast")
         self.setStyleSheet("#updToast { background: palette(window); border: 1px solid palette(highlight); "
                            "border-radius: 10px; }")
@@ -76,13 +77,17 @@ class UpdateToast(QFrame):
         self.raise_()
 
     def place(self) -> None:
-        w = self.ctl.win
+        w = self._win
         sb = w.statusBar().height() if w.statusBar() else 0
         self.move(w.width() - self.width() - 16, w.height() - self.height() - 16 - sb)
 
     def eventFilter(self, obj, ev) -> bool:
-        if obj is self.ctl.win and ev.type() == QEvent.Type.Resize and self.isVisible():
-            self.place()
+        # 視窗關閉 / 刪除時也會進來：這裡丟出例外的話 PyQt 會直接結束整個程式
+        try:
+            if ev.type() == QEvent.Type.Resize and obj is self._win and self.isVisible():
+                self.place()
+        except RuntimeError:
+            pass
         return False
 
 
