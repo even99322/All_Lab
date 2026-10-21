@@ -1,0 +1,77 @@
+# HFSS 自動化工具（HFSSTool/）→ Windows 單一 exe：HFSSTool_v<版本>_windows.exe（版本 = config.py 的 APP_VERSION）。
+# 手動執行（Actions > Build HFSS tool > Run workflow）會建立 / 更新 GitHub 發佈 hfss-v<版本>；
+# 平台控制台「從 GitHub 取得新版」就拿得到（Hub 1.0.17 起），也可以下載 exe 拖進控制台。
+# 改了 HFSSTool/ 推到 main 只打包檢查（不發佈）。打包完執行「--self-test」：套件、介面、獨立程序（不需要 AEDT）。
+name: Build HFSS tool
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "建立 GitHub 發佈 hfss-v<版本>"
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths: ["HFSSTool/**", ".github/workflows/hfss.yml"]
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: HFSSTool
+    shell: pwsh
+
+jobs:
+  windows:
+    name: Windows exe
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install packages
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt "pyinstaller>=6.11"
+      - name: Version
+        id: v
+        run: |
+          $v = (Select-String -Path config.py -Pattern 'APP_VERSION\s*=\s*"v?([0-9.]+)"').Matches[0].Groups[1].Value
+          "version=$v" >> $env:GITHUB_OUTPUT
+          echo "HFSS tool $v"
+      - name: Build
+        run: |
+          pyinstaller --noconfirm --log-level WARN packaging/hfsstool.spec
+          Get-ChildItem dist | Format-Table Name, Length
+          if (-not (Test-Path "dist/HFSSTool_v${{ steps.v.outputs.version }}_windows.exe")) { throw "沒有產生 exe" }
+      - name: Self-test
+        run: |
+          $exe = "dist/HFSSTool_v${{ steps.v.outputs.version }}_windows.exe"
+          $p = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru
+          Get-Content "$env:TEMP/hfss_selftest.log" -ErrorAction SilentlyContinue
+          if ($p.ExitCode -ne 0) { throw "self-test 失敗（$($p.ExitCode)）" }
+      - uses: actions/upload-artifact@v5
+        with:
+          name: HFSSTool-windows
+          path: HFSSTool/dist/HFSSTool_v${{ steps.v.outputs.version }}_windows.exe
+          retention-days: 14
+      - name: GitHub release hfss-v${{ steps.v.outputs.version }}
+        if: github.event_name == 'workflow_dispatch' && inputs.release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ steps.v.outputs.version }}"
+          $tag = "hfss-v$v"
+          $exe = "dist/HFSSTool_v${v}_windows.exe"
+          $readme = Get-Content README.md -Raw -Encoding utf8
+          $m = [regex]::Match($readme, "(?ms)^###\s*v$([regex]::Escape($v))\s*\r?\n(.*?)(?=^###\s|^##\s|\z)")
+          $notes = "HFSS 自動化工具 $v（Windows 單一 exe；需要 Ansys AEDT 2026 R1 或 2025 R2）`n`n" + $m.Groups[1].Value.Trim()
+          Set-Content -Path notes.md -Value $notes -Encoding utf8
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) { gh release upload $tag $exe --clobber }
+          else { gh release create $tag $exe --title "HFSS 自動化工具 $v" --notes-file notes.md --target $env:GITHUB_SHA }

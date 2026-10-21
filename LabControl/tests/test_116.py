@@ -49,3 +49,14 @@ def test_publish_hfss_shows_download_tile(tmp_path):
         assert any(x["id"] == "hfss" and x["allowed"] for x in plat.modules_for({"username": "a", "owner": False}))
     finally:
         srv.server_close()
+
+
+def test_hfss_exe_from_github():
+    """1.0.17：GitHub 發佈 hfss-v3.2 的 HFSSTool_v3.2_windows.exe → 模擬工具的 Windows 版。"""
+    from labhub.github_sync import PREFIXES, guess
+    from labhub.packages import identify
+
+    assert "hfss-v" in PREFIXES
+    g = guess("HFSSTool_v3.2_windows.exe")
+    assert g["target"] == "hfss" and g["version"] == "3.2" and g["platform"] == "windows"
+    assert identify(b"MZ" + b"x" * 100, "HFSSTool_v3.2_windows.exe")["target"] == "hfss"

@@ -1,0 +1,63 @@
+# HFSS 自動化工具 v3.0 — AEDT 2026 R1
+# 安裝: python -m pip install -r requirements.txt
+
+# --- PyAEDT 與 Ansys 相依 (已升級) ---
+pyaedt==1.6.0
+pyedb==0.84.0
+ansys-edb-core==0.3.3
+ansys-api-edb==0.3.2
+ansys-tools-common==0.5.3
+
+# --- PyAEDT 其他相依 ---
+annotated-types==0.7.0
+attrs==26.1.0
+certifi==2026.2.25
+charset-normalizer==3.4.7
+click==8.3.2
+colorama==0.4.6
+defusedxml==0.7.1
+grpcio==1.78.0
+idna==3.11
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+packaging==26.0
+platformdirs==4.9.6
+protobuf==6.33.6
+psutil==7.2.2
+pydantic==2.12.5
+pydantic_core==2.41.5
+PyYAML==6.0.3
+referencing==0.37.0
+requests==2.33.1
+rpds-py==0.30.0
+scooby==0.11.0
+toml==0.10.2
+tomli_w==1.2.0
+typing-inspection==0.4.2
+typing_extensions==4.15.0
+urllib3==2.6.3
+xmltodict==1.0.4
+
+# --- .NET 模式 (預設 gRPC 用不到，保留無害) ---
+ansys-pythonnet==3.1.0rc6
+clr_loader==0.2.10
+cffi==2.0.0
+pycparser==3.0
+
+# --- 工具本身 ---
+PyQt6==6.11.0
+PyQt6-Qt6==6.11.0
+PyQt6_sip==13.11.1
+matplotlib==3.10.8
+contourpy==1.3.3
+cycler==0.12.1
+fonttools==4.62.1
+kiwisolver==1.5.0
+pyparsing==3.3.2
+numpy==2.2.6
+pandas==3.0.2
+python-dateutil==2.9.0.post0
+six==1.17.0
+tzdata==2026.1
+pillow==12.2.0
+pywin32==311

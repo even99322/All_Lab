@@ -247,6 +247,10 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 
 ### 0q. 1.0.16：模擬工具（HFSS 自動化工具）
 
+- 1.0.17：原始碼在 `HFSSTool/`；`.github/workflows/hfss.yml`（Windows）用 `HFSSTool/packaging/hfsstool.spec` 打包單一 exe
+  `HFSSTool_v<APP_VERSION>_windows.exe`，`--self-test`（`HFSSTool/selftest.py`，結果在 %TEMP%\hfss_selftest.log）；
+  手動執行時建立 / 更新 GitHub 發佈 `hfss-v<版本>`，Hub 的 GitHub 同步 `PREFIXES` 多了 `hfss-v`。
+
 - 模塊 `hfss`（名稱「模擬」、kind app、`note` = 安裝方式）；發佈檔是 Python 原始碼 zip（`packages.identify`：`hfss_worker.py` ＋ `config.py`
   `APP_VERSION = "v3.2"` → 3.2，說明取 README `### v3.2`；或 `qel-module.json` `{"id": "hfss"}`）。之後有打包好的 `HFSSTool_v<版本>_windows.exe` 也認得。
 - 首頁：沒有 .exe / .dmg 但有 zip → 主按鈕下載 zip ＋ `note`。舊版 Hub 發佈時自動建的空白模塊設定（`{"name": id, "kind": "python"}`）不會蓋掉內建的。

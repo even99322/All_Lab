@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .packages import PackageError, identify_binary
 
-PREFIXES = ("labcontrol-v", "lablogviewer-v")
+PREFIXES = ("labcontrol-v", "lablogviewer-v", "hfss-v")     # 1.0.17：模擬工具 HFSSTool_v*_windows.exe
 CACHE_S = 60.0
 AUTO_EVERY_S = 30 * 60.0
 _ZIP = re.compile(r"^(?P<name>LabControlHub|LabControlMonitor|LabControl|LabLogViewerPets|LabLogViewer|paperlib)"

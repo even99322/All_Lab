@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# 使用者設定 (實際存放在 %USERPROFILE%\LAB\HFSS，舊版可能留在程式旁)
+hfss_settings.json
+
+# HFSS 專案與結果 (放在 C:\Temp\HFSS_Local 與 NAS，不進版控)
+*.aedt
+*.aedt.lock
+*.aedtresults/
+*.aedtz
+*.csv
+*.s[0-9]*p
+*.gif
+!docs/images/*.gif
+
+# 其他
+*.log
+pyaedt*.log
+.DS_Store
+Thumbs.db

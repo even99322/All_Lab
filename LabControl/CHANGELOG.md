@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.17 — 2026-10-21
+
+模擬工具（HFSS 自動化工具）雲端打包成 Windows 單一 exe（GitHub 發佈 `hfss-v<版本>`），控制台「從 GitHub 取得新版」一起拿；首頁「模擬」給 Windows 下載。只需要更新 Hub。詳見 [docs/releases/v1.0.17.md](docs/releases/v1.0.17.md)。
+
+---
+
 ## 1.0.16 — 2026-10-21
 
 平台模塊下載加入「模擬」（HFSS 自動化工具）：控制台丟工具的 zip 就發佈，首頁有下載按鈕與安裝方式；中文檔名自動換成英數。只需要更新 Hub。詳見 [docs/releases/v1.0.16.md](docs/releases/v1.0.16.md)。
