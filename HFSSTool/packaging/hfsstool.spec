@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
-# HFSS 自動化工具 → 單一 exe（HFSSTool_v<版本>_windows.exe）。在 HFSSTool/ 執行：pyinstaller --noconfirm packaging/hfsstool.spec
-# 雲端打包：.github/workflows/hfss.yml（Windows），打包完執行「HFSSTool.exe --self-test」檢查。
+# HFSS 自動化工具 → 資料夾版 dist/HFSSTool/HFSSTool.exe，再由 packaging/installer.iss 做成安裝程式
+# HFSSTool_v<版本>_windows-setup.exe（v3.6 起，跟量測程式、LabLogViewer 一樣）。在 HFSSTool/ 執行：pyinstaller --noconfirm packaging/hfsstool.spec
+# 雲端打包：.github/workflows/hfss.yml（Windows），打包完執行「HFSSTool.exe --self-test」檢查（安裝前、安裝後各一次）。
 import os
 import re
 
@@ -42,11 +43,11 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     [],
-    name=f"HFSSTool_v{VERSION}_windows",
+    exclude_binaries=True,
+    name="HFSSTool",
     console=False,
     upx=False,
     icon=os.path.join(ROOT, "icon.ico"),
 )
+coll = COLLECT(exe, a.binaries, a.datas, name="HFSSTool", upx=False)

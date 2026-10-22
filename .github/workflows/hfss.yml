@@ -1,4 +1,5 @@
-# HFSS 自動化工具（HFSSTool/）→ Windows 單一 exe：HFSSTool_v<版本>_windows.exe（版本 = config.py 的 APP_VERSION）。
+# HFSS 自動化工具（HFSSTool/）→ Windows 安裝程式：HFSSTool_v<版本>_windows-setup.exe（版本 = config.py 的 APP_VERSION；v3.6 起，
+# 之前是單一 exe）。PyInstaller 資料夾版 → Inno Setup（packaging/installer.iss）。
 # 手動執行（Actions > Build HFSS tool > Run workflow）會建立 / 更新 GitHub 發佈 hfss-v<版本>；
 # 平台控制台「從 GitHub 取得新版」就拿得到（Hub 1.0.17 起），也可以下載 exe 拖進控制台。
 # 改了 HFSSTool/ 推到 main 只打包檢查（不發佈）。打包完執行「--self-test」：套件、介面、獨立程序（不需要 AEDT）。
@@ -51,18 +52,32 @@ jobs:
       - name: Build
         run: |
           pyinstaller --noconfirm --log-level WARN packaging/hfsstool.spec 2>&1 | Select-String '::notice|ERROR' | ForEach-Object { $_.Line }
-          Get-ChildItem dist | Format-Table Name, Length
-          if (-not (Test-Path "dist/HFSSTool_v${{ steps.v.outputs.version }}_windows.exe")) { throw "沒有產生 exe" }
-      - name: Self-test
+          if (-not (Test-Path "dist/HFSSTool/HFSSTool.exe")) { throw "沒有產生 dist/HFSSTool/HFSSTool.exe" }
+          "{0:N0} MB" -f ((Get-ChildItem dist/HFSSTool -Recurse | Measure-Object Length -Sum).Sum / 1MB)
+      - name: Installer
         run: |
-          $exe = "dist/HFSSTool_v${{ steps.v.outputs.version }}_windows.exe"
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+            choco install innosetup -y --no-progress
+            $env:Path += ";${env:ProgramFiles(x86)}\Inno Setup 6" }
+          iscc "/DAppVersion=${{ steps.v.outputs.version }}" packaging/installer.iss
+          if (-not (Test-Path "dist/HFSSTool_v${{ steps.v.outputs.version }}_windows-setup.exe")) { throw "沒有產生安裝程式" }
+          Get-ChildItem dist -File | Format-Table Name, Length
+      - name: Install silently (like an in-app update)
+        run: |
+          $dir = "$env:RUNNER_TEMP\hfss_installed"
+          $p = Start-Process -FilePath "dist/HFSSTool_v${{ steps.v.outputs.version }}_windows-setup.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$dir" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "安裝失敗（$($p.ExitCode)）" }
+          foreach ($f in "HFSSTool.exe", "unins000.exe") { if (-not (Test-Path "$dir\$f")) { throw "安裝後沒有 $f" } }
+          "HFSS_EXE=$dir\HFSSTool.exe" >> $env:GITHUB_ENV
+      - name: Self-test (installed copy)
+        run: |
+          $exe = $env:HFSS_EXE
           $p = Start-Process -FilePath $exe -ArgumentList "--self-test" -Wait -PassThru
           $log = Get-Content "$env:TEMP/hfss_selftest.log" -Raw -Encoding utf8 -ErrorAction SilentlyContinue
           Write-Output $log
           Write-Output "::notice title=self-test exit::$($p.ExitCode)"
           $crash = Get-Content "$env:TEMP/hfss_selftest.log.crash" -Raw -Encoding utf8 -ErrorAction SilentlyContinue
-          $k = 0
-          $cl = @(("$crash" -split "`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch 'font' })
+          $cl = @(("$crash" -split "`n") | ForEach-Object { $_.Trim() } | Where-Object { $_ -and $_ -notmatch 'font|propagateSizeHints' })
           if ($cl.Count) { Write-Output "::warning title=crash::$((($cl | Select-Object -Last 30) -join ' | ') -replace '%', '%25')" }
           # GitHub 每一步最多 10 個 notice / 10 個 error：沒過的那幾行用 error，其他的合成一個 notice
           $ok = @(); $bad = @()
@@ -77,7 +92,7 @@ jobs:
       - uses: actions/upload-artifact@v5
         with:
           name: HFSSTool-windows
-          path: HFSSTool/dist/HFSSTool_v${{ steps.v.outputs.version }}_windows.exe
+          path: HFSSTool/dist/HFSSTool_v${{ steps.v.outputs.version }}_windows-setup.exe
           retention-days: 14
       - name: GitHub release hfss-v${{ steps.v.outputs.version }}
         if: github.event_name == 'workflow_dispatch' && inputs.release
@@ -86,10 +101,10 @@ jobs:
         run: |
           $v = "${{ steps.v.outputs.version }}"
           $tag = "hfss-v$v"
-          $exe = "dist/HFSSTool_v${v}_windows.exe"
+          $exe = "dist/HFSSTool_v${v}_windows-setup.exe"
           $readme = Get-Content README.md -Raw -Encoding utf8
           $m = [regex]::Match($readme, "(?ms)^###\s*v$([regex]::Escape($v))\s*\r?\n(.*?)(?=^###\s|^##\s|\z)")
-          $notes = "HFSS 自動化工具 $v（Windows 單一 exe；需要 Ansys AEDT 2026 R1 或 2025 R2）`n`n" + $m.Groups[1].Value.Trim()
+          $notes = "HFSS 自動化工具 $v（Windows 安裝程式；需要 Ansys AEDT 2026 R1 或 2025 R2）`n`n" + $m.Groups[1].Value.Trim()
           Set-Content -Path notes.md -Value $notes -Encoding utf8
           gh release view $tag 2>$null
           if ($LASTEXITCODE -eq 0) { gh release upload $tag $exe --clobber }

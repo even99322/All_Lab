@@ -4,6 +4,8 @@
          → 比目前新 → 主視窗右下角通知、狀態列「⬆ 更新到 x」
     之後一直掛著 GET <Hub>/get/watch?app=hfss&version=<目前>&wait=60（長輪詢）：站長一發佈，幾秒內就跳通知
     更新 → 下載新的 exe（核對 sha256）→ 關掉程式 → 換掉同一個檔（捷徑、工作列釘選照用）→ 重開
+    v3.6 起發佈的是安裝程式（HFSSTool_v<版本>_windows-setup.exe）：下載後用 /SILENT 安裝（只有進度條）→ 重開裝好的程式。
+    3.5 以前的單一 exe 更新到 3.6 時，舊版會把安裝程式換到舊 exe 的位置執行（一般安裝畫面），裝好後安裝程式自己刪掉那個檔。
 
 Hub 位址：環境變數 QEL_HUB（逗號分隔）→ %USERPROFILE%\\LAB\\HFSS\\update.json 的 hub_url → 實驗室內網、VPN。
 這裡不用 Qt，介面在 update_ui.py。
@@ -109,12 +111,17 @@ def is_newer(app: Optional[Dict]) -> bool:
     return bool(app and app.get("version") and vkey(app["version"]) > vkey(current_version()))
 
 
+def is_setup(name: str) -> bool:
+    n = os.path.basename(str(name or "")).lower()
+    return n.endswith(".exe") and "setup" in n
+
+
 def pick_file(app: Dict, hub: str) -> Optional[Dict]:
-    """這台電腦要下載的檔：Windows exe（最新的那個）。"""
+    """這台電腦要下載的檔：Windows exe（最新的那個；同一版有安裝程式就用安裝程式）。"""
     files = [f for f in app.get("downloads") or [] if f.get("platform") == "windows"]
     if not files:
         return None
-    f = max(files, key=lambda x: vkey(x.get("version")))
+    f = max(files, key=lambda x: (vkey(x.get("version")), is_setup(x.get("name"))))
     url = f.get("url", "")
     if url.startswith("/"):
         url = hub + url
@@ -129,6 +136,33 @@ def can_self_update() -> bool:
 
 def target_exe() -> str:
     return os.path.abspath(sys.executable)
+
+
+def installed_dir() -> Optional[str]:
+    """用安裝程式裝的（exe 旁邊有 unins000.exe）→ 安裝資料夾；單一 exe / 原始碼版 → None。"""
+    if not getattr(sys, "frozen", False):
+        return None
+    d = os.path.dirname(target_exe())
+    return d if os.path.isfile(os.path.join(d, "unins000.exe")) else None
+
+
+def default_install_exe() -> str:
+    base = os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local")
+    return os.path.join(base, "Programs", "HFSSTool", "HFSSTool.exe")
+
+
+def setup_script(setup_exe: str, app_exe: str, pids: List[int], old_version: str) -> str:
+    """PowerShell：等程式結束 → 安裝程式 /SILENT（只有進度條）→ 重開裝好的程式 → 刪掉下載的安裝程式。"""
+    return "\n".join([
+        "$ErrorActionPreference = 'SilentlyContinue'",
+        f"foreach ($p in @({', '.join(str(int(p)) for p in pids)})) {{ Wait-Process -Id $p -Timeout 120 }}",
+        f"$setup = {_ps_quote(setup_exe)}; $app = {_ps_quote(app_exe)}",
+        "$p = Start-Process -FilePath $setup -ArgumentList '/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "
+        "'/CLOSEAPPLICATIONS' -Wait -PassThru",
+        f"if (Test-Path -LiteralPath $app) {{ Start-Process -FilePath $app -ArgumentList '--updated-from', {_ps_quote(old_version)} }}",
+        "Start-Sleep -Seconds 3",
+        "Remove-Item -LiteralPath $setup -Force",
+    ])
 
 
 def download(url: str, dst: str, sha256: str = "", progress: Optional[Callable[[int, int], None]] = None,
@@ -203,15 +237,23 @@ def install(new_exe: str) -> None:
         pids.append(os.getppid())          # 單一 exe：外層解壓程序
     except OSError:
         pass
-    script = install_script(new_exe, target_exe(), pids, current_version())
+    if is_setup(new_exe):
+        app = os.path.join(installed_dir(), "HFSSTool.exe") if installed_dir() else default_install_exe()
+        script = setup_script(new_exe, app, pids, current_version())
+    else:
+        script = install_script(new_exe, target_exe(), pids, current_version())
     enc = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
     flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
     subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
                       "-EncodedCommand", enc], creationflags=flags, close_fds=True)
 
 
-def new_exe_path() -> str:
-    """新 exe 先下載到舊 exe 旁邊（同一個磁碟，換檔只要改名）；那裡不能寫就放 LAB\\HFSS。"""
+def new_exe_path(name: str = "") -> str:
+    """新 exe 先下載到舊 exe 旁邊（同一個磁碟，換檔只要改名）；那裡不能寫就放 LAB\\HFSS。
+    安裝程式（v3.6 起）一律放 LAB\\HFSS（用完就刪）。"""
+    if is_setup(name):
+        os.makedirs(SETTINGS_DIR, exist_ok=True)
+        return os.path.join(SETTINGS_DIR, re.sub(r"[^A-Za-z0-9_.-]", "_", os.path.basename(name)))
     target = target_exe()
     folder = os.path.dirname(target)
     probe = os.path.join(folder, ".hfss_write_test")

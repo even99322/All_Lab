@@ -241,7 +241,7 @@ class UpdateController(QObject):
         if busy:
             QMessageBox.information(self.win, "更新", "HFSS 任務還在執行，等它結束再更新。")
             return
-        dst = updater.new_exe_path()
+        dst = updater.new_exe_path(f.get("name", ""))
         prog = QProgressDialog(f"下載 {app['version']}…", "取消", 0, 100, self.win)
         prog.setWindowTitle("更新")
         prog.setWindowModality(Qt.WindowModality.WindowModal)

@@ -902,21 +902,20 @@ class HfssWorker:
         self.emit_log(f"⚙️ 套用求解器 ({adaptive_mode}) 與掃頻 ({p['sweep_mode']}) 設定...")
         setup = self._create_adaptive_setup(hfss, S_SETUP_NAME, adaptive_mode, adaptive_freqs)
 
-        sweep = setup.create_frequency_sweep(
-            unit="GHz",
-            start_frequency=parse_freq_ghz(p['freq_start']),
-            stop_frequency=parse_freq_ghz(p['freq_stop']),
-            num_of_freq_points=p['sweep_points'],
-            name=S_SWEEP_NAME,
-            sweep_type=p['sweep_mode'],
-            save_fields=bool(p.get('sweep_save_fields', False)),   # 預設不存場，避免 Discrete 掃頻存下大量場資料
-            interpolation_tol=float(p.get('interp_tol', 0.5)),
-            interpolation_max_solutions=int(p.get('interp_max_solns', 250)),
-        )
+        sweep_mode = p['sweep_mode']
+        if use_yig and sweep_mode == 'Fast':
+            # v3.5.2：模型有偏置的 ferrite（YIG）時 AEDT 不接受 Fast 掃頻（InsertFrequencySweep 失敗）→ 改 Interpolating
+            sweep_mode = 'Interpolating'
+            self.emit_log("🧲 模型有 YIG（偏置 ferrite），AEDT 不能用 Fast 掃頻 → 主掃頻改用 Interpolating。")
+        sweep = self._add_sweep(setup, S_SWEEP_NAME, sweep_mode, parse_freq_ghz(p['freq_start']),
+                                parse_freq_ghz(p['freq_stop']), p['sweep_points'],
+                                bool(p.get('sweep_save_fields', False)),   # 預設不存場，避免 Discrete 掃頻存下大量場資料
+                                float(p.get('interp_tol', 0.5)))
         if not sweep:
-            self.emit_log("❌ 建立掃頻失敗。")
+            self.emit_log("❌ 建立掃頻失敗（請看 AEDT Message Manager）。")
             return False
-        if p['sweep_mode'] == 'Interpolating':
+        sweep_mode = sweep._qel_mode
+        if sweep_mode == 'Interpolating':
             try:
                 sweep.props["EnforcePassivity"] = bool(p.get('enforce_passivity', True))
                 sweep.props["EnforceCausality"] = bool(p.get('enforce_causality', False))
@@ -927,16 +926,18 @@ class HfssWorker:
         kittel_sweep = None
         if use_yig and p.get('yig_fine_sweep', True):
             span = p.get('yig_span_mhz', 50) / 1e3
-            kittel_sweep = setup.create_frequency_sweep(
-                unit="GHz", start_frequency=max(0.001, f_k - span), stop_frequency=f_k + span,
-                num_of_freq_points=int(p.get('yig_fine_points', 1001)), name=yig.KITTEL_SWEEP,
-                sweep_type=p.get('yig_fine_type', 'Interpolating'), save_fields=False,
-                interpolation_tol=float(p.get('yig_fine_tol', 0.1)),
-                interpolation_max_solutions=int(p.get('interp_max_solns', 250)))
-            if kittel_sweep:
+            fine_type = p.get('yig_fine_type', 'Interpolating')
+            if fine_type == 'Fast':
+                fine_type = 'Interpolating'
+            kittel_sweep = self._add_sweep(setup, yig.KITTEL_SWEEP, fine_type, max(0.001, f_k - span), f_k + span,
+                                           int(p.get('yig_fine_points', 1001)), False,
+                                           float(p.get('yig_fine_tol', 0.1)))
+            if not kittel_sweep:
+                self.emit_log("   ⚠️ Kittel 細掃建立失敗，只算主掃頻。")
+            else:
                 step = 2 * span * 1e3 / max(1, int(p.get('yig_fine_points', 1001)) - 1)
                 self.emit_log(f"🧲 Kittel 細掃：{f_k - span:.4f}–{f_k + span:.4f} GHz，"
-                              f"{p.get('yig_fine_points')} 點 (間距 {step:.3f} MHz，{p.get('yig_fine_type')})")
+                              f"{p.get('yig_fine_points')} 點 (間距 {step:.3f} MHz，{kittel_sweep._qel_mode})")
 
         self.emit_log(f"🚀 開始計算 S 參數 ({p['hpc_cores']} 核心 / {p['hpc_tasks']} 任務"
                       f"{' / ' + str(p['hpc_gpus']) + ' GPU' if p.get('hpc_gpus') else ''})...")
@@ -947,6 +948,30 @@ class HfssWorker:
             base, ext = os.path.splitext(p['csv_path'])
             self._export_s_params(hfss, S_SETUP_NAME, kittel_sweep.name, csv_path=f"{base}_kittel{ext}")
         return ok
+
+    def _add_sweep(self, setup, name, mode, f0, f1, points, save_fields, tol):
+        """建立掃頻；AEDT 拒絕（InsertFrequencySweep 失敗）時依序退回 Interpolating → Discrete，不讓整個任務中斷。"""
+        order = [mode] + [m for m in ("Interpolating", "Discrete") if m != mode]
+        for i, m in enumerate(order):
+            try:
+                try:
+                    setup.delete_sweep(name)            # 上一次失敗留下的半成品
+                except Exception:
+                    pass
+                sw = setup.create_frequency_sweep(
+                    unit="GHz", start_frequency=f0, stop_frequency=f1, num_of_freq_points=int(points), name=name,
+                    sweep_type=m, save_fields=save_fields if m != "Discrete" else False,
+                    interpolation_tol=tol, interpolation_max_solutions=int(self.params.get('interp_max_solns', 250)))
+                if sw:
+                    if i:
+                        self.emit_log(f"   ⚠️ AEDT 不接受 {order[0]} 掃頻，{name} 改用 {m}。")
+                    sw._qel_mode = m
+                    return sw
+                err = "回傳 False"
+            except Exception as e:  # noqa: BLE001 - GrpcApiError 等
+                err = f"{type(e).__name__}: {e}"
+            self.emit_log(f"   ⚠️ 建立 {m} 掃頻 {name} 失敗：{err}")
+        return None
 
     def _export_s_params(self, hfss, setup_name, sweep_name, csv_path=None):
         p = self.params

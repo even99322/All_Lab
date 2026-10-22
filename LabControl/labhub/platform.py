@@ -66,7 +66,7 @@ DEFAULT_MODULES: Dict[str, Dict[str, Any]] = {
     # 1.0.16：模擬工具（Python 原始碼 zip：HFSSTool_v<版本>.zip，控制台發佈）
     "hfss": {"name": "模擬", "kind": "app", "app": "HFSS 自動化工具", "order": 4,
              "description": "HFSS 自動化工具：DXF 版圖 → 3D 模型、S 參數與場型模擬、YIG 磁性球（Windows ＋ Ansys AEDT 2026 R1）",
-             "note": "Windows：下載 .exe 直接執行（單一檔案，不用裝 Python；第一次開要等十幾秒），之後程式會自己更新。"
+             "note": "Windows：下載安裝程式（…_windows-setup.exe）執行，裝好開始功能表與桌面都有捷徑，不用管理員密碼；之後程式會自己更新。"
                      "需要 Ansys Electronics Desktop 2026 R1（或 2025 R2）。"},
 }
 #: 下載頁 /get 列出、不用登入就能下載的獨立程式

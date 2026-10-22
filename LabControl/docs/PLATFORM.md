@@ -254,6 +254,9 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 - 解析在 Hub `labhub/lmstat.py`（`Users of <授權>: (Total of N issued; Total of M in use)`、使用者行 `user host display … start 週 月/日 時:分[, K licenses]`，
   跨年處理、伺服器 UP/DOWN 與版本）；`GET /api/hfss/usage` 多了 `lm`：`summary`（Electronics Desktop / HFSS 求解 / HPC）、`features`、
   `devices`（依電腦＋使用者，`key_of` 跟工具回報共用標註，合併工具狀態與正在跑的任務）、`age`、`stale`（> 150 秒）、`error`。
+- 模擬工具 3.6：改發佈安裝程式 `HFSSTool_v<版本>_windows-setup.exe`（PyInstaller 資料夾版＋`HFSSTool/packaging/installer.iss`，
+  裝在 `%LOCALAPPDATA%\Programs\HFSSTool`）；程式內更新下載安裝程式後 `/SILENT` 安裝再重開。3.5 以前的單一 exe 更新時會把安裝程式換到舊 exe 的位置執行，
+  裝好後安裝程式刪掉那個檔。CI 會靜默安裝一次再對安裝好的程式跑 `--self-test`。
 - 模擬工具 3.5 `usage.py`：`find_lmutil()`（update.json `lmutil` / `HFSS_LMUTIL` → `AWP_ROOTxxx` 等 → Program Files 最新版）、`run_lmstat()`（CREATE_NO_WINDOW、30 秒逾時）、
   `send_lmstat()`；self-test 多了「授權伺服器查詢」。
 

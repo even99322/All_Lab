@@ -152,7 +152,11 @@ def run() -> int:
         s = updater.install_script("C:/a b/new.exe", "C:/a'b/HFSSTool.exe", [1, 2], updater.current_version())
         if "C:/a''b/HFSSTool.exe" not in s:
             raise RuntimeError("換檔腳本的路徑沒有跳脫")
-        return f"{updater.current_version()} 可以自己換新：{updater.can_self_update()}"
+        s2 = updater.setup_script("C:/x/HFSSTool_v9_windows-setup.exe", "C:/a'b/HFSSTool.exe", [1], "1")
+        if "/SILENT" not in s2 or "C:/a''b/HFSSTool.exe" not in s2:
+            raise RuntimeError("安裝程式更新腳本不對")
+        where = updater.installed_dir() or "（沒有安裝，單一 exe / 原始碼）"
+        return f"{updater.current_version()} 可以自己換新：{updater.can_self_update()}；安裝在：{where}"
     step("自動更新", upd)
 
     def spawn():
