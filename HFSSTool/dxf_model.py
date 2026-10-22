@@ -1,4 +1,4 @@
-"""DXF 編輯器的資料（v3.3）：讀 / 寫 DXF、板材大小、用節點畫的微波線、CPW 自動上地。不用 Qt，可以單獨測試。
+"""DXF 編輯器的資料（v3.3–3.4）：讀 / 寫 DXF、板材大小、用節點畫的微波線、曲線、CPW 自動上地。不用 Qt，可以單獨測試。
 
 DXF 單位是 mm（建模時以 Scale 0.001 匯入）。圖層照 README「DXF 圖層命名規範」：
     MS ：b 板材、g 訊號線、h 螺絲孔
@@ -8,6 +8,9 @@ DXF 單位是 mm（建模時以 Scale 0.001 匯入）。圖層照 README「DXF �
     存檔時在 g 產生封閉輪廓（HFSS 匯入的就是它），中心線另外存在圖層 g_path（HFSS 不會匯入），之後打開還能用節點編輯。
     CPW 打開「自動產生上地」時，ub = 板材 −（微波線往外加間隙），也是存檔時產生。
     產生的圖元帶 XDATA「QELHFSS」，重新打開時不當成使用者畫的東西。
+曲線（v3.4，幾何在 dxf_geom.py）：
+    每段可以是圓弧（bulges：DXF 的 bulge）、每個節點可以有圓角（fillets：半徑）→ 存成 DXF 真正的圓弧；
+    smooth = "bezier"：Bézier 曲線（點 = 錨、控、控、錨…），存檔時切成細小直線段。
 其他圖元（文字、標註、不認得的）原樣保留。
 """
 from __future__ import annotations
@@ -18,9 +21,10 @@ os.environ.setdefault("EZDXF_DISABLE_C_EXT", "1")      # 見 main.py：打包後
 
 import copy
 import json
-import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
+
+import dxf_geom as G
 
 APPID = "QELHFSS"
 PATH_LAYER = "g_path"
@@ -35,6 +39,7 @@ LAYER_INFO = {
     "h": ("螺絲孔", 8), "v": ("金屬過孔", 5), PATH_LAYER: ("微波線中心線（不匯入）", 6),
 }
 EDGE_TOL = 1e-6
+XDATA_CHUNK = 250
 
 Point = Tuple[float, float]
 
@@ -53,58 +58,170 @@ class Shape:
     width: float = 1.0                 # path：線寬
     gap: float = 0.2                   # path：CPW 間隙
     handle: str = ""                   # 讀進來的圖元（存檔時刪掉重寫）
+    bulges: List[float] = field(default_factory=list)    # 每段（i → i+1）的 bulge；0 = 直線
+    fillets: List[float] = field(default_factory=list)   # 每個節點的圓角半徑；0 = 尖角
+    smooth: str = ""                   # "bezier"：點 = 錨、控、控、錨…
 
+    # ---- 基本 -----------------------------------------------------------------------------------
     def copy(self) -> "Shape":
         return copy.deepcopy(self)
 
     def to_dict(self) -> dict:
         return {"kind": self.kind, "layer": self.layer, "pts": [list(p) for p in self.pts], "r": self.r,
-                "width": self.width, "gap": self.gap, "handle": self.handle}
+                "width": self.width, "gap": self.gap, "handle": self.handle, "bulges": list(self.bulges),
+                "fillets": list(self.fillets), "smooth": self.smooth}
 
     @staticmethod
     def from_dict(d: dict) -> "Shape":
         return Shape(d["kind"], d["layer"], [tuple(p) for p in d["pts"]], d.get("r", 0.0), d.get("width", 1.0),
-                     d.get("gap", 0.2), d.get("handle", ""))
+                     d.get("gap", 0.2), d.get("handle", ""), list(d.get("bulges") or []), list(d.get("fillets") or []),
+                     d.get("smooth", ""))
+
+    @property
+    def closed(self) -> bool:
+        return self.kind == "poly"
+
+    @property
+    def bezier(self) -> bool:
+        return self.smooth == "bezier" and self.kind in ("path", "poly")
+
+    def n_segs(self) -> int:
+        n = len(self.pts)
+        return n if self.closed else max(n - 1, 0)
+
+    def norm(self) -> None:
+        """bulges / fillets 的長度跟節點數對齊。"""
+        if self.bezier or self.kind == "circle":
+            self.bulges, self.fillets = [], []
+            return
+        segs = self.n_segs()
+        self.bulges = (list(self.bulges) + [0.0] * segs)[:segs]
+        self.fillets = (list(self.fillets) + [0.0] * len(self.pts))[:len(self.pts)]
+
+    def is_anchor(self, i: int) -> bool:
+        return not self.bezier or i % 3 == 0
+
+    # ---- 幾何 -----------------------------------------------------------------------------------
+    def centerline(self) -> List[Point]:
+        """path：細分的中心線；poly：細分的邊界。"""
+        if self.kind == "circle":
+            return list(self.pts)
+        if self.bezier:
+            return G.bezier_points(self.pts, self.closed)
+        self.norm()
+        pts = G.flatten(G.chain(self.pts, self.bulges, self.fillets, self.closed))
+        if self.closed and len(pts) > 1 and G._close(pts[0], pts[-1]):
+            pts.pop()
+        return pts
+
+    def verts(self, extra: float = 0.0) -> List[G.Vert]:
+        """存檔用的頂點 [(x, y, bulge)]：poly = 邊界；path = 輪廓（extra = 每邊再往外）。"""
+        if self.kind == "poly":
+            if self.bezier:
+                return [(x, y, 0.0) for x, y in G.bezier_points(self.pts, True)]
+            self.norm()
+            return G.boundary(self.pts, self.bulges, self.fillets)
+        if self.kind == "path":
+            if self.bezier:
+                return G._dense_outline(G.bezier_points(self.pts, False), self.width / 2 + extra)
+            self.norm()
+            return G.path_outline(self.pts, self.width, self.bulges, self.fillets, extra)
+        return []
+
+    def ring(self, extra: float = 0.0) -> List[Point]:
+        """畫面 / 布林運算用的細分輪廓。"""
+        return G.ring_points(self.verts(extra))
 
     def bounds(self) -> Tuple[float, float, float, float]:
         if self.kind == "circle":
             (x, y), r = self.pts[0], self.r
             return x - r, y - r, x + r, y + r
         pad = self.width / 2 + self.gap if self.kind == "path" else 0.0
-        xs = [p[0] for p in self.pts] or [0.0]
-        ys = [p[1] for p in self.pts] or [0.0]
+        pts = (self.centerline() if (self.bezier or any(self.bulges) or any(self.fillets)) else list(self.pts)) \
+            or list(self.pts) or [(0.0, 0.0)]
+        if self.bezier:
+            pts += list(self.pts)                            # 控制點也算（才看得到、點得到）
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
         return min(xs) - pad, min(ys) - pad, max(xs) + pad, max(ys) + pad
 
     def translate(self, dx: float, dy: float) -> None:
         self.pts = [(x + dx, y + dy) for x, y in self.pts]
 
+    def ends(self) -> Tuple[Point, Point]:
+        return self.pts[0], self.pts[-1]
 
-# ---- 幾何（shapely）-------------------------------------------------------------------------------
-def _sg():
-    import shapely.geometry as sg
-    return sg
+    # ---- 節點 -----------------------------------------------------------------------------------
+    def insert_after(self, seg: int, p: Optional[Point] = None, t: float = 0.5) -> int:
+        """在第 seg 段中間加一個節點（Bézier：在 t 切開）→ 新節點的索引。"""
+        if self.bezier:
+            segs = G.bezier_segments(self.pts, self.closed)
+            a, b = G.split_bezier(segs[seg], t)
+            i = 3 * seg
+            self.pts = self.pts[:i + 1] + [a[1], a[2], a[3], b[1], b[2]] + self.pts[i + 3:]
+            return i + 3
+        self.norm()
+        n = len(self.pts)
+        j = (seg + 1) % n
+        b = self.bulges[seg] if seg < len(self.bulges) else 0.0
+        a, c = self.pts[seg], self.pts[j]
+        if b:
+            arc = G.bulge_arc(a, c, b)
+            if p is None:
+                p = G.arc_mid(a, c, b)
+                b1 = b2 = G.math.tan(G.math.atan(b) / 2.0)
+            else:
+                center, r, a0, sweep = arc
+                ang = G.math.atan2(p[1] - center[1], p[0] - center[0])
+                d = (ang - a0) % (2 * G.math.pi) if sweep > 0 else -((a0 - ang) % (2 * G.math.pi))
+                d = max(min(d, sweep), 0.0) if sweep > 0 else min(max(d, sweep), 0.0)
+                p = (center[0] + r * G.math.cos(a0 + d), center[1] + r * G.math.sin(a0 + d))
+                b1, b2 = G.math.tan(d / 4.0), G.math.tan((sweep - d) / 4.0)
+        else:
+            if p is None:
+                p = ((a[0] + c[0]) / 2, (a[1] + c[1]) / 2)
+            b1 = b2 = 0.0
+        self.pts.insert(seg + 1, p)
+        self.bulges[seg:seg + 1] = [b1, b2]
+        self.fillets.insert(seg + 1, 0.0)
+        return seg + 1
 
+    def min_nodes(self) -> int:
+        if self.bezier:
+            return 6 if self.closed else 4                    # 至少 2 個錨（封閉 3 個錨的話 9 點；2 段就夠畫）
+        return 3 if self.closed else 2
 
-def path_outline(pts: List[Point], width: float, extra: float = 0.0):
-    """中心線 → 輪廓（平頭、斜接），extra = 每邊再往外加（CPW 間隙）。"""
-    sg = _sg()
-    clean = [p for i, p in enumerate(pts) if i == 0 or (abs(p[0] - pts[i - 1][0]) > 1e-12 or abs(p[1] - pts[i - 1][1]) > 1e-12)]
-    if len(clean) < 2 or width <= 0:
-        return sg.Polygon()
-    return sg.LineString(clean).buffer(width / 2 + extra, cap_style="flat", join_style="mitre", mitre_limit=10.0)
+    def can_delete(self, i: int) -> bool:
+        if self.bezier:
+            return self.is_anchor(i) and len(self.pts) - 3 >= self.min_nodes()
+        return len(self.pts) > self.min_nodes()
 
-
-def _polys(geom) -> list:
-    if geom is None or geom.is_empty:
-        return []
-    if geom.geom_type == "Polygon":
-        return [geom]
-    return [g for g in getattr(geom, "geoms", []) if g.geom_type == "Polygon" and not g.is_empty]
-
-
-def _ring(poly) -> List[Point]:
-    pts = [(round(x, 9), round(y, 9)) for x, y in poly.exterior.coords]
-    return pts[:-1] if len(pts) > 1 and pts[0] == pts[-1] else pts
+    def delete_node(self, i: int) -> bool:
+        if not self.can_delete(i):
+            return False
+        if self.bezier:
+            n = len(self.pts)
+            if not self.closed and i == 0:
+                del self.pts[0:3]
+            elif not self.closed and i == n - 1:
+                del self.pts[n - 3:n]
+            elif self.closed and i == 0:
+                rest = self.pts[2:n - 1]                      # [控, 錨1, …, 錨末, 控] → 錨點要在 0, 3, 6…
+                self.pts = rest[1:] + rest[:1]
+            else:
+                del self.pts[i - 1:i + 2]
+            return True
+        self.norm()
+        segs = self.n_segs()
+        del self.pts[i]
+        del self.fillets[i]
+        if self.closed:
+            del self.bulges[i % segs]
+        elif i < segs:
+            del self.bulges[i]
+        else:
+            del self.bulges[segs - 1]
+        self.norm()
+        return True
 
 
 # ---- 設計 ---------------------------------------------------------------------------------------
@@ -117,6 +234,7 @@ class Design:
         self.doc = None                      # 讀進來的 ezdxf 文件（存檔時保留其他圖元）
         self.foreign: List[dict] = []        # 不能編輯、只顯示的圖元（線段）：{"layer", "pts"}
         self.loaded: set = set()             # 讀進來、由編輯器管理的圖元 handle（存檔時全部重寫）
+        self._ground_holes = 0
 
     # ---- 快照（復原 / 重做）-------------------------------------------------------------------
     def snapshot(self) -> str:
@@ -129,11 +247,13 @@ class Design:
 
     # ---- 範本 --------------------------------------------------------------------------------
     @classmethod
-    def template(cls, mode: str, w: float = 30.0, h: float = 20.0, width: float = 1.0, gap: float = 0.2) -> "Design":
+    def template(cls, mode: str, w: float = 30.0, h: float = 20.0, width: float = 1.0, gap: float = 0.2,
+                 trace: bool = True) -> "Design":
         d = cls(mode)
         board = BOARD_LAYERS[d.mode][0]
         d.shapes.append(Shape("poly", board, [(0, 0), (w, 0), (w, h), (0, h)]))
-        d.shapes.append(Shape("path", "g", [(0, h / 2), (w, h / 2)], width=width, gap=gap))
+        if trace:
+            d.shapes.append(Shape("path", "g", [(0, h / 2), (w, h / 2)], width=width, gap=gap))
         d.auto_ground = d.mode == "CPW"
         return d
 
@@ -149,7 +269,7 @@ class Design:
         return min(x[0] for x in b), min(x[1] for x in b), max(x[2] for x in b), max(x[3] for x in b)
 
     def bounds(self) -> Tuple[float, float, float, float]:
-        items = [s.bounds() for s in self.shapes] + [
+        items = [s.bounds() for s in self.shapes if s.pts] + [
             (min(p[0] for p in f["pts"]), min(p[1] for p in f["pts"]), max(p[0] for p in f["pts"]),
              max(p[1] for p in f["pts"])) for f in self.foreign if f["pts"]]
         if not items:
@@ -157,23 +277,34 @@ class Design:
         return min(b[0] for b in items), min(b[1] for b in items), max(b[2] for b in items), max(b[3] for b in items)
 
     def board_geom(self):
+        import shapely.geometry as sg
         from shapely.ops import unary_union
-        sg = _sg()
-        return unary_union([sg.Polygon(s.pts).buffer(0) for s in self.boards() if len(s.pts) >= 3])
+        return unary_union([sg.Polygon(s.ring()).buffer(0) for s in self.boards() if len(s.pts) >= 3])
 
     def generated(self) -> Dict[str, list]:
-        """存檔時會產生的輪廓：{"g": [多邊形點…], "ub": [...]}（畫面上也顯示這些）。"""
+        """存檔時會產生的輪廓：{"g": [[(x, y, bulge)…]…], "ub": [...]}（畫面上也顯示這些）。"""
+        import shapely.geometry as sg
         from shapely.ops import unary_union
         out: Dict[str, list] = {"g": [], "ub": []}
-        paths = [s for s in self.shapes if s.kind == "path"]
+        paths = [s for s in self.shapes if s.kind == "path" and len(s.pts) >= 2]
         for s in paths:
-            out["g"] += [_ring(p) for p in _polys(path_outline(s.pts, s.width))]
+            v = s.verts()
+            if len(v) >= 3:
+                out["g"].append(v)
+        self._ground_holes = 0
         if self.mode == "CPW" and self.auto_ground and paths:
             board = self.board_geom()
             if not board.is_empty:
-                cut = unary_union([path_outline(s.pts, s.width, s.gap) for s in paths])
-                out["ub"] = [_ring(p) for p in _polys(board.difference(cut))]
-                self._ground_holes = sum(len(p.interiors) for p in _polys(board.difference(cut)))
+                cut = unary_union([sg.Polygon(s.ring(s.gap)).buffer(0) for s in paths if len(s.ring(s.gap)) >= 3])
+                rest = board.difference(cut)
+                polys = [rest] if rest.geom_type == "Polygon" else [g for g in getattr(rest, "geoms", [])
+                                                                    if g.geom_type == "Polygon"]
+                for p in polys:
+                    if p.is_empty:
+                        continue
+                    p = p.simplify(G.TOL / 2, preserve_topology=True)
+                    out["ub"].append(G._dedupe([(round(x, 9), round(y, 9), 0.0) for x, y in list(p.exterior.coords)[:-1]]))
+                    self._ground_holes += len(p.interiors)
         return out
 
     def ports(self) -> List[Tuple[Point, str]]:
@@ -185,14 +316,14 @@ class Design:
         for s in self.shapes:
             if s.kind != "path" or len(s.pts) < 2:
                 continue
-            for p in (s.pts[0], s.pts[-1]):
+            for p in s.ends():
                 side = _edge_side(p, bb)
                 if side:
                     out.append((p, side))
         return out
 
     def check(self) -> List[str]:
-        """存檔前的檢查：缺圖層、端點沒碰到板邊、上地有內孔。回傳警告（空 = 沒問題）。"""
+        """存檔前的檢查：缺圖層、端點沒碰到板邊、上地有內孔、圓角。回傳警告（空 = 沒問題）。"""
         warn = []
         have = {s.layer for s in self.shapes} | ({"g"} if any(s.kind == "path" for s in self.shapes) else set())
         if self.mode == "CPW" and self.auto_ground:
@@ -204,15 +335,21 @@ class Design:
         if paths and len(self.ports()) < 1:
             warn.append("沒有微波線的端點碰到板邊：HFSS 找不到可以放 Wave Port 的位置")
         if self.mode == "CPW" and self.auto_ground:
-            self._ground_holes = 0
             self.generated()
-            if getattr(self, "_ground_holes", 0):
+            if self._ground_holes:
                 warn.append("自動產生的上地有內孔（微波線兩端要碰到板邊，地才會被切開）")
         for s in self.shapes:
             if s.kind == "poly" and len(s.pts) < 3:
                 warn.append(f"圖層 {s.layer} 有少於 3 個點的多邊形")
             if s.kind == "path" and len(s.pts) < 2:
                 warn.append("有少於 2 個節點的微波線")
+            if s.kind == "path" and not s.bezier and any(s.fillets):
+                s.norm()
+                _t, r_eff, _turn, clamped = G.fillet_info(s.pts, s.bulges, s.fillets, False)
+                if any(0 < r < s.width / 2 for r in r_eff):
+                    warn.append(f"有圓角半徑小於線寬的一半（{s.width / 2:g} mm）：轉角內側會重疊")
+                elif any(clamped):
+                    warn.append("有圓角太大、放不下，已經自動縮小（看節點表格的圓角）")
         return warn
 
     # ---- 編輯 --------------------------------------------------------------------------------
@@ -225,7 +362,7 @@ class Design:
         boards = self.boards()
         rect = [(x0, y0), (x0 + w, y0), (x0 + w, y0 + h), (x0, y0 + h)]
         if boards:
-            boards[0].pts = list(rect)
+            boards[0].pts, boards[0].bulges, boards[0].fillets, boards[0].smooth = list(rect), [], [], ""
             for extra in boards[1:]:
                 self.shapes.remove(extra)
         else:
@@ -239,7 +376,11 @@ class Design:
         for s in self.shapes:
             if s.kind == "path" and len(s.pts) >= 2:
                 for i in (0, len(s.pts) - 1):
-                    s.pts[i] = _move_to_edge(s.pts[i], old, nb, s.pts[1] if i == 0 else s.pts[-2])
+                    new = _move_to_edge(s.pts[i], old, nb)
+                    if s.bezier and new != s.pts[i]:            # 錨點旁邊的控制點跟著移
+                        j = 1 if i == 0 else len(s.pts) - 2
+                        s.pts[j] = (s.pts[j][0] + new[0] - s.pts[i][0], s.pts[j][1] + new[1] - s.pts[i][1])
+                    s.pts[i] = new
             elif s.kind == "poly" and s.layer not in BOARD_LAYERS[self.mode] and not (s.layer == "ub" and _is_rect(s.pts, nb)):
                 s.pts = [_move_to_edge(p, old, nb) for p in s.pts]
 
@@ -265,25 +406,42 @@ class Design:
         d.auto_ground = bool(meta.get("auto_ground", False))
         for e in doc.modelspace():
             t, layer = e.dxftype(), e.dxf.layer
-            if _xdata(e).get("gen"):
+            x = _xdata(e)
+            if x.get("gen"):
                 continue                          # 存檔時產生的：重新產生
             if t == "LWPOLYLINE":
-                pts = _lw_points(e)
+                raw = [(float(px), float(py), float(b)) for px, py, b in e.get_points("xyb")]
                 if layer == PATH_LAYER:
-                    x = _xdata(e)
-                    d.shapes.append(Shape("path", x.get("layer", "g"), [(p[0], p[1]) for p in e.get_points("xy")],
-                                          width=float(x.get("width") or e.dxf.const_width or 1.0),
-                                          gap=float(x.get("gap", 0.2)), handle=e.dxf.handle))
-                elif e.closed or (len(pts) > 2 and _same(pts[0], pts[-1])):
-                    if len(pts) > 2 and _same(pts[0], pts[-1]):
-                        pts = pts[:-1]
-                    d.shapes.append(Shape("poly", layer, pts, handle=e.dxf.handle))
+                    if x.get("pts"):              # v3.4：完整的節點（含圓角、Bézier）在 XDATA
+                        s = Shape("path", x.get("layer", "g"), [tuple(p) for p in x["pts"]],
+                                  width=float(x.get("width") or 1.0), gap=float(x.get("gap", 0.2)), handle=e.dxf.handle,
+                                  bulges=[float(b) for b in x.get("bulges") or []],
+                                  fillets=[float(f) for f in x.get("fillets") or []], smooth=x.get("smooth", ""))
+                    else:
+                        s = Shape("path", x.get("layer", "g"), [(p[0], p[1]) for p in raw],
+                                  width=float(x.get("width") or e.dxf.const_width or 1.0), gap=float(x.get("gap", 0.2)),
+                                  handle=e.dxf.handle, bulges=[p[2] for p in raw[:-1]])
+                    s.norm()
+                    d.shapes.append(s)
+                elif e.closed or (len(raw) > 2 and _same(raw[0], raw[-1])):
+                    if len(raw) > 2 and _same(raw[0], raw[-1]) and not e.closed:
+                        raw = raw[:-1]
+                    if x.get("pts"):                # v3.4：圓角 / Bézier 多邊形
+                        s = Shape("poly", layer, [tuple(p) for p in x["pts"]], handle=e.dxf.handle,
+                                  bulges=[float(b) for b in x.get("bulges") or []],
+                                  fillets=[float(f) for f in x.get("fillets") or []], smooth=x.get("smooth", ""))
+                    else:
+                        s = Shape("poly", layer, [(p[0], p[1]) for p in raw], handle=e.dxf.handle,
+                                  bulges=[p[2] for p in raw])
+                    s.norm()
+                    d.shapes.append(s)
                 else:
-                    d.foreign.append({"layer": layer, "pts": pts})
+                    d.foreign.append({"layer": layer, "pts": _lw_points(e)})
             elif t == "POLYLINE" and not e.is_3d_polyline and not e.is_poly_face_mesh and not e.is_polygon_mesh:
                 pts = [(v.dxf.location.x, v.dxf.location.y) for v in e.vertices]
+                bul = [float(v.dxf.get("bulge", 0.0) or 0.0) for v in e.vertices]
                 if e.is_closed and len(pts) >= 3:
-                    d.shapes.append(Shape("poly", layer, pts, handle=e.dxf.handle))
+                    d.shapes.append(Shape("poly", layer, pts, handle=e.dxf.handle, bulges=bul))
                 else:
                     d.foreign.append({"layer": layer, "pts": pts})
             elif t == "CIRCLE":
@@ -319,18 +477,26 @@ class Design:
             if name not in doc.layers:
                 doc.layers.add(name, color=color)
         for s in self.shapes:
+            s.norm()
+            curved = s.bezier or any(s.fillets)
             if s.kind == "poly":
-                e = msp.add_lwpolyline(s.pts, close=True, dxfattribs={"layer": s.layer})
+                e = msp.add_lwpolyline(s.verts(), format="xyb", close=True, dxfattribs={"layer": s.layer})
+                if curved:                       # 圓角 / Bézier：原始節點存起來，之後打開還能編輯
+                    _set_xdata(e, {"pts": s.pts, "bulges": s.bulges, "fillets": s.fillets, "smooth": s.smooth})
             elif s.kind == "circle":
                 e = msp.add_circle(s.pts[0], s.r, dxfattribs={"layer": s.layer})
             else:
-                e = msp.add_lwpolyline(s.pts, close=False, dxfattribs={"layer": PATH_LAYER, "const_width": s.width})
-                e.set_xdata(APPID, [(1000, json.dumps({"width": s.width, "gap": s.gap, "layer": s.layer}))])
+                line = ([(x, y, 0.0) for x, y in G.bezier_points(s.pts)] if s.bezier
+                        else [(p[0], p[1], s.bulges[i] if i < len(s.bulges) else 0.0) for i, p in enumerate(s.pts)])
+                e = msp.add_lwpolyline(line, format="xyb", close=False,
+                                       dxfattribs={"layer": PATH_LAYER, "const_width": s.width})
+                _set_xdata(e, {"width": s.width, "gap": s.gap, "layer": s.layer, "pts": s.pts, "bulges": s.bulges,
+                               "fillets": s.fillets, "smooth": s.smooth})
             s.handle = e.dxf.handle
         for layer, polys in self.generated().items():
-            for pts in polys:
-                e = msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": layer})
-                e.set_xdata(APPID, [(1000, json.dumps({"gen": 1}))])
+            for verts in polys:
+                e = msp.add_lwpolyline(verts, format="xyb", close=True, dxfattribs={"layer": layer})
+                _set_xdata(e, {"gen": 1})
         meta = json.dumps({"mode": self.mode, "auto_ground": self.auto_ground})
         cv = doc.header.custom_vars
         if cv.has_tag("QEL_HFSS"):
@@ -348,16 +514,21 @@ class Design:
 
 
 # ---- 小工具 -----------------------------------------------------------------------------------
-def _same(a: Point, b: Point, tol: float = 1e-9) -> bool:
+def _same(a, b, tol: float = 1e-9) -> bool:
     return abs(a[0] - b[0]) <= tol and abs(a[1] - b[1]) <= tol
+
+
+def _set_xdata(e, data: dict) -> None:
+    """XDATA 每個字串最多 255 字：JSON 切成好幾段。"""
+    text = json.dumps(data, separators=(",", ":"))
+    e.set_xdata(APPID, [(1000, text[i:i + XDATA_CHUNK]) for i in range(0, len(text), XDATA_CHUNK)] or [(1000, "{}")])
 
 
 def _xdata(e) -> dict:
     try:
         if e.has_xdata(APPID):
-            for code, value in e.get_xdata(APPID):
-                if code == 1000:
-                    return json.loads(value)
+            text = "".join(str(v) for code, v in e.get_xdata(APPID) if code == 1000)
+            return json.loads(text) if text else {}
     except Exception:  # noqa: BLE001 - 別人的 XDATA
         pass
     return {}
@@ -391,7 +562,6 @@ def _edge_side(p: Point, bb, tol: float = 1e-6) -> str:
 def _move_to_edge(p: Point, old, new, neighbor: Optional[Point] = None) -> Point:
     """原本在舊板邊上的點移到新板邊的同一邊（另一個座標保持，超出新板材時夾回）。"""
     x, y = p
-    ox0, oy0, ox1, oy1 = old
     nx0, ny0, nx1, ny1 = new
     side = _edge_side(p, old)
     if side == "左":

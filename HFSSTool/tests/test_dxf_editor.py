@@ -122,3 +122,55 @@ def test_cpw_mode_switch(ed):
     assert len(ed.design.generated()["ub"]) == 2
     ed.undo()
     assert ed.design.mode == "MS"
+
+
+def test_curve_tools(ed, tmp_path):
+    import math
+    d = ed.design
+    n0 = len(d.shapes)
+    # 三點弧
+    ed.set_tool("arc")
+    for x, y in ((0, 2), (5, 0), (10, 2)):
+        _click(ed, x, y)
+    arc = d.shapes[-1]
+    assert len(d.shapes) == n0 + 1 and arc.kind == "path" and arc.pts == [(0, 2), (10, 2)] and arc.bulges[0] > 0
+    # 曲線（Bézier）
+    ed.set_tool("bezier")
+    for x, y in ((0, 17), (10, 14), (20, 17)):
+        _click(ed, x, y)
+    QTest.keyClick(ed.canvas, Qt.Key.Key_Return)
+    bez = d.shapes[-1]
+    assert bez.smooth == "bezier" and len(bez.pts) == 7 and bez.pts[3] == (10, 14)
+    # 微波線＋預設圓角
+    ed.new_fillet.setValue(2.0)
+    ed.set_tool("path")
+    for x, y in ((0, 6), (12, 6), (12, 12)):
+        _click(ed, x, y)
+    QTest.keyClick(ed.canvas, Qt.Key.Key_Return)
+    p = d.shapes[-1]
+    assert p.fillets == [0, 2.0, 0]
+    # 拖橘色菱形（線段中點）→ 第一段彎成圓弧
+    ed.set_tool("select")
+    ed.canvas.select(len(d.shapes) - 1)
+    vp = ed.canvas.viewport()
+    QTest.mousePress(vp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _vp(ed, 6, 6))
+    QTest.mouseMove(vp, _vp(ed, 6, 4))
+    QTest.mouseRelease(vp, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, _vp(ed, 6, 4))
+    assert p.bulges[0] == pytest.approx(2 * 2 / 12, abs=0.02)                   # sagitta 2 mm、弦 12 mm
+    # 表格：圓角、弧度
+    ed.canvas.select(len(d.shapes) - 1)
+    ed.table.item(1, 2).setText("3")
+    assert p.fillets[1] == 3
+    ed.table.item(0, 3).setText("0")
+    assert p.bulges[0] == 0
+    # 變成平滑曲線、改回折線
+    ed.to_bezier()
+    assert p.smooth == "bezier" and len(p.pts) == 7
+    ed.to_polyline()
+    assert p.smooth == "" and len(p.pts) == 3
+    f = str(tmp_path / "curves.dxf")
+    assert ed._save_to(f)
+    from dxf_model import Design
+    r = Design.load(f)
+    assert sum(1 for s in r.shapes if s.smooth == "bezier") == 1
+    assert any(s.bulges and s.bulges[0] > 0 for s in r.shapes if s.kind == "path")

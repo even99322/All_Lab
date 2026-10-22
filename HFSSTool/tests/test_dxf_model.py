@@ -120,7 +120,11 @@ def test_bulge_polyline_is_flattened(tmp_path):
                                     dxfattribs={"layer": "b"})
     doc.saveas(f)
     d = Design.load(f)
-    assert len(d.shapes) == 1 and len(d.shapes[0].pts) > 6                         # 弧切成小段
+    s = d.shapes[0]
+    assert len(d.shapes) == 1 and len(s.pts) == 4 and s.bulges[1] == pytest.approx(1.0)   # 圓弧保留成 bulge（可以編輯）
+    assert len(s.ring()) > 20                                                           # 畫面上是圓弧
+    d.save(f)
+    assert Design.load(f).shapes[0].bulges[1] == pytest.approx(1.0)
 
 
 def test_snapshot_restore():
@@ -129,3 +133,47 @@ def test_snapshot_restore():
     d.shapes.append(Shape("circle", "h", [(1, 1)], r=0.5))
     d.restore(snap)
     assert len(d.shapes) == 2
+
+
+def test_curves_roundtrip(tmp_path):
+    """v3.4：圓角、弧線段、Bézier 的微波線與多邊形存檔讀回還能編輯；g 的輪廓用真正的圓弧。"""
+    import math
+    d = Design.template("MS", 30, 20)
+    path = next(s for s in d.shapes if s.kind == "path")
+    path.pts = [(0, 5), (15, 5), (15, 15), (30, 15)]
+    path.fillets = [0, 3, 3, 0]
+    d.shapes.append(Shape("path", "g", [(0, 18), (10, 18)], width=0.5, bulges=[0.2]))
+    import dxf_geom as G
+    d.shapes.append(Shape("path", "g", G.bezier_from_anchors([(30, 2), (20, 1), (10, 3)]), width=0.4, smooth="bezier"))
+    d.shapes.append(Shape("poly", "h", [(2, 2), (6, 2), (6, 6), (2, 6)], fillets=[1, 1, 1, 1]))
+    assert d.check() == []
+    f = str(tmp_path / "curves.dxf")
+    d.save(f)
+    doc = ezdxf.readfile(f)
+    g = [e for e in doc.modelspace().query('LWPOLYLINE[layer=="g"]')]
+    assert len(g) == 3
+    assert any(b for _x, _y, b in g[0].get_points("xyb"))                         # 圓角是真的圓弧
+    r = Design.load(f)
+    paths = [s for s in r.shapes if s.kind == "path"]
+    assert paths[0].fillets == [0, 3, 3, 0] and paths[1].bulges == [pytest.approx(0.2)]
+    assert paths[2].smooth == "bezier" and len(paths[2].pts) == 7
+    hole = next(s for s in r.shapes if s.layer == "h")
+    assert hole.fillets == [1, 1, 1, 1] and len(hole.pts) == 4
+    # 圓角太小 → 警告
+    paths[0].fillets = [0, 0.2, 0.2, 0]
+    assert any("圓角半徑小於" in w for w in r.check())
+
+
+def test_node_ops_keep_curves():
+    import dxf_geom as G
+    s = Shape("path", "g", [(0, 0), (10, 0), (10, 10)], bulges=[0.3, 0], fillets=[0, 2, 0])
+    i = s.insert_after(0)                                                          # 弧線段中間加節點：拆成兩段弧
+    assert i == 1 and len(s.pts) == 4 and s.bulges[0] and s.bulges[1] and s.fillets == [0, 0, 2, 0]
+    assert s.delete_node(1) and len(s.pts) == 3 and len(s.bulges) == 2
+    b = Shape("path", "g", G.bezier_from_anchors([(0, 0), (5, 5), (10, 0)]), smooth="bezier")
+    j = b.insert_after(0)
+    assert j == 3 and len(b.pts) == 10 and all(b.is_anchor(k) for k in (0, 3, 6, 9))
+    assert b.delete_node(3) and len(b.pts) == 7
+    assert not b.can_delete(1)                                                     # 控制點不能刪
+    c = Shape("poly", "h", G.bezier_from_anchors([(0, 0), (4, 0), (4, 4), (0, 4)], closed=True), smooth="bezier")
+    assert c.delete_node(0) and len(c.pts) == 9 and c.pts[0] == (4, 0)            # 刪第一個錨：其他錨還在 0、3、6

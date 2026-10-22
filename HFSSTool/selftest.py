@@ -118,6 +118,30 @@ def run() -> int:
         return "ok"
     step("DXF 編輯器", editor)
 
+    def curves():
+        import dxf_geom as G
+        v = G.path_outline([(0, 0), (10, 0), (10, 10)], 1.0, fillets=[0, 3, 0])
+        if not any(b for _x, _y, b in v):
+            raise RuntimeError("圓角沒有變成圓弧")
+        return f"{len(v)} 個頂點"
+    step("DXF 曲線", curves)
+
+    def view3d():
+        need_app()
+        from dxf_model import Design
+        from yig_view import make_view, scene_from
+        sc = scene_from(Design.template("CPW"), 0.8, 0.035, {"yig_diameter": 0.4, "yig_gap": 0.1, "yig_pos_mode": "auto"})
+        v = make_view()
+        v.set_scene(sc)
+        v.canvas.draw()
+        return f"{len(sc['verts'])} 個頂點"
+    step("YIG 3D 預覽", view3d)
+
+    def usage():
+        import usage as u
+        return f"{u.identity()['host']}，AEDT 開著：{u.aedt_status()['running']}"
+    step("授權回報", usage)
+
     def upd():
         import updater
         s = updater.install_script("C:/a b/new.exe", "C:/a'b/HFSSTool.exe", [1, 2], updater.current_version())

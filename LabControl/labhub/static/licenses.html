@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HFSS 授權</title>
+<style>
+  :root { --bg:#f3f4f6; --card:#fff; --text:#1c1f24; --muted:#6b7280; --line:#e2e5e9; --soft:#eef0f3;
+          --accent:#1971c2; --accent-soft:#e7f1fb; --ok:#2b8a3e; --warn:#e67700; --err:#e03131; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1116; --card:#151a21; --text:#e9ecef; --muted:#8b939d; --line:#2a313b; --soft:#1c222b;
+            --accent:#4dabf7; --accent-soft:#16283a; --ok:#40c057; --warn:#ffa94d; --err:#ff6b6b; }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); }
+  body { font:14px/1.45 -apple-system,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; }
+  main { max-width:1000px; margin:0 auto; padding:12px 14px 40px; }
+  h1 { font-size:20px; margin:4px 0 10px; }
+  .sum { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px; min-width:130px; }
+  .stat .v { font-size:24px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .stat .k { color:var(--muted); font-size:12px; }
+  .stat.full .v { color:var(--err); }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .list { display:flex; flex-direction:column; gap:8px; }
+  .row { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px;
+         display:grid; grid-template-columns:14px minmax(150px,1.2fr) minmax(160px,1.3fr) minmax(200px,2fr) auto; gap:10px; align-items:center; }
+  .row.using { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .row.off { opacity:.62; }
+  .dot { width:10px; height:10px; border-radius:50%; background:#868e96; }
+  .dot.on { background:var(--ok); } .dot.use { background:var(--accent); animation:p 1.4s infinite; }
+  @keyframes p { 50% { opacity:.35; } }
+  .who input { width:100%; font:inherit; font-weight:700; font-size:15px; color:var(--text); background:transparent;
+               border:1px solid transparent; border-radius:7px; padding:3px 6px; }
+  .who input:hover { border-color:var(--line); } .who input:focus { border-color:var(--accent); outline:none; background:var(--soft); }
+  .who input::placeholder { color:var(--warn); font-weight:600; }
+  .who input.named::placeholder { color:var(--text); font-weight:700; }
+  .host { font-variant-numeric:tabular-nums; }
+  .state b { font-weight:700; } .state .use { color:var(--accent); }
+  .btn { border:1px solid var(--line); background:var(--soft); color:var(--text); border-radius:8px; padding:4px 10px; font:inherit;
+         cursor:pointer; }
+  .btn.del { color:var(--err); background:transparent; }
+  .seat { display:flex; gap:6px; align-items:center; }
+  .seat input { width:70px; font:inherit; padding:4px 6px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--text); }
+  .empty { background:var(--card); border:1px dashed var(--line); border-radius:12px; padding:24px; text-align:center; color:var(--muted); }
+  .help { margin-top:16px; font-size:12px; color:var(--muted); }
+  @media (max-width: 720px) {
+    .row { grid-template-columns:14px 1fr; }
+    .row > .host, .row > .state, .row > .act { grid-column:2; }
+    .row > .act { justify-self:start; }
+  }
+</style>
+</head>
+<body>
+<!--QEL-NAV-->
+<main>
+  <h1>HFSS 授權占用</h1>
+  <div class="sum" id="sum"></div>
+  <div class="list" id="list"><div class="empty">讀取中…</div></div>
+  <div class="help">
+    每台開著「模擬工具（HFSS 自動化工具 3.4 以上）」的電腦每 20 秒回報一次；那台電腦開著 AEDT 就算占用一個授權（不管是不是用工具開的）。
+    90 秒沒回報算離線。<b>標註</b>：點名字那一格直接輸入是誰（例如「譯文」），按 Enter 存檔，大家都看得到。
+  </div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let ME = null, editing = false, timer = null;
+async function api(path, opt = {}) {
+  const r = await fetch(path, {method: opt.method || "GET", credentials: "same-origin",
+    headers: opt.json ? {"Content-Type": "application/json"} : {}, body: opt.json ? JSON.stringify(opt.json) : undefined});
+  if (r.status === 401) { location.href = "/login?next=/licenses"; throw new Error("未登入"); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+function dur(s) {
+  if (!s || s < 0) return "";
+  s = Math.floor(s);
+  if (s < 60) return s + " 秒";
+  if (s < 3600) return Math.floor(s / 60) + " 分";
+  if (s < 86400) return Math.floor(s / 3600) + " 小時 " + Math.floor(s % 3600 / 60) + " 分";
+  return Math.floor(s / 86400) + " 天 " + Math.floor(s % 86400 / 3600) + " 小時";
+}
+function ago(t, now) { return t ? dur(now - t) + "前" : "—"; }
+function render(d) {
+  const owner = ME && ME.user && ME.user.owner;
+  const free = d.seats ? d.seats - d.used : null;
+  $("#sum").innerHTML = `
+    <div class="stat${d.seats && free <= 0 ? " full" : ""}"><div class="v">${d.used}${d.seats ? " / " + d.seats : ""}</div><div class="k">占用中的授權${d.seats ? (free > 0 ? `（剩 ${free} 個）` : "（全部在用）") : ""}</div></div>
+    <div class="stat"><div class="v">${d.online}</div><div class="k">開著模擬工具的電腦</div></div>
+    ${owner ? `<div class="stat"><div class="k">授權總數（站長）</div><div class="seat"><input id="seats" type="number" min="0" value="${d.seats || ""}" placeholder="不限"><button class="btn" id="seatsave">存</button></div></div>` : ""}`;
+  if (owner) $("#seatsave").onclick = async () => {
+    try { await api("/api/hfss/usage/seats", {method: "PUT", json: {seats: parseInt($("#seats").value || "0", 10)}}); load(); }
+    catch (e) { alert(e.message); }
+  };
+  if (!d.items.length) { $("#list").innerHTML = `<div class="empty">還沒有電腦回報。在實驗室電腦開啟「模擬工具」3.4 以上版本，幾秒後就會出現在這裡。</div>`; return; }
+  $("#list").innerHTML = d.items.map(it => {
+    const a = it.aedt || {}, t = it.task;
+    let st;
+    if (it.using) st = `<span class="use"><b>● 使用中</b></span>　AEDT 開了 ${dur(d.time - (a.since || it.seen))}${a.count > 1 ? `（${a.count} 個）` : ""}`;
+    else if (it.online) st = `<span class="muted">工具開著，沒有占用授權</span>`;
+    else st = `<span class="muted">離線　最後回報 ${ago(it.seen, d.time)}${it.last_aedt ? `，上次用 AEDT ${ago(it.last_aedt, d.time)}` : ""}</span>`;
+    if (t) st += `<div class="small">正在跑：<b>${esc(t.name)}</b>${t.project ? "　" + esc(t.project) : ""}${t.started ? `　${dur(d.time - t.started)}` : ""}
+      ${t.cores ? `　${t.cores} 核` : ""}${t.tasks > 1 ? ` × ${t.tasks} 任務` : ""}${t.gpus ? `　${t.gpus} GPU` : ""}</div>`;
+    return `<div class="row${it.using ? " using" : ""}${it.online ? "" : " off"}">
+      <span class="dot${it.using ? " use" : it.online ? " on" : ""}"></span>
+      <div class="who"><input class="${it.name ? "named" : ""}" data-key="${esc(it.key)}" value="${esc(it.label)}" placeholder="${esc(it.name || "標註是誰…")}" maxlength="40" title="標註是誰（Enter 存檔）"></div>
+      <div class="host"><b>${esc(it.host)}</b><div class="small muted">${esc(it.user)}${it.version ? "　工具 " + esc(it.version) : ""}${it.ip ? "　" + esc(it.ip) : ""}</div></div>
+      <div class="state">${st}</div>
+      <div class="act">${owner ? `<button class="btn del" data-del="${esc(it.key)}" title="刪掉這台（站長）">刪除</button>` : ""}</div></div>`;
+  }).join("");
+  document.querySelectorAll(".who input").forEach(inp => {
+    inp.onfocus = () => { editing = true; };
+    inp.onblur = async () => { editing = false; await save(inp); };
+    inp.onkeydown = e => { if (e.key === "Enter") inp.blur(); if (e.key === "Escape") { inp.value = inp.defaultValue; inp.blur(); } };
+  });
+  document.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+    if (!confirm("刪掉這台電腦的紀錄？（之後它再回報會再出現）")) return;
+    try { await api("/api/hfss/usage/" + encodeURIComponent(b.dataset.del), {method: "DELETE"}); load(); } catch (e) { alert(e.message); }
+  });
+}
+async function save(inp) {
+  if (inp.value === inp.defaultValue) return;
+  try { await api("/api/hfss/usage/label", {method: "PUT", json: {key: inp.dataset.key, label: inp.value}}); inp.defaultValue = inp.value; }
+  catch (e) { alert("存不了：" + e.message); }
+  load();
+}
+async function load() {
+  clearTimeout(timer);
+  try { if (!editing) render(await api("/api/hfss/usage")); }
+  catch (e) { $("#list").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  timer = setTimeout(load, 5000);
+}
+(async () => {
+  try { ME = await api("/api/platform/me"); } catch (e) { ME = null; }
+  load();
+})();
+</script>
+</body>
+</html>

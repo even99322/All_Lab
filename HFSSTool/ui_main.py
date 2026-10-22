@@ -80,10 +80,13 @@ class MainWindow(QMainWindow):
         self.init_main_tab()
         self.init_advanced_tab()
         self.init_yig_tab()
+        self.tabs.currentChanged.connect(self._yig_tab_shown)
         self.init_plot_tab()
         self.init_status_bar()
         from update_ui import UpdateController          # v3.3：開啟時檢查新版、推播（跟量測程式一樣）
         self.updater = UpdateController(self)
+        from usage import UsageReporter                 # v3.4：平台「授權」頁看得到這台電腦有沒有占用 HFSS 授權
+        self.usage = UsageReporter(self, self._usage_task)
         self.dxf_editor = None
         self._register_settings()
         self.load_settings()
@@ -456,6 +459,15 @@ class MainWindow(QMainWindow):
         self.chk_yig = QCheckBox("在訊號線上方放置 YIG 球 (建模時自動建立球體、材料、偏置磁場與網格設定)")
         self.chk_yig.setStyleSheet("font-weight: bold;")
         lay.addWidget(self.chk_yig)
+        row = QHBoxLayout()
+        self.btn_yig_build = QPushButton("🧲 建立 / 更新 YIG 球")
+        self.btn_yig_build.setToolTip("在已經建好的模型上放 YIG 球（已經有的話換成目前的參數），不用重新建模。"
+                                      "沒有模型時請先在主控制面板「建立 3D 模型」或勾著這個再建模。")
+        self.btn_yig_build.clicked.connect(self._run_yig_task)
+        row.addWidget(self.btn_yig_build)
+        row.addWidget(QLabel("（不用重新建模；改了直徑、位置、偏置也是按這個）"))
+        row.addStretch(1)
+        lay.addLayout(row)
 
         g = QGroupBox("幾何")
         gl = QGridLayout(g)
@@ -534,7 +546,22 @@ class MainWindow(QMainWindow):
         note.setWordWrap(True)
         note.setStyleSheet(f"color: {self._muted()};")
         lay.addWidget(note)
+
+        # v3.4：3D 座標預覽（第一次切到這個分頁才建立）
+        self.yig_view_box = QGroupBox("3D 座標預覽（上基板表面＋波導＋YIG 球；滑鼠移到頂點顯示座標）")
+        self.yig_view_lay = QVBoxLayout(self.yig_view_box)
+        self.yig_view = None
+        self.yig_view_msg = QLabel("切到這個分頁時會讀 DXF 畫出來。")
+        self.yig_view_lay.addWidget(self.yig_view_msg)
+        lay.addWidget(self.yig_view_box)
         lay.addStretch()
+        self._yig_view_timer = QTimer(self)
+        self._yig_view_timer.setSingleShot(True)
+        self._yig_view_timer.setInterval(500)
+        self._yig_view_timer.timeout.connect(self.refresh_yig_view)
+        for w in (self.edit_yig_d, self.edit_yig_gap, self.edit_yig_x, self.edit_yig_y):
+            w.textChanged.connect(lambda _t: self.yig_view is not None and self._yig_view_timer.start())
+        self.combo_yig_pos.currentIndexChanged.connect(lambda _i: self.yig_view is not None and self._yig_view_timer.start())
 
         for w in (self.edit_yig_ms, self.edit_yig_bias, self.edit_yig_g, self.edit_yig_dh, self.edit_yig_span,
                   self.edit_yig_pts):
@@ -542,6 +569,76 @@ class MainWindow(QMainWindow):
         self.combo_yig_bmode.currentIndexChanged.connect(self._on_yig_bmode)
         self._yig_bmode_prev = 0
         self._update_yig_calc()
+
+    def _run_yig_task(self):
+        if not self.chk_yig.isChecked():
+            self.chk_yig.setChecked(True)
+        self.run_task('YIG')
+
+    def _yig_tab_shown(self, index):
+        """切到 YIG 分頁：第一次建立 3D 預覽，之後每次重新讀 DXF。"""
+        if self.tabs.widget(index) is None or self.tabs.tabText(index) != "YIG 磁性球":
+            return
+        if self.yig_view is None:
+            try:
+                from yig_view import make_view
+                self.yig_view = make_view(self.yig_view_box)
+            except Exception as e:  # noqa: BLE001 - 沒有 3D 繪圖也要能用其他功能
+                self.yig_view_msg.setText(f"沒辦法建立 3D 預覽：{e}")
+                return
+            self.yig_view.on_set_yig = self._set_yig_xy
+            self.yig_view.btn_refresh.clicked.connect(self.refresh_yig_view)
+            self.yig_view_lay.addWidget(self.yig_view)
+        self.refresh_yig_view()
+
+    def _yig_preview_params(self):
+        def f(edit, default):
+            try:
+                return float(edit.text())
+            except (TypeError, ValueError):
+                return default
+        auto = self.combo_yig_pos.currentIndex() == 0
+        return {"yig_diameter": f(self.edit_yig_d, 0.4), "yig_gap": f(self.edit_yig_gap, 0.1),
+                "yig_pos_mode": "auto" if auto else "abs",
+                "yig_dx": f(self.edit_yig_x, 0.0) if auto else 0.0, "yig_dy": f(self.edit_yig_y, 0.0) if auto else 0.0,
+                "yig_x": f(self.edit_yig_x, 0.0), "yig_y": f(self.edit_yig_y, 0.0)}
+
+    def refresh_yig_view(self):
+        if self.yig_view is None:
+            return
+        path = self.edit_dxf.text().strip()
+        if not path or not os.path.exists(path):
+            self.yig_view_msg.setText("先在主控制面板選 DXF 檔（或用「✏ 編輯」畫一個），這裡才畫得出來。")
+            self.yig_view.set_scene(None)
+            return
+        try:
+            from dxf_model import Design
+            from yig_view import scene_from
+
+            def f(edit, default):
+                try:
+                    return float(edit.text())
+                except (TypeError, ValueError):
+                    return default
+            design = Design.load(path)
+            scene = scene_from(design, f(self.edit_thick_die, 0.8), f(self.edit_thick_top, 0.035),
+                               self._yig_preview_params())
+        except Exception as e:  # noqa: BLE001
+            self.yig_view_msg.setText(f"讀不了 DXF：{e}")
+            self.yig_view.set_scene(None)
+            return
+        sph = scene["sphere"]
+        self.yig_view_msg.setText(f"{os.path.basename(path)}（{design.mode}）　上基板表面 z = {scene['z'][0]:g} mm、"
+                                  f"走線頂面 z = {scene['z'][1]:g} mm"
+                                  + (f"　YIG 球心 ({sph[0][0]:.4g}, {sph[0][1]:.4g}, {sph[0][2]:.4g}) mm" if sph else ""))
+        self.yig_view.set_scene(scene)
+
+    def _set_yig_xy(self, x, y):
+        """3D 預覽點選的頂點 → YIG 球心放在它正上方（絕對座標）。"""
+        self.combo_yig_pos.setCurrentIndex(1)
+        self.edit_yig_x.setText(f"{x:.4f}".rstrip("0").rstrip("."))
+        self.edit_yig_y.setText(f"{y:.4f}".rstrip("0").rstrip("."))
+        self.refresh_yig_view()
 
     def _yig_pos_labels(self, idx):
         if idx == 0:
@@ -997,6 +1094,21 @@ class MainWindow(QMainWindow):
         if self.dxf_editor is not None:
             self.combo_type.setCurrentText(self.dxf_editor.design.mode)
         self.statusBar().showMessage(f"DXF 已存檔並套用：{path}", 8000)
+        self.refresh_yig_view()
+
+    def _usage_task(self):
+        """平台「授權」頁顯示的「正在跑什麼」。"""
+        if not self._is_running():
+            return None
+
+        def num(edit):
+            try:
+                return float(edit.text())
+            except (TypeError, ValueError):
+                return None
+        return {"name": self.current_task or "", "project": self.confirmed_project or self.edit_project_name.text(),
+                "started": self.task_start_time or None, "cores": num(self.edit_hpc_cores),
+                "tasks": num(self.edit_hpc_tasks), "gpus": num(self.edit_hpc_gpus)}
 
     def closeEvent(self, event):
         if self.dxf_editor is not None and self.dxf_editor.isVisible() and not self.dxf_editor.close():
@@ -1018,6 +1130,10 @@ class MainWindow(QMainWindow):
         if self.help_dialog:
             self.help_dialog.close()
         self.updater.stop()
+        try:
+            self.usage.close()
+        except Exception:  # noqa: BLE001 - 平台連不到也要能關
+            pass
         event.accept()
 
     # ==================================================================
@@ -1042,6 +1158,8 @@ class MainWindow(QMainWindow):
         self.btn_pipeline.setEnabled(state)
         for b in self.step_buttons:
             b.setEnabled(state)
+        if hasattr(self, "btn_yig_build"):
+            self.btn_yig_build.setEnabled(state)
 
     # ==================================================================
     # 參數收集

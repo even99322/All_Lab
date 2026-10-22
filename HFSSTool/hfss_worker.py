@@ -33,7 +33,7 @@ class StepFailed(Exception):
 
 
 STEP_LABELS = {'OPEN': '開啟專案', 'BUILD': '建模', 'SIM_S': 'S參數模擬', 'SIM_FIELDS': '場型模擬',
-               'EXPORT_GIF': 'GIF 匯出', 'CLOSE': '關閉專案', 'PIPELINE': '一鍵全流程'}
+               'EXPORT_GIF': 'GIF 匯出', 'CLOSE': '關閉專案', 'PIPELINE': '一鍵全流程', 'YIG': '建立 / 更新 YIG 球'}
 
 
 class _Signal:
@@ -44,7 +44,7 @@ class _Signal:
 
 class HfssWorker:
     # 會修改專案、需要存檔/備份的任務
-    _MODIFYING = {"BUILD", "SIM_S", "SIM_FIELDS", "EXPORT_GIF"}
+    _MODIFYING = {"BUILD", "SIM_S", "SIM_FIELDS", "EXPORT_GIF", "YIG"}
 
     def __init__(self, params, emit=None):
         self.params = params
@@ -112,6 +112,7 @@ class HfssWorker:
             'SIM_S': self.run_s_param_sim,
             'SIM_FIELDS': self.run_fields_sim,
             'EXPORT_GIF': self.export_field_gifs,
+            'YIG': self.task_yig,
         }
 
         try:
@@ -697,6 +698,40 @@ class HfssWorker:
     # ------------------------------------------------------------------
     # YIG 鐵磁共振球
     # ------------------------------------------------------------------
+    def task_yig(self, hfss):
+        """v3.4：在已經建好的模型上建立（或換新）YIG 球：刪掉舊的球、偏置與網格設定，用 YIG 分頁目前的參數重建。"""
+        if not self.params.get('yig_enable'):
+            self.emit_log("❌ 請先勾選「在訊號線上方放置 YIG 球」。")
+            return False
+        names = list(hfss.modeler.object_names)
+        guides = [n for n in names if n.startswith("TOP_Copper_Guide")]
+        if not guides:
+            self.emit_log("❌ 專案裡找不到訊號線（TOP_Copper_Guide_*）：請先「建立 3D 模型」。")
+            return False
+        if yig.YIG_OBJECT in names:
+            self.emit_log("   移除舊的 YIG 球與設定…")
+            try:
+                for bnd in list(hfss.boundaries):
+                    if bnd.name == yig.YIG_BIAS:
+                        bnd.delete()
+            except Exception:
+                pass
+            try:
+                for op in list(hfss.mesh.meshoperations):
+                    if str(op.name).startswith("YIG_"):
+                        op.delete()
+            except Exception:
+                pass
+            try:
+                hfss.modeler.delete([yig.YIG_OBJECT])
+            except Exception as e:
+                self.emit_log(f"❌ 刪不掉舊的 YIG 球: {e}")
+                return False
+        ok = self._build_yig(hfss, guides)
+        if ok is not False:
+            self.emit_log("✅ YIG 球已建立 / 更新。要算共振請再跑「S 參數模擬」（Kittel 頻點與細掃會自動加上）。")
+        return ok
+
     def _yig_fields(self):
         p = self.params
         return yig.bias_fields(p['yig_bias_value'], p['yig_bias_mode'], p['yig_ms_t'], p.get('yig_g', 2.0))

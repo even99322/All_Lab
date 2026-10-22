@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDockWidget, QDoubleSpinBox, 
                              QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPushButton, QTableWidget,
                              QTableWidgetItem, QToolBar, QToolButton, QVBoxLayout, QWidget)
 
+import dxf_geom as G
 from dxf_model import BOARD_LAYERS, LAYER_INFO, LAYERS, PATH_LAYER, Design, DxfError, Shape
 
 FILL = {"b": "#7CB342", "db": "#7CB342", "ub": "#FFA726", "g": "#E53935", "h": "#9E9E9E", "v": "#1E88E5"}
@@ -125,22 +126,30 @@ class Canvas(QGraphicsView):
         if s.kind == "circle":
             (x, y), r = s.pts[0], s.r
             path.addEllipse(QPointF(x, y), r, r)
-        elif s.kind == "poly":
-            path.addPolygon(_poly(s.pts))
+            return path
+        ring = s.ring() if len(s.pts) >= 2 else []
+        if len(ring) >= 3:
+            path.addPolygon(_poly(ring))
             path.closeSubpath()
-        else:
-            from dxf_model import _polys, _ring, path_outline
-            for poly in _polys(path_outline(s.pts, s.width)):
-                path.addPolygon(_poly(_ring(poly)))
-                path.closeSubpath()
-            if path.isEmpty() and s.pts:            # 只有一個節點：給一條細線讓它點得到
-                line = QPainterPath(QPointF(*s.pts[0]))
-                for p in s.pts[1:]:
-                    line.lineTo(QPointF(*p))
-                st = QPainterPathStroker()
-                st.setWidth(max(s.width, 6 * self.px()))
-                path = st.createStroke(line)
+        elif s.pts:                                 # 太短 / 退化：給一條細線讓它點得到
+            line = _line_path(s.centerline() or s.pts)
+            st = QPainterPathStroker()
+            st.setWidth(max(s.width, 6 * self.px()))
+            path = st.createStroke(line)
         return path
+
+    def handles(self, s: Shape) -> List[Tuple[str, int, Tuple[float, float]]]:
+        """選取的圖形可以拖的點：n = 節點、c = Bézier 控制點、m = 線段中點（拖彎成圓弧）、r = 圓的半徑。"""
+        if s.kind == "circle":
+            return [("n", 0, s.pts[0]), ("r", 1, (s.pts[0][0] + s.r, s.pts[0][1]))]
+        out = [("n" if s.is_anchor(i) else "c", i, p) for i, p in enumerate(s.pts)]
+        if not s.bezier:
+            s.norm()
+            n = len(s.pts)
+            for k in range(s.n_segs()):
+                a, b = s.pts[k], s.pts[(k + 1) % n]
+                out.append(("m", k, G.arc_mid(a, b, s.bulges[k])))
+        return out
 
     def rebuild(self) -> None:
         sc = self.scene()
@@ -152,17 +161,15 @@ class Canvas(QGraphicsView):
         for f in d.foreign:
             if f["layer"] in hidden or len(f["pts"]) < 2:
                 continue
-            path = QPainterPath(QPointF(*f["pts"][0]))
-            for p in f["pts"][1:]:
-                path.lineTo(QPointF(*p))
-            sc.addPath(path, self._pen("#90A4AE", 1, Qt.PenStyle.DashLine))
+            sc.addPath(_line_path(f["pts"]), self._pen("#90A4AE", 1, Qt.PenStyle.DashLine))
         gen = d.generated()
         order = {name: i for i, name in enumerate(DRAW_ORDER)}
         items = sorted(enumerate(d.shapes), key=lambda kv: order.get(kv[1].layer, 9))
         # 自動上地畫在訊號線下面
         if "ub" not in hidden:
-            for pts in gen.get("ub", []):
-                sc.addPolygon(_poly(pts), self._pen(FILL["ub"], 1, Qt.PenStyle.DashLine), QBrush(_qc(FILL["ub"], 80)))
+            for verts in gen.get("ub", []):
+                sc.addPolygon(_poly(G.ring_points(verts)), self._pen(FILL["ub"], 1, Qt.PenStyle.DashLine),
+                              QBrush(_qc(FILL["ub"], 80)))
         for idx, s in items:
             if s.layer in hidden or (s.kind == "path" and PATH_LAYER in hidden and "g" in hidden):
                 continue
@@ -171,10 +178,7 @@ class Canvas(QGraphicsView):
                             QBrush(_qc(color, ALPHA.get(s.layer, 120))))
             it.setData(0, idx)
             if s.kind == "path" and PATH_LAYER not in hidden and len(s.pts) >= 2:
-                line = QPainterPath(QPointF(*s.pts[0]))
-                for p in s.pts[1:]:
-                    line.lineTo(QPointF(*p))
-                sc.addPath(line, self._pen(edge, 1, Qt.PenStyle.DashDotLine))
+                sc.addPath(_line_path(s.centerline()), self._pen(edge, 1, Qt.PenStyle.DashDotLine))
         # 埠（微波線端點在板邊）
         r = 5 * self.px()
         for (x, y), _side in d.ports():
@@ -184,31 +188,71 @@ class Canvas(QGraphicsView):
             s = d.shapes[self.selected]
             sc.addPath(self.shape_path(s), self._pen("#2979FF", 2.5))
             h = NODE_PX / 2 * self.px()
-            nodes = s.pts if s.kind != "circle" else [s.pts[0], (s.pts[0][0] + s.r, s.pts[0][1])]
-            for i, (x, y) in enumerate(nodes):
-                fill = "#FFFFFF" if not (s.kind == "path" and i in (0, len(nodes) - 1)) else "#00C853"
-                sc.addRect(QRectF(x - h, y - h, 2 * h, 2 * h), self._pen("#2979FF", 1.5), QBrush(QColor(fill)))
+            hs = self.handles(s)
+            if s.bezier:                                  # 控制點連到它的錨點
+                for kind, i, (x, y) in hs:
+                    if kind == "c":
+                        a = s.pts[i - 1] if i % 3 == 1 else s.pts[(i + 1) % len(s.pts)]
+                        sc.addLine(a[0], a[1], x, y, self._pen("#2979FF", 1, Qt.PenStyle.DashLine))
+            last = len(s.pts) - 1
+            for kind, i, (x, y) in hs:
+                if kind == "m":
+                    dm = QPolygonF([QPointF(x, y - h), QPointF(x + h, y), QPointF(x, y + h), QPointF(x - h, y)])
+                    sc.addPolygon(dm, self._pen("#F57C00", 1.2), QBrush(QColor("#FFE0B2")))
+                elif kind == "c":
+                    sc.addEllipse(QRectF(x - h * 0.8, y - h * 0.8, 1.6 * h, 1.6 * h), self._pen("#2979FF", 1.2),
+                                  QBrush(QColor("#BBDEFB")))
+                else:
+                    end = s.kind == "path" and i in (0, last)
+                    fill = "#00C853" if end else "#FFFFFF"
+                    if s.kind != "circle" and not s.bezier and s.fillets and i < len(s.fillets) and s.fillets[i] > 0:
+                        fill = "#CE93D8"                  # 有圓角的節點
+                    sc.addRect(QRectF(x - h, y - h, 2 * h, 2 * h), self._pen("#2979FF", 1.5), QBrush(QColor(fill)))
         # 畫圖中
         if self.draft:
-            pts = self.draft + [self.cursor]
-            pen = self._pen("#2979FF", 1.5, Qt.PenStyle.DashLine)
-            if self.tool == "rect" and len(self.draft) == 1:
-                (x0, y0), (x1, y1) = self.draft[0], self.cursor
-                sc.addRect(QRectF(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0)), pen)
-            elif self.tool == "circle" and len(self.draft) == 1:
-                (cx, cy), (x1, y1) = self.draft[0], self.cursor
-                rr = math.hypot(x1 - cx, y1 - cy)
-                sc.addEllipse(QRectF(cx - rr, cy - rr, 2 * rr, 2 * rr), pen)
-            else:
-                if self.tool == "path" and len(pts) >= 2:
-                    from dxf_model import _polys, _ring, path_outline
-                    for poly in _polys(path_outline(pts, self.ed.new_width.value())):
-                        sc.addPolygon(_poly(_ring(poly)), self._pen(FILL["g"], 1), QBrush(_qc(FILL["g"], 90)))
-                path = QPainterPath(QPointF(*pts[0]))
-                for p in pts[1:]:
-                    path.lineTo(QPointF(*p))
-                sc.addPath(path, pen)
+            self._draw_draft(sc)
         self.viewport().update()
+
+    def _draft_shape(self) -> Optional[Shape]:
+        """畫到一半的圖形（含游標那一點），預覽用。"""
+        pts = self.draft + [self.cursor]
+        ed = self.ed
+        if self.tool == "path" and len(pts) >= 2:
+            f = ed.new_fillet.value()
+            return Shape("path", "g", pts, width=ed.new_width.value(), fillets=[0.0] + [f] * (len(pts) - 2) + [0.0])
+        if self.tool == "bezier" and len(pts) >= 2:
+            return Shape("path", "g", G.bezier_from_anchors(pts), width=ed.new_width.value(), smooth="bezier")
+        if self.tool == "bezpoly" and len(pts) >= 3:
+            return Shape("poly", ed.current_layer(), G.bezier_from_anchors(pts, closed=True), smooth="bezier")
+        if self.tool == "arc" and len(pts) == 3:
+            return Shape("path", "g", [pts[0], pts[2]], width=ed.new_width.value(),
+                         bulges=[G.arc3_bulge(pts[0], pts[1], pts[2])])
+        return None
+
+    def _draw_draft(self, sc) -> None:
+        pts = self.draft + [self.cursor]
+        pen = self._pen("#2979FF", 1.5, Qt.PenStyle.DashLine)
+        if self.tool == "rect" and len(self.draft) == 1:
+            (x0, y0), (x1, y1) = self.draft[0], self.cursor
+            sc.addRect(QRectF(min(x0, x1), min(y0, y1), abs(x1 - x0), abs(y1 - y0)), pen)
+            return
+        if self.tool == "circle" and len(self.draft) == 1:
+            (cx, cy), (x1, y1) = self.draft[0], self.cursor
+            rr = math.hypot(x1 - cx, y1 - cy)
+            sc.addEllipse(QRectF(cx - rr, cy - rr, 2 * rr, 2 * rr), pen)
+            return
+        shape = self._draft_shape()
+        if shape is not None:
+            ring = shape.ring()
+            color = FILL["g"] if shape.kind == "path" else FILL.get(shape.layer, "#8E24AA")
+            if len(ring) >= 3:
+                sc.addPolygon(_poly(ring), self._pen(color, 1), QBrush(_qc(color, 90)))
+            if shape.kind == "path":
+                sc.addPath(_line_path(shape.centerline()), self._pen("#2979FF", 1, Qt.PenStyle.DashDotLine))
+        sc.addPath(_line_path(pts), pen)
+        h = 3 * self.px()
+        for x, y in self.draft:
+            sc.addRect(QRectF(x - h, y - h, 2 * h, 2 * h), self._pen("#2979FF", 1), QBrush(QColor("#FFFFFF")))
 
     def drawBackground(self, painter: QPainter, rect: QRectF) -> None:
         dark = self.palette().window().color().lightness() < 128
@@ -234,16 +278,19 @@ class Canvas(QGraphicsView):
         painter.drawLine(QPointF(rect.left(), 0), QPointF(rect.right(), 0))
 
     # ---- 選取 / 點擊判斷 -------------------------------------------------------------------------
-    def node_at(self, view_pos) -> Optional[int]:
+    def node_at(self, view_pos) -> Optional[Tuple[str, int]]:
+        """游標下的把手 → (種類, 索引)；節點優先於控制點、線段中點。"""
         if self.selected is None or self.selected >= len(self.design.shapes):
             return None
         s = self.design.shapes[self.selected]
-        nodes = s.pts if s.kind != "circle" else [s.pts[0], (s.pts[0][0] + s.r, s.pts[0][1])]
-        for i, (x, y) in enumerate(nodes):
+        best = None
+        rank = {"n": 0, "r": 0, "c": 1, "m": 2}
+        for kind, i, (x, y) in self.handles(s):
             p = self.mapFromScene(QPointF(x, y))
             if abs(p.x() - view_pos.x()) <= NODE_PX and abs(p.y() - view_pos.y()) <= NODE_PX:
-                return i
-        return None
+                if best is None or rank[kind] < rank[best[0]]:
+                    best = (kind, i)
+        return best
 
     def shape_at(self, x: float, y: float) -> Optional[int]:
         hidden = self.ed.hidden_layers()
@@ -298,10 +345,11 @@ class Canvas(QGraphicsView):
         free = bool(ev.modifiers() & Qt.KeyboardModifier.AltModifier)
         sx, sy = self._constrain(*self.snap(x, y, free), ev)
         if self.tool == "select":
-            node = self.node_at(ev.position())
-            if node is not None:
+            h = self.node_at(ev.position())
+            if h is not None:
                 self.ed.checkpoint()
-                self.drag = {"kind": "node", "i": node, "free": free}
+                s = self.design.shapes[self.selected]
+                self.drag = {"kind": "node", "h": h[0], "i": h[1], "free": free, "orig": s.copy()}
                 return
             idx = self.shape_at(x, y)
             if idx != self.selected:
@@ -314,21 +362,64 @@ class Canvas(QGraphicsView):
         if self.tool in ("rect", "circle") and self.draft:
             self._finish((sx, sy))
             return
+        if self.tool == "arc" and len(self.draft) == 2:
+            self._finish((sx, sy))
+            return
         self.draft.append((sx, sy))
         if self.tool in ("rect", "circle"):
             self.cursor = (sx, sy)
         self.rebuild()
 
+    def _drag_handle(self, s: Shape, x: float, y: float, sx: float, sy: float, alt: bool) -> None:
+        kind, i, o = self.drag["h"], self.drag["i"], self.drag["orig"]
+        if s.kind == "circle":
+            if kind == "n":
+                s.pts[0] = (sx, sy)
+            else:
+                s.r = max(1e-4, math.hypot(sx - s.pts[0][0], sy - s.pts[0][1]))
+            return
+        if kind == "m":                                    # 拖線段中點：彎成圓弧（不吸附格線，比較順）
+            n = len(s.pts)
+            s.bulges[i] = round(G.bulge_from_sagitta(s.pts[i], s.pts[(i + 1) % n], (x, y)), 6)
+            if abs(s.bulges[i]) < 0.01:
+                s.bulges[i] = 0.0                          # 拉回弦附近 → 直線
+            return
+        if not s.bezier:
+            s.pts[i] = (sx, sy)
+            return
+        n = len(s.pts)
+        if kind == "n":                                    # 錨點：兩邊的控制點一起移
+            dx, dy = sx - o.pts[i][0], sy - o.pts[i][1]
+            s.pts[i] = (sx, sy)
+            neigh = [(i - 1) % n, (i + 1) % n] if s.closed else [j for j in (i - 1, i + 1) if 0 <= j < n]
+            for j in neigh:
+                s.pts[j] = (o.pts[j][0] + dx, o.pts[j][1] + dy)
+            return
+        s.pts[i] = (sx, sy)                                # 控制點；沒按 Alt 時對面的控制點跟著保持平滑
+        if alt:
+            return
+        anchor, other = (i - 1, i - 2) if i % 3 == 1 else (i + 1, i + 2)
+        if s.closed:
+            anchor, other = anchor % n, other % n
+        elif not (0 <= other < n and 0 <= anchor < n):
+            return
+        a = s.pts[anchor]
+        vx, vy = sx - a[0], sy - a[1]
+        L = math.hypot(vx, vy)
+        ol = math.hypot(o.pts[other][0] - a[0], o.pts[other][1] - a[1])
+        if L > 1e-12:
+            s.pts[other] = (a[0] - vx / L * ol, a[1] - vy / L * ol)
+
     def mouseMoveEvent(self, ev) -> None:
         x, y = self._scene_xy(ev)
-        free = bool(ev.modifiers() & Qt.KeyboardModifier.AltModifier)
+        alt = bool(ev.modifiers() & Qt.KeyboardModifier.AltModifier)
         if self.drag and self.drag["kind"] == "pan":
             d = ev.position() - self.drag["pos"]
             self.drag["pos"] = ev.position()
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - int(round(d.x())))
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - int(round(d.y())))
             return
-        sx, sy = self._constrain(*self.snap(x, y, free or bool(self.drag and self.drag.get("free"))), ev)
+        sx, sy = self._constrain(*self.snap(x, y, alt or bool(self.drag and self.drag.get("free"))), ev)
         self.cursor = (sx, sy)
         info = ""
         if self.draft:
@@ -338,14 +429,10 @@ class Canvas(QGraphicsView):
         if self.drag and self.selected is not None:
             s = self.design.shapes[self.selected]
             if self.drag["kind"] == "node":
-                i = self.drag["i"]
-                if s.kind == "circle":
-                    if i == 0:
-                        s.pts[0] = (sx, sy)
-                    else:
-                        s.r = max(1e-4, math.hypot(sx - s.pts[0][0], sy - s.pts[0][1]))
-                else:
-                    s.pts[i] = (sx, sy)
+                self._drag_handle(s, x, y, sx, sy, alt)
+                if self.drag["h"] == "m":
+                    b = s.bulges[self.drag["i"]]
+                    self.cursor_moved.emit(sx, sy, f"弧 {math.degrees(4 * math.atan(b)):.1f}°")
             elif self.drag["kind"] == "body":
                 ox, oy = self.drag["start"]
                 o = self.drag["orig"]
@@ -356,7 +443,7 @@ class Canvas(QGraphicsView):
         if self.draft:
             self.rebuild()
         if self.tool == "select":
-            hover = self.node_at(ev.position()) is not None
+            hover = self.node_at(ev.position())
             self.setCursor(Qt.CursorShape.SizeAllCursor if hover else Qt.CursorShape.ArrowCursor)
 
     def mouseReleaseEvent(self, ev) -> None:
@@ -373,7 +460,7 @@ class Canvas(QGraphicsView):
                 self.selection_changed.emit()
 
     def mouseDoubleClickEvent(self, ev) -> None:
-        if self.tool in ("path", "poly"):
+        if self.tool in ("path", "poly", "bezier", "bezpoly"):
             if self.draft and len(self.draft) >= 2 and self.draft[-1] == self.draft[-2]:
                 self.draft.pop()
             self._finish(None)
@@ -383,11 +470,16 @@ class Canvas(QGraphicsView):
             if s.kind in ("path", "poly"):
                 x, y = self._scene_xy(ev)
                 self.ed.checkpoint()
-                i, p = _nearest_segment(s.pts, (x, y), closed=s.kind == "poly")
-                s.pts.insert(i + 1, self.snap(*p))
+                if s.bezier:
+                    seg, t, _d = G.nearest_bezier(s.pts, (x, y), s.closed)
+                    new = s.insert_after(seg, t=t)
+                else:
+                    seg = _nearest_seg(s, (x, y))
+                    new = s.insert_after(seg, self.snap(x, y))
                 self.rebuild()
                 self.changed.emit()
                 self.selection_changed.emit()
+                self.ed.table.setCurrentCell(new, 0)
 
     def wheelEvent(self, ev) -> None:
         f = 1.2 if ev.angleDelta().y() > 0 else 1 / 1.2
@@ -428,25 +520,37 @@ class Canvas(QGraphicsView):
         tool = self.tool
         self.draft = []
         shape = None
+        ed = self.ed
         if tool == "path" and len(pts) >= 2:
-            shape = Shape("path", "g", pts, width=self.ed.new_width.value(), gap=self.ed.new_gap.value())
+            f = ed.new_fillet.value()
+            shape = Shape("path", "g", pts, width=ed.new_width.value(), gap=ed.new_gap.value(),
+                          fillets=[0.0] + [f] * (len(pts) - 2) + [0.0])
+        elif tool == "bezier" and len(pts) >= 2:
+            shape = Shape("path", "g", G.bezier_from_anchors(pts), width=ed.new_width.value(), gap=ed.new_gap.value(),
+                          smooth="bezier")
+        elif tool == "arc" and len(pts) == 3:
+            b = G.arc3_bulge(pts[0], pts[1], pts[2])
+            shape = Shape("path", "g", [pts[0], pts[2]], width=ed.new_width.value(), gap=ed.new_gap.value(), bulges=[b])
         elif tool == "poly" and len(pts) >= 3:
-            shape = Shape("poly", self.ed.current_layer(), pts)
+            shape = Shape("poly", ed.current_layer(), pts)
+        elif tool == "bezpoly" and len(pts) >= 3:
+            shape = Shape("poly", ed.current_layer(), G.bezier_from_anchors(pts, closed=True), smooth="bezier")
         elif tool == "rect" and len(pts) == 2:
             (x0, y0), (x1, y1) = pts
             if x0 != x1 and y0 != y1:
-                shape = Shape("poly", self.ed.current_layer(),
+                shape = Shape("poly", ed.current_layer(),
                               [(min(x0, x1), min(y0, y1)), (max(x0, x1), min(y0, y1)), (max(x0, x1), max(y0, y1)),
                                (min(x0, x1), max(y0, y1))])
         elif tool == "circle" and len(pts) == 2:
             r = math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1])
             if r > 0:
-                layer = self.ed.current_layer()
+                layer = ed.current_layer()
                 shape = Shape("circle", layer if layer in ("h", "v") else "h", [pts[0]], r=r)
         if shape is None:
             self.rebuild()
             return
-        self.ed.checkpoint()
+        shape.norm()
+        ed.checkpoint()
         self.design.shapes.append(shape)
         self.selected = len(self.design.shapes) - 1
         self.rebuild()
@@ -458,42 +562,80 @@ class Canvas(QGraphicsView):
             self._finish(None)
             return
         m = QMenu(self)
-        node = self.node_at(ev.position())
-        if node is not None:
+        h = self.node_at(ev.position())
+        ed = self.ed
+        if h is not None:
             s = self.design.shapes[self.selected]
-            if s.kind != "circle":
+            kind, i = h
+            if kind == "n" and s.kind != "circle":
                 a = m.addAction("刪除這個節點")
-                a.setEnabled(len(s.pts) > (3 if s.kind == "poly" else 2))
-                a.triggered.connect(lambda: self.ed.delete_node(node))
+                a.setEnabled(s.can_delete(i))
+                a.triggered.connect(lambda: ed.delete_node(i))
+                if not s.bezier and (s.closed or 0 < i < len(s.pts) - 1):
+                    m.addAction("設圓角…", lambda: ed.ask_fillet(i))
+                    if s.fillets and i < len(s.fillets) and s.fillets[i]:
+                        m.addAction("取消圓角", lambda: ed.set_fillet(i, 0.0))
+            elif kind == "m":
+                m.addAction("改成直線", lambda: ed.set_bulge(i, 0.0))
+                m.addAction("圓弧 90°（往右彎）", lambda: ed.set_bulge(i, math.tan(math.radians(90) / 4)))
+                m.addAction("圓弧 90°（往左彎）", lambda: ed.set_bulge(i, -math.tan(math.radians(90) / 4)))
+                m.addAction("半圓", lambda: ed.set_bulge(i, 1.0))
+                m.addAction("反向彎", lambda: ed.set_bulge(i, -s.bulges[i]))
         else:
             idx = self.shape_at(x, y)
             if idx is not None:
                 self.select(idx)
-                m.addAction("刪除（Delete）", self.ed.delete_selected)
-                m.addAction("複製一份", self.ed.duplicate_selected)
+                m.addAction("刪除（Delete）", ed.delete_selected)
+                m.addAction("複製一份", ed.duplicate_selected)
                 s = self.design.shapes[idx]
+                if s.kind in ("path", "poly"):
+                    if s.bezier:
+                        m.addAction("改回折線（只留錨點）", ed.to_polyline)
+                    else:
+                        m.addAction("變成平滑曲線（Bézier）", ed.to_bezier)
                 if s.kind in ("poly", "circle"):
                     sub = m.addMenu("改到圖層")
                     for layer in LAYERS[self.design.mode]:
                         act = sub.addAction(f"{layer}　{LAYER_INFO[layer][0]}")
-                        act.triggered.connect(lambda _c=False, la=layer: self.ed.set_layer(la))
+                        act.triggered.connect(lambda _c=False, la=layer: ed.set_layer(la))
         if not m.isEmpty():
             m.exec(ev.globalPosition().toPoint())
 
 
-def _nearest_segment(pts, p, closed: bool) -> Tuple[int, Tuple[float, float]]:
-    best = (0, pts[0], float("inf"))
-    n = len(pts)
-    for i in range(n if closed else n - 1):
-        a, b = pts[i], pts[(i + 1) % n]
-        dx, dy = b[0] - a[0], b[1] - a[1]
-        L = dx * dx + dy * dy
-        t = 0.0 if L == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L))
-        q = (a[0] + t * dx, a[1] + t * dy)
-        dist = math.hypot(q[0] - p[0], q[1] - p[1])
-        if dist < best[2]:
-            best = (i, q, dist)
-    return best[0], best[1]
+def _line_path(pts) -> QPainterPath:
+    path = QPainterPath()
+    if not pts:
+        return path
+    path.moveTo(QPointF(*pts[0]))
+    for p in pts[1:]:
+        path.lineTo(QPointF(*p))
+    return path
+
+
+def _nearest_seg(s: Shape, p) -> int:
+    """直線 / 圓弧段裡最接近 p 的那一段。"""
+    s.norm()
+    n = len(s.pts)
+    best, best_d = 0, float("inf")
+    for k in range(s.n_segs()):
+        a, b = s.pts[k], s.pts[(k + 1) % n]
+        if s.bulges[k]:
+            arc = G.bulge_arc(a, b, s.bulges[k])
+            samples = G.flatten([("A", arc[0], arc[1], arc[2], arc[3], a, b)], 0.01) if arc else [a, b]
+        else:
+            samples = [a, b]
+        for j in range(len(samples) - 1):
+            d = _seg_dist(samples[j], samples[j + 1], p)
+            if d < best_d:
+                best, best_d = k, d
+    return best
+
+
+def _seg_dist(a, b, p) -> float:
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    L = dx * dx + dy * dy
+    t = 0.0 if L == 0 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L))
+    return math.hypot(a[0] + t * dx - p[0], a[1] + t * dy - p[1])
 
 
 # =====================================================================================================
@@ -539,6 +681,9 @@ class DxfEditor(QMainWindow):
         nm = QMenu(new)
         nm.addAction("MS 範本（板材＋一條直的微波線）", lambda: self.new_design("MS"))
         nm.addAction("CPW 範本（下板材＋自動上地＋微波線）", lambda: self.new_design("CPW"))
+        nm.addSeparator()
+        nm.addAction("空白 MS（只有板材，自己畫）", lambda: self.new_design("MS", trace=False))
+        nm.addAction("空白 CPW（只有下板材，自己畫）", lambda: self.new_design("CPW", trace=False))
         new.setMenu(nm)
         tb.addWidget(new)
         for text, key, fn in (("開啟…", QKeySequence.StandardKey.Open, self.open_dialog),
@@ -558,20 +703,6 @@ class DxfEditor(QMainWindow):
         tb.addAction(self.act_undo)
         tb.addAction(self.act_redo)
         tb.addSeparator()
-        grp = QActionGroup(self)
-        self.tool_actions = {}
-        for tool, text, keys in (("select", "選取", ("F1", "V")), ("pan", "平移", ("F2", "H")),
-                                 ("path", "微波線", ("P",)), ("poly", "多邊形", ("G",)),
-                                 ("rect", "矩形", ("R",)), ("circle", "圓（孔）", ("C",))):
-            a = QAction(f"{text}（{keys[0]}）", self)
-            a.setCheckable(True)
-            a.setShortcuts([QKeySequence(k) for k in keys])
-            a.triggered.connect(lambda _c=False, t=tool: self.set_tool(t))
-            grp.addAction(a)
-            tb.addAction(a)
-            self.tool_actions[tool] = a
-        self.tool_actions["select"].setChecked(True)
-        tb.addSeparator()
         a = QAction("全部顯示（F）", self)
         a.setShortcut(QKeySequence("F"))
         a.triggered.connect(self.canvas.fit)
@@ -588,7 +719,34 @@ class DxfEditor(QMainWindow):
         self.spin_grid.setSuffix(" mm")
         self.spin_grid.valueChanged.connect(lambda _v: self.canvas.viewport().update())
         tb.addWidget(self.spin_grid)
-        tb.addWidget(QLabel("  Alt：不吸附　Shift：0/45/90°　右鍵：結束 / 選單"))
+        # 第二排：畫圖工具
+        self.addToolBarBreak()
+        tb2 = QToolBar("畫圖")
+        tb2.setMovable(False)
+        self.addToolBar(tb2)
+        grp = QActionGroup(self)
+        self.tool_actions = {}
+        for tool, text, keys, tip in (
+                ("select", "選取", ("F1", "V"), "點圖形選取；拖節點、拖整個圖形；雙擊線段加節點；拖橘色菱形把線段彎成圓弧"),
+                ("pan", "平移", ("F2", "H"), "拖曳移動畫面（也可以按住空白鍵或滑鼠中鍵）"),
+                ("path", "微波線", ("P",), "點節點畫中心線（線寬、轉角圓角在左邊設定）；雙擊或 Enter 結束"),
+                ("arc", "三點弧", ("A",), "起點 → 弧上一點 → 終點，畫一段圓弧微波線"),
+                ("bezier", "曲線", ("B",), "點幾個錨點，畫出平滑的 Bézier 微波線；之後可以拖藍色控制點調整"),
+                ("poly", "多邊形", ("G",), "在目前圖層畫封閉多邊形"),
+                ("bezpoly", "曲線多邊形", ("K",), "在目前圖層畫平滑的封閉曲線"),
+                ("rect", "矩形", ("R",), "兩個對角點"),
+                ("circle", "圓（孔）", ("C",), "圓心 → 半徑（螺絲孔 h、過孔 v）")):
+            a = QAction(f"{text}（{keys[0]}）", self)
+            a.setCheckable(True)
+            a.setToolTip(tip)
+            a.setShortcuts([QKeySequence(k) for k in keys])
+            a.triggered.connect(lambda _c=False, t=tool: self.set_tool(t))
+            grp.addAction(a)
+            tb2.addAction(a)
+            self.tool_actions[tool] = a
+        self.tool_actions["select"].setChecked(True)
+        tb2.addSeparator()
+        tb2.addWidget(QLabel("  Alt：不吸附　Shift：0/45/90°　右鍵：結束 / 選單"))
 
     def _spin(self, lo=-1e5, hi=1e5, val=0.0, dec=4) -> QDoubleSpinBox:
         s = QDoubleSpinBox()
@@ -635,6 +793,9 @@ class DxfEditor(QMainWindow):
         self.new_gap = self._spin(0.0, 1000, 0.2)
         f.addRow("線寬", self.new_width)
         f.addRow("間隙（CPW）", self.new_gap)
+        self.new_fillet = self._spin(0.0, 1000, 0.0)
+        self.new_fillet.setToolTip("微波線工具（P）畫的轉角自動加這個半徑的圓角；0 = 尖角。之後可以在節點表格逐點改")
+        f.addRow("轉角圓角", self.new_fillet)
         v.addWidget(g)
 
         g = QGroupBox("圖層")
@@ -659,7 +820,7 @@ class DxfEditor(QMainWindow):
     def _build_right(self) -> None:
         w = QWidget()
         self.props = QVBoxLayout(w)
-        self.lbl_sel = QLabel("點選圖形來編輯。\n\n雙擊線段：加節點\n拖白色方塊：移動節點\n右鍵節點：刪除節點")
+        self.lbl_sel = QLabel("")
         self.lbl_sel.setWordWrap(True)
         self.props.addWidget(self.lbl_sel)
         self.form = QFormLayout()
@@ -678,8 +839,8 @@ class DxfEditor(QMainWindow):
         self.form.addRow("圓心 X", self.sp_cx)
         self.form.addRow("圓心 Y", self.sp_cy)
         self.form.addRow("半徑", self.sp_r)
-        self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["X (mm)", "Y (mm)"])
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["X (mm)", "Y (mm)", "圓角 R", "弧 °"])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.itemChanged.connect(self._table_changed)
         self.props.addWidget(self.table)
@@ -817,11 +978,16 @@ class DxfEditor(QMainWindow):
             wdg.setVisible(nodes)
         self.btn_delete.setVisible(s is not None)
         if s is None:
-            self.lbl_sel.setText("點選圖形來編輯。\n\n雙擊線段：加節點\n拖白色方塊：移動節點\n右鍵節點：刪除節點\n"
-                                 "拖圖形：整個移動")
+            self.lbl_sel.setText("點選圖形來編輯。<br><br>拖白色方塊：移動節點<br>拖橘色菱形：把線段彎成圓弧<br>"
+                                 "雙擊線段：加節點<br>右鍵節點：刪除、設圓角<br>拖圖形：整個移動<br>"
+                                 "表格「圓角 R」：轉角半徑；「弧 °」：到下一點那段的圓心角（正 = 往右彎）")
         else:
             kind = {"path": "微波線（中心線＋線寬）", "poly": "多邊形", "circle": "圓"}[s.kind]
-            self.lbl_sel.setText(f"<b>{kind}</b>　圖層 {s.layer}")
+            if s.bezier:
+                kind = "曲線微波線（Bézier）" if s.kind == "path" else "曲線多邊形（Bézier）"
+            extra = "<br><span style='color:gray'>方塊 = 錨點、藍圈 = 控制點（拖控制點會保持平滑，按住 Alt 可以折角）</span>" \
+                if s.bezier else ""
+            self.lbl_sel.setText(f"<b>{kind}</b>　圖層 {s.layer}{extra}")
             if s.kind == "path":
                 self.sp_width.setValue(s.width)
                 self.sp_gap.setValue(s.gap)
@@ -832,10 +998,7 @@ class DxfEditor(QMainWindow):
             if s.kind != "path":
                 self.combo_shape_layer.setCurrentIndex(max(0, self.combo_shape_layer.findData(s.layer)))
             if nodes:
-                self.table.setRowCount(len(s.pts))
-                for r, (x, y) in enumerate(s.pts):
-                    self.table.setItem(r, 0, QTableWidgetItem(_fmt(x)))
-                    self.table.setItem(r, 1, QTableWidgetItem(_fmt(y)))
+                self._fill_table(s)
         self.table.blockSignals(False)
         self._sync = False
 
@@ -914,45 +1077,143 @@ class DxfEditor(QMainWindow):
         s.layer = layer
         self._commit()
 
+    def _fill_table(self, s: Shape) -> None:
+        """節點表格：X、Y、圓角 R（節點）、弧 °（到下一點那一段）；Bézier 第三欄是錨點 / 控制點。"""
+        if s.bezier:
+            self.table.setColumnCount(3)
+            self.table.setHorizontalHeaderLabels(["X (mm)", "Y (mm)", "種類"])
+        else:
+            self.table.setColumnCount(4)
+            self.table.setHorizontalHeaderLabels(["X (mm)", "Y (mm)", "圓角 R", "弧 °"])
+            s.norm()
+        self.table.setRowCount(len(s.pts))
+        n = len(s.pts)
+        ro = Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled
+        for r, (x, y) in enumerate(s.pts):
+            self.table.setItem(r, 0, QTableWidgetItem(_fmt(x)))
+            self.table.setItem(r, 1, QTableWidgetItem(_fmt(y)))
+            if s.bezier:
+                it = QTableWidgetItem("錨點" if s.is_anchor(r) else "控制點")
+                it.setFlags(ro)
+                self.table.setItem(r, 2, it)
+                continue
+            can_fillet = s.closed or 0 < r < n - 1
+            it = QTableWidgetItem(_fmt(s.fillets[r]) if s.fillets[r] else "")
+            if not can_fillet:
+                it.setFlags(ro)
+            self.table.setItem(r, 2, it)
+            has_seg = r < s.n_segs()
+            b = s.bulges[r] if has_seg else 0.0
+            it = QTableWidgetItem(f"{math.degrees(4 * math.atan(b)):.2f}".rstrip("0").rstrip(".") if b else "")
+            if not has_seg:
+                it.setFlags(ro)
+            self.table.setItem(r, 3, it)
+
     def _table_changed(self, item: QTableWidgetItem) -> None:
         s = self._selected()
         if self._sync or s is None:
             return
+        r, c = item.row(), item.column()
+        text = item.text().strip()
         try:
-            v = float(item.text())
+            v = float(text) if text else 0.0
         except ValueError:
             self._refresh_props()
             return
-        r, c = item.row(), item.column()
         self.checkpoint()
-        x, y = s.pts[r]
-        s.pts[r] = (v, y) if c == 0 else (x, v)
+        if c in (0, 1):
+            x, y = s.pts[r]
+            s.pts[r] = (v, y) if c == 0 else (x, v)
+        elif c == 2 and not s.bezier:
+            s.norm()
+            s.fillets[r] = max(0.0, v)
+        elif c == 3 and not s.bezier:
+            s.norm()
+            v = max(-359.0, min(359.0, v))
+            s.bulges[r] = math.tan(math.radians(v) / 4.0)
         self.canvas.rebuild()
         self._on_changed()
+        if c >= 2:
+            self._refresh_props()
+
+    def set_fillet(self, i: int, r: float) -> None:
+        s = self._selected()
+        if s is None or s.bezier or s.kind == "circle":
+            return
+        self.checkpoint()
+        s.norm()
+        s.fillets[i] = max(0.0, r)
+        self._commit()
+
+    def ask_fillet(self, i: int) -> None:
+        s = self._selected()
+        if s is None:
+            return
+        s.norm()
+        from PyQt6.QtWidgets import QInputDialog
+        cur = s.fillets[i] or max(s.width * 2, 1.0) if s.kind == "path" else (s.fillets[i] or 1.0)
+        r, ok = QInputDialog.getDouble(self, "圓角", "轉角半徑 (mm)：", cur, 0.0, 1e4, 4)
+        if ok:
+            self.set_fillet(i, r)
+
+    def set_bulge(self, i: int, b: float) -> None:
+        s = self._selected()
+        if s is None or s.bezier or s.kind == "circle":
+            return
+        self.checkpoint()
+        s.norm()
+        s.bulges[i] = b
+        self._commit()
+
+    def to_bezier(self) -> None:
+        """折線 → 經過同樣節點的平滑曲線（之後拖控制點微調）。"""
+        s = self._selected()
+        if s is None or s.kind not in ("path", "poly") or s.bezier:
+            return
+        self.checkpoint()
+        s.pts = G.bezier_from_anchors(s.pts, closed=s.closed)
+        s.smooth, s.bulges, s.fillets = "bezier", [], []
+        self._commit()
+
+    def to_polyline(self) -> None:
+        s = self._selected()
+        if s is None or not s.bezier:
+            return
+        self.checkpoint()
+        s.pts = [p for i, p in enumerate(s.pts) if s.is_anchor(i)]
+        s.smooth = ""
+        s.norm()
+        self._commit()
 
     def add_node_after(self) -> None:
         s = self._selected()
         if s is None or s.kind not in ("path", "poly"):
             return
         r = self.table.currentRow()
-        r = len(s.pts) - 1 if r < 0 else r
-        a = s.pts[r]
-        b = s.pts[(r + 1) % len(s.pts)] if (s.kind == "poly" or r + 1 < len(s.pts)) else None
-        new = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) if b else (a[0] + 1.0, a[1])
-        self.checkpoint()
-        s.pts.insert(r + 1, new)
+        if s.bezier:
+            seg = max(0, min((r if r >= 0 else len(s.pts) - 1) // 3, len(G.bezier_segments(s.pts, s.closed)) - 1))
+            self.checkpoint()
+            new = s.insert_after(seg)
+        else:
+            s.norm()
+            segs = s.n_segs()
+            r = segs - 1 if r < 0 or r >= segs else r
+            self.checkpoint()
+            new = s.insert_after(r)
         self._commit()
-        self.table.setCurrentCell(r + 1, 0)
+        self.table.setCurrentCell(new, 0)
 
     def delete_node(self, i: int) -> None:
         s = self._selected()
         if s is None or s.kind not in ("path", "poly") or not (0 <= i < len(s.pts)):
             return
-        if len(s.pts) <= (3 if s.kind == "poly" else 2):
-            QMessageBox.information(self, "DXF 編輯器", "節點不能再少了（多邊形至少 3 個、微波線至少 2 個）。")
+        if not s.can_delete(i):
+            msg = ("控制點不能刪：刪它旁邊的錨點，或右鍵圖形「改回折線」。" if s.bezier and not s.is_anchor(i)
+                   else "節點不能再少了（多邊形至少 3 個、微波線至少 2 個）。")
+            QMessageBox.information(self, "DXF 編輯器", msg)
             return
         self.checkpoint()
-        del s.pts[i]
+        s.delete_node(i)
         self._commit()
 
     def reverse_selected(self) -> None:
@@ -961,6 +1222,14 @@ class DxfEditor(QMainWindow):
             return
         self.checkpoint()
         s.pts.reverse()
+        if not s.bezier:
+            s.norm()
+            if s.closed:                                  # 封閉：第 i 段（i → i+1）變成（n-1-i → …）
+                n = len(s.pts)
+                s.bulges = [-s.bulges[(n - 2 - k) % n] for k in range(n)]
+            else:
+                s.bulges = [-b for b in reversed(s.bulges)]
+            s.fillets = list(reversed(s.fillets))
         self._commit()
 
     def delete_selected(self) -> None:
@@ -1033,10 +1302,10 @@ class DxfEditor(QMainWindow):
             return self.save()
         return r == QMessageBox.StandardButton.Discard
 
-    def new_design(self, mode: str) -> None:
+    def new_design(self, mode: str, trace: bool = True) -> None:
         if not self._ask_discard():
             return
-        self.design = Design.template(mode, width=self.new_width.value(), gap=self.new_gap.value())
+        self.design = Design.template(mode, width=self.new_width.value(), gap=self.new_gap.value(), trace=trace)
         self._after_load()
         self.dirty = True
         self._title()

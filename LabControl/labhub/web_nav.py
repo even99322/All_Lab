@@ -1,6 +1,6 @@
 """1.0.7：Hub 網頁共用的頂端導覽（http://<NAS>:8765 登入後的每一頁）。
 
-    模塊下載 /portal   數據查看 /data   量測查看 /live   電磁鐵 /magnet   量測設置 /setup   論文庫 ↗（外部連結）
+    模塊下載 /portal   數據查看 /data   量測查看 /live   電磁鐵 /magnet   量測設置 /setup   授權 /licenses   論文庫 ↗（外部連結）
     控制台、帳號與權限（站長）                                            使用者 · 登出
 
 各頁的 HTML 放 ``<!--QEL-NAV-->``，送出前由 ``page()`` 換成導覽列（依登入者決定顯示哪些項目）。只用標準函式庫。
@@ -89,7 +89,7 @@ def items(h: Handler) -> List[Tuple[str, str, str, bool]]:
     """[(key, 文字, 網址, 外部連結?)]"""
     out = [("home", "模塊下載", "/portal#/", False), ("data", "數據查看", "/data", False),
            ("live", "量測查看", "/live", False), ("magnet", "電磁鐵", "/magnet", False),
-           ("setup", "量測設置", "/setup", False)]
+           ("setup", "量測設置", "/setup", False), ("licenses", "授權", "/licenses", False)]
     plat = getattr(h.hub, "platform", None)
     paper = plat.paperlib_public if plat is not None and getattr(plat, "paperlib", None) is not None else ""
     if paper:

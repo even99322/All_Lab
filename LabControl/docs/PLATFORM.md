@@ -245,6 +245,14 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 - 手動步進：`run_defaults.manual_loop: true` → 每一點自動循環量測，直到「記錄並下一點」。
 - 子專案需要論文庫 1.8.0（`projects.parent_id`、schema 8；專案專區「新增子專案」、編輯專案改「上層專案」、同一層名稱不重複、刪除時子專案移到上一層）；舊版論文庫一切照舊（都是最上層）。
 
+### 0s. 1.0.19：HFSS 授權占用、模擬工具 3.4
+
+- `labhub/hfss_usage.py`：`POST /api/hfss/usage`（不用登入；模擬工具每 20 秒 {host, user, name, version, aedt: {running, count, since},
+  task, closing}）→ 記憶體；`GET /api/hfss/usage`（登入）、`PUT …/label {key, label}`（登入的人都可以）、`PUT …/seats`、`DELETE …/<key>`（站長）。
+  標註、授權總數、電腦清單存在 `data/hfss_usage.json`；90 秒沒回報 = 離線。「占用」= 那台電腦有 `ansysedt.exe`（psutil）。頁面 `/licenses`（導覽「授權」）。
+- 模擬工具 3.4：`HFSSTool/usage.py`（回報）、`dxf_geom.py`（圓角 / bulge / Bézier、微波線精確輪廓：平行偏移，切點相接直接連、直線尖角斜接，
+  其他退回 shapely 細分）、`yig_view.py`（matplotlib 3D，頂點投影到螢幕找最近的 12 px 內）、worker 任務 `YIG`（刪舊球 / 偏置 / 網格後重建）。
+
 ### 0r. 1.0.18：模擬工具 3.3（程式內更新、DXF 編輯器）
 
 - `APPS` 多了 `hfss` → `/get/info`、`/get/watch?app=hfss`、`/get/hfss/<版本>/<檔>`（不用登入）。
