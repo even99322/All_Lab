@@ -464,6 +464,9 @@ class MainWindow(QMainWindow):
         self.btn_yig_build.setToolTip("在已經建好的模型上放 YIG 球（已經有的話換成目前的參數），不用重新建模。"
                                       "沒有模型時請先在主控制面板「建立 3D 模型」或勾著這個再建模。")
         self.btn_yig_build.clicked.connect(self._run_yig_task)
+        # v3.5：跟「建立 3D 模型」一樣——開啟專案後才能按、每次任務結束都會重新打開（3.4 跑完任何任務後就一直是灰的）
+        self.btn_yig_build.setEnabled(bool(self.btn_build.isEnabled()))
+        self.step_buttons.append(self.btn_yig_build)
         row.addWidget(self.btn_yig_build)
         row.addWidget(QLabel("（不用重新建模；改了直徑、位置、偏置也是按這個）"))
         row.addStretch(1)
@@ -1429,6 +1432,7 @@ class MainWindow(QMainWindow):
         else:
             self.btn_close.setEnabled(True)
             self.btn_build.setEnabled(True)
+            self.btn_yig_build.setEnabled(True)
             has_model = payload.get('has_model', False)
             if task_name == 'OPEN' and success and has_model:
                 self.log_msg("🔍 偵測到專案內已有 3D 模型，直接為您解鎖模擬功能！")

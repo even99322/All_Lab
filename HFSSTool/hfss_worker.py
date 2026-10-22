@@ -661,9 +661,14 @@ class HfssWorker:
         if port_count == 1:
             self.emit_log("   ⚠️ 沒有偵測到任何碰到板邊的訊號線，未建立 Wave Port。")
 
+        yig_failed = False
         if p.get('yig_enable'):
-            if self._build_yig(hfss, top_guides_names) is False:
-                return False
+            # v3.5：YIG 沒建成也把空氣腔做完（模型能用），最後再回報失敗，修好參數後按「建立 / 更新 YIG 球」即可
+            if self._build_yig(hfss, top_guides_names) is False or not self._yig_has_sphere(hfss):
+                yig_failed = True
+                self.emit_log("   ❌ YIG 球沒有建成（原因見上面）。其他部分照常完成；修正後到 YIG 分頁按「🧲 建立 / 更新 YIG 球」。")
+        else:
+            self.emit_log("   （YIG 分頁沒有勾「在訊號線上方放置 YIG 球」→ 這次不建 YIG）")
 
         self.emit_log(f"⚙️ 處理空氣腔設定 (貼齊方向: {sorted(port_directions)})...")
         try:
@@ -693,7 +698,7 @@ class HfssWorker:
                         self.emit_log(f"   ⚠️ 空氣腔 Padding 修改失敗: {e}")
         except Exception as e:
             self.emit_log(f"   ❌ 空氣腔建立失敗: {e}")
-        return True
+        return not yig_failed
 
     # ------------------------------------------------------------------
     # YIG 鐵磁共振球
@@ -728,6 +733,9 @@ class HfssWorker:
                 self.emit_log(f"❌ 刪不掉舊的 YIG 球: {e}")
                 return False
         ok = self._build_yig(hfss, guides)
+        if ok is not False and not self._yig_has_sphere(hfss):
+            self.emit_log(f"❌ AEDT 回報成功，但專案裡找不到 {yig.YIG_OBJECT}。")
+            ok = False
         if ok is not False:
             self.emit_log("✅ YIG 球已建立 / 更新。要算共振請再跑「S 參數模擬」（Kittel 頻點與細掃會自動加上）。")
         return ok
@@ -771,7 +779,9 @@ class HfssWorker:
         # 3) 球體
         try:
             sph = hfss.modeler.create_sphere(origin=center, radius=r, name=yig.YIG_OBJECT)
-            name = sph.name if sph else yig.YIG_OBJECT
+            if not sph:
+                raise RuntimeError("create_sphere 回傳 False（請看 AEDT Message Manager）")
+            name = sph.name
             hfss.modeler.oeditor.ChangeProperty(yig.set_material_args(name, yig.YIG_MATERIAL))
             sph.color = (90, 60, 160)
             sph.transparency = 0.2
@@ -807,6 +817,10 @@ class HfssWorker:
         return True
 
     def _yig_has_sphere(self, hfss):
+        try:
+            hfss.modeler.refresh_all_ids()
+        except Exception:
+            pass
         return yig.YIG_OBJECT in hfss.modeler.object_names
 
     # ------------------------------------------------------------------
