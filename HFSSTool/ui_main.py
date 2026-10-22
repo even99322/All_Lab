@@ -481,7 +481,10 @@ class MainWindow(QMainWindow):
         self.edit_yig_x, self.edit_yig_y = QLineEdit("0"), QLineEdit("0")
         _tip(self.edit_yig_x, "訊號線中央模式：相對走線中心的偏移 ΔX (mm)；絕對座標模式：球心 X (mm)")
         _tip(self.edit_yig_y, "訊號線中央模式：相對走線中心的偏移 ΔY (mm)；絕對座標模式：球心 Y (mm)")
-        self.edit_yig_mesh = _tip(QLineEdit("0.05"), "球體內網格最大邊長 (mm)。建議 ≤ 直徑 / 8。")
+        self.edit_yig_mesh = _tip(QLineEdit(""), "球體內網格最大邊長 (mm)。空白 = 自動（直徑 / 8）。\n"
+                                  "太小會讓 HFSS 在球裡預先撒幾十萬個四面體 → 記憶體不夠（Out of memory）。右邊會估計四面體數。")
+        self.edit_yig_mesh.setPlaceholderText("自動（直徑 / 8）")
+        self.lbl_yig_mesh_est = QLabel("")
         gl.addWidget(QLabel("直徑 (mm):"), 0, 0); gl.addWidget(self.edit_yig_d, 0, 1)
         gl.addWidget(QLabel("離走線間隙 (mm):"), 0, 2); gl.addWidget(self.edit_yig_gap, 0, 3)
         gl.addWidget(QLabel("位置:"), 1, 0); gl.addWidget(self.combo_yig_pos, 1, 1)
@@ -489,6 +492,10 @@ class MainWindow(QMainWindow):
         gl.addWidget(self.lbl_yig_x, 2, 0); gl.addWidget(self.edit_yig_x, 2, 1)
         gl.addWidget(self.lbl_yig_y, 2, 2); gl.addWidget(self.edit_yig_y, 2, 3)
         gl.addWidget(QLabel("球體網格邊長 (mm):"), 3, 0); gl.addWidget(self.edit_yig_mesh, 3, 1)
+        gl.addWidget(self.lbl_yig_mesh_est, 3, 2, 1, 2)
+        self.edit_yig_mesh.textChanged.connect(self._yig_mesh_hint)
+        self.edit_yig_d.textChanged.connect(self._yig_mesh_hint)
+        self._yig_mesh_hint()
         self.combo_yig_pos.currentIndexChanged.connect(self._yig_pos_labels)
         lay.addWidget(g)
 
@@ -572,6 +579,28 @@ class MainWindow(QMainWindow):
         self.combo_yig_bmode.currentIndexChanged.connect(self._on_yig_bmode)
         self._yig_bmode_prev = 0
         self._update_yig_calc()
+
+    def _yig_mesh_hint(self, *_):
+        import yig as _yig
+        try:
+            d = float(self.edit_yig_d.text())
+        except ValueError:
+            self.lbl_yig_mesh_est.setText("")
+            return
+        txt = self.edit_yig_mesh.text().strip()
+        try:
+            edge = float(txt) if txt else _yig.auto_mesh_mm(d)
+        except ValueError:
+            self.lbl_yig_mesh_est.setText("")
+            return
+        n = _yig.mesh_estimate(d, edge)
+        auto = "" if txt else f"自動 {edge:g} mm，"
+        if n > _yig.MESH_WARN_TETS:
+            self.lbl_yig_mesh_est.setText(f"⚠️ {auto}約 {n:,} 個四面體：可能記憶體不夠，建議 ≥ {_yig.mesh_for_tets(d, 15000):g} mm")
+            self.lbl_yig_mesh_est.setStyleSheet("color: #e03131;")
+        else:
+            self.lbl_yig_mesh_est.setText(f"{auto}約 {n:,} 個四面體")
+            self.lbl_yig_mesh_est.setStyleSheet("color: gray;")
 
     def _run_yig_task(self):
         if not self.chk_yig.isChecked():
@@ -1265,7 +1294,7 @@ class MainWindow(QMainWindow):
                 'yig_diameter': num(self.edit_yig_d, "YIG 直徑", float, 0.001),
                 'yig_gap': num(self.edit_yig_gap, "YIG 間隙", float, 0),
                 'yig_pos_mode': "auto" if self.combo_yig_pos.currentIndex() == 0 else "abs",
-                'yig_mesh_mm': num(self.edit_yig_mesh, "YIG 網格邊長", float, 1e-4),
+                'yig_mesh_mm': num(self.edit_yig_mesh, "YIG 網格邊長", float, 1e-4, allow_blank=True),
                 'yig_ms_t': num(self.edit_yig_ms, "4πMs", float, 0.001),
                 'yig_dh_oe': num(self.edit_yig_dh, "ΔH", float, 0),
                 'yig_dh_freq': num(self.edit_yig_dhf, "ΔH 頻率", float, 0, allow_blank=True),

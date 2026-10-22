@@ -17,6 +17,29 @@ YIG_MESH = "YIG_Mesh"
 YIG_CURV = "YIG_Curvilinear"
 KITTEL_SWEEP = "Sweep_Kittel"
 
+# v3.6.1：球體網格。HFSS 依「最大邊長」在球內預先撒點（Seed Refinement）；邊長太小會一次長到幾十萬個四面體而記憶體不夠。
+# 經驗式：四面體數 ≈ 37 × 體積 / 邊長³（對照 AEDT「Seed Refinement Estimates」：⌀1.2 mm、0.05 mm → 約 27 萬）。
+MESH_WARN_TETS = 40_000
+MESH_MAX_ELEMENTS = 30_000      # 網格設定的「最多加幾個元素」上限（Restrict Max Elements），避免預先撒點把記憶體吃光
+
+
+def auto_mesh_mm(diameter_mm):
+    """沒填網格邊長時：直徑 / 8（⌀1.2 mm → 0.15 mm，約一萬個四面體）。"""
+    return round(max(diameter_mm, 1e-3) / 8, 4)
+
+
+def mesh_estimate(diameter_mm, edge_mm):
+    if not diameter_mm or not edge_mm or edge_mm <= 0:
+        return 0
+    vol = math.pi / 6 * diameter_mm ** 3
+    return int(37.4 * vol / edge_mm ** 3)
+
+
+def mesh_for_tets(diameter_mm, tets):
+    """要讓球裡大約 tets 個四面體的邊長（建議值）。"""
+    vol = math.pi / 6 * diameter_mm ** 3
+    return round((37.4 * vol / max(tets, 1)) ** (1 / 3), 3)
+
 # 偏置方向 → AEDT 的旋轉角 (預設偏置沿 +Z；繞 X 轉 -90° 得 +Y，繞 Y 轉 +90° 得 +X)
 BIAS_DIRECTIONS = {
     "+Z (垂直板面)": ("0deg", "0deg", "0deg"),

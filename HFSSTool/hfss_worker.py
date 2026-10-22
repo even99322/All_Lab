@@ -768,10 +768,16 @@ class HfssWorker:
             dm = hfss.oproject.GetDefinitionManager()
             args = yig.material_args(yig.YIG_MATERIAL, p['yig_er'], p['yig_tand'], p['yig_ms_t'],
                                      p['yig_dh_oe'], p.get('yig_dh_freq'))
+            # v3.6.1：AddMaterial 遇到同名不會報錯，而是另外建 YIG_auto0、YIG_auto1…（球還是用舊參數的那個）→ 先問有沒有
+            exists = False
             try:
-                dm.AddMaterial(args)
+                exists = bool(dm.DoesMaterialExist(yig.YIG_MATERIAL))
             except Exception:
-                dm.EditMaterial(yig.YIG_MATERIAL, args)      # 材料已存在 (重新建模) → 更新參數
+                exists = yig.YIG_MATERIAL.lower() in [m.lower() for m in getattr(hfss.materials, "material_keys", {})]
+            if exists:
+                dm.EditMaterial(yig.YIG_MATERIAL, args)      # 已經有 (重新建模 / 更新 YIG) → 改成目前參數
+            else:
+                dm.AddMaterial(args)
         except Exception as e:
             self.emit_log(f"❌ 建立 YIG 材料失敗: {e}")
             return False
@@ -801,10 +807,17 @@ class HfssWorker:
             self.emit_log(f"❌ 設定偏置磁場失敗: {e}")
             return False
 
-        # 5) 網格：球體曲面元素 + 邊長上限
+        # 5) 網格：球體曲面元素 + 邊長上限（v3.6.1：空白 = 直徑/8；估計四面體數，太多就警告，並限制最多加幾個元素）
+        edge = p.get('yig_mesh_mm') or yig.auto_mesh_mm(p['yig_diameter'])
+        est = yig.mesh_estimate(p['yig_diameter'], edge)
+        self.emit_log(f"   球體網格邊長 {edge:g} mm{'（自動）' if not p.get('yig_mesh_mm') else ''}，估計約 {est:,} 個四面體")
+        if est > yig.MESH_WARN_TETS:
+            self.emit_log(f"   ⚠️ 球體網格太細：估計 {est:,} 個四面體，很可能記憶體不夠（Out of memory）。"
+                          f"建議邊長 ≥ {yig.mesh_for_tets(p['yig_diameter'], 15000):g} mm；這次先限制最多加 "
+                          f"{yig.MESH_MAX_ELEMENTS:,} 個元素。")
         try:
             hfss.mesh.assign_length_mesh([name], inside_selection=True,
-                                         maximum_length=f"{p['yig_mesh_mm']:g}mm", maximum_elements=None,
+                                         maximum_length=f"{edge:g}mm", maximum_elements=yig.MESH_MAX_ELEMENTS,
                                          name=yig.YIG_MESH)
             hfss.mesh.assign_curvilinear_elements([name], enable=True, name=yig.YIG_CURV)
         except Exception as e:
@@ -876,8 +889,30 @@ class HfssWorker:
         ok = hfss.analyze_setup(setup_name, cores=p['hpc_cores'], tasks=tasks, gpus=gpus,
                                 use_auto_settings=(tasks == 1))
         if ok is False:
-            self.emit_log(f"❌ 求解 {setup_name} 失敗，請查看 AEDT Message Manager。")
+            self.emit_log(f"❌ 求解 {setup_name} 失敗。AEDT 的訊息：")
+            self._explain_failure(hfss)
         return ok
+
+    def _explain_failure(self, hfss):
+        """v3.6.1：把 AEDT Message Manager 最後的錯誤 / 警告抓到工具記錄裡，常見原因給建議。"""
+        msgs = []
+        try:
+            msgs = list(hfss.odesktop.GetMessages(hfss.project_name, hfss.design_name, 1) or [])
+        except Exception:
+            pass
+        important = [m for m in msgs if "[error]" in m.lower() or "memory" in m.lower() or "seed refinement" in m.lower()]
+        for m in important[-8:]:
+            self.emit_log("   " + re.sub(r"\s+", " ", str(m)).strip()[:300])
+        text = " ".join(msgs).lower()
+        if "memory" in text:
+            self.emit_log("   💡 記憶體不夠：")
+            if "yig" in text and "seed refinement" in text:
+                self.emit_log("      • YIG 球網格太細（上面的 Seed Refinement 估計）→ YIG 分頁「球體網格邊長」改大或留空（自動 = 直徑/8），"
+                              "再按「🧲 建立 / 更新 YIG 球」")
+            self.emit_log("      • Adaptive 用 Multi-Frequencies（Kittel 頻率自動加入）比 Broadband 省很多")
+            self.emit_log("      • 降低 Max Passes / 放寬 Max ΔS；Basis Order 用 First 或 Mixed；必要時減少 HPC 核心數")
+        elif not important:
+            self.emit_log("   （抓不到 AEDT 訊息，請看 AEDT Message Manager）")
 
     def run_s_param_sim(self, hfss):
         p = self.params
