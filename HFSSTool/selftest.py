@@ -142,6 +142,11 @@ def run() -> int:
         return f"{u.identity()['host']}，AEDT 開著：{u.aedt_status()['running']}"
     step("授權回報", usage)
 
+    def lmutil():
+        import usage as u
+        return u.find_lmutil() or "這台沒有 lmutil.exe（只是不能幫忙查授權伺服器）"
+    step("授權伺服器查詢", lmutil)
+
     def upd():
         import updater
         s = updater.install_script("C:/a b/new.exe", "C:/a'b/HFSSTool.exe", [1, 2], updater.current_version())

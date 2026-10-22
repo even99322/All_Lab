@@ -245,6 +245,18 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 - 手動步進：`run_defaults.manual_loop: true` → 每一點自動循環量測，直到「記錄並下一點」。
 - 子專案需要論文庫 1.8.0（`projects.parent_id`、schema 8；專案專區「新增子專案」、編輯專案改「上層專案」、同一層名稱不重複、刪除時子專案移到上一層）；舊版論文庫一切照舊（都是最上層）。
 
+### 0t. 1.0.20：授權頁讀授權伺服器（lmstat）、模擬工具 3.5
+
+- 站長設定 `PUT /api/hfss/usage/server {server}`（存在 `data/hfss_usage.json` 的 `license_server`；位址不寫在程式裡）。
+- 模擬工具回報 `POST /api/hfss/usage` 的回應多了 `lmstat: {server, due, every}`：一次只叫一台（租約 45 秒），上次結果超過 30 秒才叫；
+  被叫到的電腦跑 `lmutil lmstat -a -c <每個伺服器依序試>`，`POST /api/hfss/lmstat {host, user, server, text | error}`（不用登入、上限 1 MB；
+  不是被叫的那台而且資料還新 → 409）。回報 `error`（例如找不到 lmutil）→ 那台 10 分鐘內不再被叫。
+- 解析在 Hub `labhub/lmstat.py`（`Users of <授權>: (Total of N issued; Total of M in use)`、使用者行 `user host display … start 週 月/日 時:分[, K licenses]`，
+  跨年處理、伺服器 UP/DOWN 與版本）；`GET /api/hfss/usage` 多了 `lm`：`summary`（Electronics Desktop / HFSS 求解 / HPC）、`features`、
+  `devices`（依電腦＋使用者，`key_of` 跟工具回報共用標註，合併工具狀態與正在跑的任務）、`age`、`stale`（> 150 秒）、`error`。
+- 模擬工具 3.5 `usage.py`：`find_lmutil()`（update.json `lmutil` / `HFSS_LMUTIL` → `AWP_ROOTxxx` 等 → Program Files 最新版）、`run_lmstat()`（CREATE_NO_WINDOW、30 秒逾時）、
+  `send_lmstat()`；self-test 多了「授權伺服器查詢」。
+
 ### 0s. 1.0.19：HFSS 授權占用、模擬工具 3.4
 
 - `labhub/hfss_usage.py`：`POST /api/hfss/usage`（不用登入；模擬工具每 20 秒 {host, user, name, version, aedt: {running, count, since},

@@ -1268,7 +1268,7 @@ from . import index_routes  # noqa: E402,F401  （1.0.4 數據索引：/api/inde
 from . import mobile_routes  # noqa: E402,F401  （1.0.4 手機看即時量測：/m、/api/m/…）
 from . import data_routes  # noqa: E402,F401  （1.0.6 手機 / 平板看數據：/m/data、/api/data/…）
 from . import setup_routes  # noqa: E402,F401  （1.0.7 網頁：/data、/live、/setup 與共用導覽）
-from . import hfss_usage  # noqa: E402,F401  （1.0.19 HFSS 授權占用：/licenses、/api/hfss/usage）
+from . import hfss_usage  # noqa: E402,F401  （1.0.19 HFSS 授權占用：/licenses、/api/hfss/usage；1.0.20 授權伺服器 lmstat）
 
 
 # ---------------------------------------------------------------------------

@@ -14,7 +14,7 @@
   * { box-sizing:border-box; }
   html, body { margin:0; background:var(--bg); color:var(--text); }
   body { font:14px/1.45 -apple-system,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; }
-  main { max-width:1000px; margin:0 auto; padding:12px 14px 40px; }
+  main { max-width:1100px; margin:0 auto; padding:12px 14px 40px; }
   h1 { font-size:20px; margin:4px 0 10px; }
   .sum { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
   .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px; min-width:130px; }
@@ -42,6 +42,29 @@
   .btn.del { color:var(--err); background:transparent; }
   .seat { display:flex; gap:6px; align-items:center; }
   .seat input { width:70px; font:inherit; padding:4px 6px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--text); }
+  h2 { font-size:15px; margin:18px 0 8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  h2 .small { font-weight:400; }
+  .srv { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:9px 12px; margin-bottom:12px;
+         display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .srv.bad { border-color:var(--err); } .srv.warn { border-color:var(--warn); }
+  .srv input { min-width:260px; flex:1; font:inherit; padding:4px 8px; border:1px solid var(--line); border-radius:7px;
+               background:var(--card); color:var(--text); }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; font-weight:700; }
+  .pill.up { background:var(--ok); color:#fff; } .pill.down { background:var(--err); color:#fff; } .pill.old { background:var(--warn); color:#fff; }
+  .stat .bar { height:5px; border-radius:3px; background:var(--soft); margin-top:6px; overflow:hidden; }
+  .stat .bar i { display:block; height:100%; background:var(--accent); }
+  .stat.full .bar i { background:var(--err); }
+  table.lic { width:100%; border-collapse:separate; border-spacing:0; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  .lic th, .lic td { padding:8px 10px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; }
+  .lic tr:last-child td { border-bottom:0; }
+  .lic th { font-size:12px; color:var(--muted); font-weight:600; background:var(--soft); white-space:nowrap; }
+  .lic td.n { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .chip { display:inline-block; background:var(--accent-soft); color:var(--accent); border-radius:6px; padding:1px 6px; margin:1px 3px 1px 0;
+          font-size:12px; white-space:nowrap; }
+  .chip.o { background:var(--soft); color:var(--muted); }
+  .wrap { overflow-x:auto; }
+  details { margin-top:10px; } summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  label.tg { font-size:12px; font-weight:400; color:var(--muted); display:flex; gap:4px; align-items:center; cursor:pointer; }
   .empty { background:var(--card); border:1px dashed var(--line); border-radius:12px; padding:24px; text-align:center; color:var(--muted); }
   .help { margin-top:16px; font-size:12px; color:var(--muted); }
   @media (max-width: 720px) {
@@ -55,11 +78,16 @@
 <!--QEL-NAV-->
 <main>
   <h1>HFSS 授權占用</h1>
+  <div id="srv"></div>
   <div class="sum" id="sum"></div>
+  <div id="lm"></div>
+  <h2>開著模擬工具的電腦 <span class="small muted">（HFSS 自動化工具回報）</span></h2>
   <div class="list" id="list"><div class="empty">讀取中…</div></div>
   <div class="help">
-    每台開著「模擬工具（HFSS 自動化工具 3.4 以上）」的電腦每 20 秒回報一次；那台電腦開著 AEDT 就算占用一個授權（不管是不是用工具開的）。
-    90 秒沒回報算離線。<b>標註</b>：點名字那一格直接輸入是誰（例如「譯文」），按 Enter 存檔，大家都看得到。
+    <b>授權伺服器</b>：站長填好位址（例如 <code>1055@192.168.x.x;1055@100.x.x.x</code>）後，Hub 每 30 秒請一台開著「模擬工具 3.5 以上」的電腦
+    用 Ansys 內附的 lmutil 查一次（跟 lmstat 一樣），所以連沒裝模擬工具的電腦在用授權也看得到。
+    <b>標註</b>：點名字那一格直接輸入是誰（例如「譯文」），按 Enter 存檔，大家都看得到——同一台電腦＋使用者在兩個表共用同一個標註。
+    下面的「開著模擬工具的電腦」每 20 秒回報一次；90 秒沒回報算離線。
   </div>
 </main>
 <script>
@@ -83,29 +111,98 @@ function dur(s) {
   return Math.floor(s / 86400) + " 天 " + Math.floor(s % 86400 / 3600) + " 小時";
 }
 function ago(t, now) { return t ? dur(now - t) + "前" : "—"; }
+let ONLY_ELEC = true;
+try { ONLY_ELEC = localStorage.getItem("lic_only_elec") !== "0"; } catch (e) {}
+function labelInput(key, label, name) {
+  return `<input class="${name ? "named" : ""}" data-key="${esc(key)}" value="${esc(label)}" placeholder="${esc(name || "標註是誰…")}" maxlength="40" title="標註是誰（Enter 存檔）">`;
+}
+function stat(v, k, full, frac) {
+  return `<div class="stat${full ? " full" : ""}"><div class="v">${v}</div><div class="k">${k}</div>${frac != null ? `<div class="bar"><i style="width:${Math.min(100, Math.round(frac * 100))}%"></i></div>` : ""}</div>`;
+}
+function renderServer(d, owner) {
+  const L = d.lm || {};
+  let st = "", cls = "";
+  if (!L.server) st = owner ? `還沒設定授權伺服器——填好之後這頁會直接顯示伺服器上的授權（跟 lmstat 一樣）。` : `<span class="muted">站長還沒設定授權伺服器，下面只有模擬工具回報的資料。</span>`;
+  else if (L.ok) {
+    const up = (L.status || "UP") === "UP";
+    st = `<span class="pill ${L.stale ? "old" : up ? "up" : "down"}">${L.stale ? "資料過舊" : up ? "伺服器正常" : "伺服器 DOWN"}</span>
+      <span class="small muted">${owner ? "" : esc(L.server) + "　"}${L.version ? esc(L.version) + "　" : ""}${dur(L.age) || "0 秒"}前由 ${esc(L.from_host)} 查詢</span>`;
+    cls = L.stale ? "warn" : up ? "" : "bad";
+  } else st = `<span class="pill old">等待查詢</span> <span class="small muted">${esc(L.server)}　要有一台電腦開著模擬工具 3.5 以上才查得到</span>`;
+  if (L.error && (!L.ok || L.error.age < 120)) {
+    st += `<div class="small" style="color:var(--err);width:100%">最近一次查詢失敗（${esc(L.error.from)}，${dur(L.error.age) || "0 秒"}前）：${esc(L.error.text)}</div>`;
+    if (!L.ok) cls = "bad";
+  }
+  const form = owner ? `<span style="display:flex;gap:6px;flex:1;min-width:280px"><input id="lmsrv" value="${esc(L.server || "")}" placeholder="1055@192.168.x.x;1055@100.x.x.x" title="授權伺服器（站長）；多個用 ; 分開，依序試"><button class="btn" id="lmsave">存</button></span>` : "";
+  $("#srv").innerHTML = `<div class="srv ${cls}"><b>授權伺服器</b> ${st} ${form}</div>`;
+  if (owner) $("#lmsave").onclick = async () => {
+    try { await api("/api/hfss/usage/server", {method: "PUT", json: {server: $("#lmsrv").value}}); load(); }
+    catch (e) { alert(e.message); }
+  };
+}
+function renderLm(d) {
+  const L = d.lm || {};
+  if (!L.ok) { $("#lm").innerHTML = ""; return; }
+  let devs = L.devices || [];
+  if (ONLY_ELEC) devs = devs.filter(x => x.electronics);
+  const rows = devs.map(x => {
+    const t = x.tool, task = t && t.task;
+    const feats = x.features.filter(f => !ONLY_ELEC || /^(elec|electronics|hfss|anshpc|maxwell|q3d|siwave|icepak|nexxim|designer|ansoft|aedt|rf_|ensemble)/i.test(f.name));
+    let tool = `<span class="muted small">沒有模擬工具</span>`;
+    if (t) tool = t.online ? `<span class="small">工具 ${esc(t.version)} 開著</span>` : `<span class="muted small">工具離線</span>`;
+    if (task) tool += `<div class="small">正在跑：<b>${esc(task.name)}</b>${task.project ? "　" + esc(task.project) : ""}</div>`;
+    return `<tr>
+      <td class="who" style="min-width:140px">${labelInput(x.key, x.label, x.name)}</td>
+      <td style="white-space:nowrap"><b>${esc(x.host)}</b><div class="small muted">${esc(x.user)}</div></td>
+      <td class="n">${x.solve || "—"}</td>
+      <td class="n">${x.hpc ? x.hpc + " 核" : "—"}</td>
+      <td>${feats.map(f => `<span class="chip" title="${esc(f.name)}">${esc(f.label)}${f.count > 1 ? " ×" + f.count : ""}</span>`).join("")}</td>
+      <td class="n">${x.since ? dur(d.time - x.since) : "—"}</td>
+      <td>${tool}</td></tr>`;
+  }).join("");
+  const feats = (L.features || []).filter(f => !ONLY_ELEC || f.electronics);
+  $("#lm").innerHTML = `
+    <h2>誰在用授權 <span class="small muted">（授權伺服器）</span>
+      <label class="tg"><input type="checkbox" id="onlyelec" ${ONLY_ELEC ? "checked" : ""}> 只看 Electronics / HFSS 相關</label></h2>
+    ${devs.length ? `<div class="wrap"><table class="lic"><thead><tr><th>標註</th><th>電腦 / 使用者</th><th>HFSS 求解</th><th>HPC</th><th>占用的授權</th><th>已使用</th><th>模擬工具</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>` : `<div class="empty">現在沒有人在用${ONLY_ELEC ? " Electronics / HFSS " : ""}授權</div>`}
+    <details><summary>所有授權（${feats.length} 種）</summary>
+      <div class="wrap" style="margin-top:6px"><table class="lic"><thead><tr><th>授權</th><th>名稱</th><th>使用中 / 總數</th></tr></thead><tbody>
+      ${feats.map(f => `<tr><td>${esc(f.label)}</td><td class="small muted">${esc(f.name)}</td><td class="n">${f.issued ? `${f.in_use} / ${f.issued}` : esc(f.note || f.in_use)}</td></tr>`).join("")}
+      </tbody></table></div></details>`;
+  $("#onlyelec").onchange = e => { ONLY_ELEC = e.target.checked; try { localStorage.setItem("lic_only_elec", ONLY_ELEC ? "1" : "0"); } catch (x) {} render(LAST); };
+}
+let LAST = null;
 function render(d) {
+  LAST = d;
   const owner = ME && ME.user && ME.user.owner;
+  const L = d.lm || {};
+  renderServer(d, owner);
   const free = d.seats ? d.seats - d.used : null;
-  $("#sum").innerHTML = `
-    <div class="stat${d.seats && free <= 0 ? " full" : ""}"><div class="v">${d.used}${d.seats ? " / " + d.seats : ""}</div><div class="k">占用中的授權${d.seats ? (free > 0 ? `（剩 ${free} 個）` : "（全部在用）") : ""}</div></div>
-    <div class="stat"><div class="v">${d.online}</div><div class="k">開著模擬工具的電腦</div></div>
-    ${owner ? `<div class="stat"><div class="k">授權總數（站長）</div><div class="seat"><input id="seats" type="number" min="0" value="${d.seats || ""}" placeholder="不限"><button class="btn" id="seatsave">存</button></div></div>` : ""}`;
-  if (owner) $("#seatsave").onclick = async () => {
+  let sum = "";
+  if (L.ok) sum = (L.summary || []).map(x => stat(`${x.in_use}${x.issued ? " / " + x.issued : ""}`, `${esc(x.title)}${x.unit ? "（核）" : ""}${x.issued ? (x.in_use >= x.issued ? "　全部在用" : `　剩 ${x.issued - x.in_use}`) : ""}`, x.issued && x.in_use >= x.issued, x.issued ? x.in_use / x.issued : null)).join("")
+    + stat((L.devices || []).filter(x => x.electronics).length, "在用的電腦");
+  else sum = stat(`${d.used}${d.seats ? " / " + d.seats : ""}`, `占用中的授權${d.seats ? (free > 0 ? `（剩 ${free} 個）` : "（全部在用）") : ""}`, d.seats && free <= 0, d.seats ? d.used / d.seats : null)
+    + (owner ? `<div class="stat"><div class="k">授權總數（站長）</div><div class="seat"><input id="seats" type="number" min="0" value="${d.seats || ""}" placeholder="不限"><button class="btn" id="seatsave">存</button></div></div>` : "");
+  sum += stat(d.online, "開著模擬工具的電腦");
+  $("#sum").innerHTML = sum;
+  if (owner && $("#seatsave")) $("#seatsave").onclick = async () => {
     try { await api("/api/hfss/usage/seats", {method: "PUT", json: {seats: parseInt($("#seats").value || "0", 10)}}); load(); }
     catch (e) { alert(e.message); }
   };
-  if (!d.items.length) { $("#list").innerHTML = `<div class="empty">還沒有電腦回報。在實驗室電腦開啟「模擬工具」3.4 以上版本，幾秒後就會出現在這裡。</div>`; return; }
-  $("#list").innerHTML = d.items.map(it => {
+  renderLm(d);
+  if (!d.items.length) $("#list").innerHTML = `<div class="empty">還沒有電腦回報。在實驗室電腦開啟「模擬工具」3.4 以上版本，幾秒後就會出現在這裡。</div>`;
+  else $("#list").innerHTML = d.items.map(it => {
     const a = it.aedt || {}, t = it.task;
     let st;
     if (it.using) st = `<span class="use"><b>● 使用中</b></span>　AEDT 開了 ${dur(d.time - (a.since || it.seen))}${a.count > 1 ? `（${a.count} 個）` : ""}`;
-    else if (it.online) st = `<span class="muted">工具開著，沒有占用授權</span>`;
+    else if (it.online) st = `<span class="muted">工具開著，沒有開 AEDT</span>`;
     else st = `<span class="muted">離線　最後回報 ${ago(it.seen, d.time)}${it.last_aedt ? `，上次用 AEDT ${ago(it.last_aedt, d.time)}` : ""}</span>`;
     if (t) st += `<div class="small">正在跑：<b>${esc(t.name)}</b>${t.project ? "　" + esc(t.project) : ""}${t.started ? `　${dur(d.time - t.started)}` : ""}
       ${t.cores ? `　${t.cores} 核` : ""}${t.tasks > 1 ? ` × ${t.tasks} 任務` : ""}${t.gpus ? `　${t.gpus} GPU` : ""}</div>`;
     return `<div class="row${it.using ? " using" : ""}${it.online ? "" : " off"}">
       <span class="dot${it.using ? " use" : it.online ? " on" : ""}"></span>
-      <div class="who"><input class="${it.name ? "named" : ""}" data-key="${esc(it.key)}" value="${esc(it.label)}" placeholder="${esc(it.name || "標註是誰…")}" maxlength="40" title="標註是誰（Enter 存檔）"></div>
+      <div class="who">${labelInput(it.key, it.label, it.name)}</div>
       <div class="host"><b>${esc(it.host)}</b><div class="small muted">${esc(it.user)}${it.version ? "　工具 " + esc(it.version) : ""}${it.ip ? "　" + esc(it.ip) : ""}</div></div>
       <div class="state">${st}</div>
       <div class="act">${owner ? `<button class="btn del" data-del="${esc(it.key)}" title="刪掉這台（站長）">刪除</button>` : ""}</div></div>`;
@@ -115,6 +212,8 @@ function render(d) {
     inp.onblur = async () => { editing = false; await save(inp); };
     inp.onkeydown = e => { if (e.key === "Enter") inp.blur(); if (e.key === "Escape") { inp.value = inp.defaultValue; inp.blur(); } };
   });
+  const srvIn = $("#lmsrv");
+  if (srvIn) { srvIn.onfocus = () => { editing = true; }; srvIn.onblur = () => { setTimeout(() => { editing = false; }, 300); }; }
   document.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
     if (!confirm("刪掉這台電腦的紀錄？（之後它再回報會再出現）")) return;
     try { await api("/api/hfss/usage/" + encodeURIComponent(b.dataset.del), {method: "DELETE"}); load(); } catch (e) { alert(e.message); }
