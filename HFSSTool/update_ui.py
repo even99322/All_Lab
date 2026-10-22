@@ -278,6 +278,9 @@ class UpdateController(QObject):
             except (OSError, updater.UpdateError) as e:
                 QMessageBox.warning(self.win, "更新", f"沒辦法換上新版：{e}")
                 return
+            if updater.is_setup(path):
+                QMessageBox.information(self.win, "更新", f"已下載 {app['version']}。按「確定」後程式會關閉，"
+                                        "接著出現安裝進度條，裝好會自動重新開啟（約半分鐘）。")
             self.stop()
             self.win.close()
             QApplication.quit()

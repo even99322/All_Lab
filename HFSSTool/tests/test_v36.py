@@ -86,3 +86,36 @@ def test_explain_failure_reads_aedt_messages():
     w._explain_failure(H())
     text = "\n".join(w.logs)
     assert "Insufficient memory" in text and "球體網格邊長" in text and "Multi-Frequencies" in text
+
+
+def test_yig_height_and_z_linked():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ["HFSS_NO_UPDATE_CHECK"] = "1"
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from ui_main import MainWindow
+    w = MainWindow()
+    try:
+        w.edit_thick_die.setText("0.813")
+        w.edit_thick_top.setText("0.035")
+        w.edit_yig_d.setText("1.2")
+        w.edit_yig_gap.setText("0.1")
+        assert w.edit_yig_z.text() == "1.548"                      # 0.848 + 0.1 + 0.6
+        w.edit_yig_z.setText("1.448")
+        w.edit_yig_z.textEdited.emit("1.448")
+        assert w.edit_yig_gap.text() == "0"                         # 球底貼波導頂面
+        w.edit_yig_z.setText("1.3")
+        w.edit_yig_z.textEdited.emit("1.3")
+        assert "⚠️" in w.lbl_yig_zinfo.text()
+    finally:
+        w.close()
+
+
+def test_update_waits_only_for_itself(monkeypatch):
+    import updater
+    monkeypatch.setattr(updater.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(updater.sys, "_MEIPASS", os.path.join(os.path.dirname(updater.target_exe()), "_internal"),
+                        raising=False)
+    assert not updater.is_onefile()                                 # 安裝版（資料夾版）
+    monkeypatch.setattr(updater.sys, "_MEIPASS", "/tmp/_MEI12345", raising=False)
+    assert updater.is_onefile()

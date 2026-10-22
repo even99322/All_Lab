@@ -475,7 +475,11 @@ class MainWindow(QMainWindow):
         g = QGroupBox("幾何")
         gl = QGridLayout(g)
         self.edit_yig_d = _tip(QLineEdit("0.4"), "YIG 球直徑 (mm)")
-        self.edit_yig_gap = _tip(QLineEdit("0.1"), "球的底部到訊號線頂面的距離 (mm)。球心高度 = 走線頂面 + 間隙 + 半徑。")
+        self.edit_yig_gap = _tip(QLineEdit("0.1"), "球的底部到波導（訊號線）頂面的高度 (mm)，最低 0 = 球底貼在波導頂面。\n"
+                                 "球心 Z = 波導頂面 + 高度 + 半徑；也可以直接填下面的「球心 Z」。")
+        # v3.6.2：也可以直接填球心的絕對 Z（最低 = 波導頂面 + 半徑），跟「高度」互相換算
+        self.edit_yig_z = _tip(QLineEdit(""), "球心的絕對 Z 座標 (mm)。最低 = 波導頂面 Z + 半徑（球底貼在波導頂面）。")
+        self.lbl_yig_zinfo = QLabel("")
         self.combo_yig_pos = QComboBox()
         self.combo_yig_pos.addItems(["訊號線中央 + 偏移", "絕對座標"])
         self.edit_yig_x, self.edit_yig_y = QLineEdit("0"), QLineEdit("0")
@@ -486,13 +490,21 @@ class MainWindow(QMainWindow):
         self.edit_yig_mesh.setPlaceholderText("自動（直徑 / 8）")
         self.lbl_yig_mesh_est = QLabel("")
         gl.addWidget(QLabel("直徑 (mm):"), 0, 0); gl.addWidget(self.edit_yig_d, 0, 1)
-        gl.addWidget(QLabel("離走線間隙 (mm):"), 0, 2); gl.addWidget(self.edit_yig_gap, 0, 3)
+        gl.addWidget(QLabel("高度：球底離波導頂面 (mm):"), 0, 2); gl.addWidget(self.edit_yig_gap, 0, 3)
         gl.addWidget(QLabel("位置:"), 1, 0); gl.addWidget(self.combo_yig_pos, 1, 1)
         self.lbl_yig_x, self.lbl_yig_y = QLabel("ΔX (mm):"), QLabel("ΔY (mm):")
         gl.addWidget(self.lbl_yig_x, 2, 0); gl.addWidget(self.edit_yig_x, 2, 1)
         gl.addWidget(self.lbl_yig_y, 2, 2); gl.addWidget(self.edit_yig_y, 2, 3)
         gl.addWidget(QLabel("球體網格邊長 (mm):"), 3, 0); gl.addWidget(self.edit_yig_mesh, 3, 1)
         gl.addWidget(self.lbl_yig_mesh_est, 3, 2, 1, 2)
+        gl.addWidget(QLabel("球心 Z (mm):"), 4, 0); gl.addWidget(self.edit_yig_z, 4, 1)
+        gl.addWidget(self.lbl_yig_zinfo, 4, 2, 1, 2)
+        self.edit_yig_gap.textEdited.connect(lambda _t: self._yig_sync_z("gap"))
+        self.edit_yig_z.textEdited.connect(lambda _t: self._yig_sync_z("z"))
+        for w in (self.edit_yig_d, self.edit_thick_die, self.edit_thick_top):
+            w.textChanged.connect(lambda _t: self._yig_sync_z("gap"))
+        self.edit_yig_gap.textChanged.connect(lambda _t: self._yig_sync_z("gap") if not self.edit_yig_gap.hasFocus() else None)
+        self._yig_sync_z("gap")
         self.edit_yig_mesh.textChanged.connect(self._yig_mesh_hint)
         self.edit_yig_d.textChanged.connect(self._yig_mesh_hint)
         self._yig_mesh_hint()
@@ -579,6 +591,40 @@ class MainWindow(QMainWindow):
         self.combo_yig_bmode.currentIndexChanged.connect(self._on_yig_bmode)
         self._yig_bmode_prev = 0
         self._update_yig_calc()
+
+    def _yig_z_base(self):
+        """(波導頂面 Z, 半徑)；欄位不是數字 → None。"""
+        try:
+            top = float(self.edit_thick_die.text()) + float(self.edit_thick_top.text())
+            r = float(self.edit_yig_d.text()) / 2
+        except ValueError:
+            return None
+        return top, r
+
+    def _yig_sync_z(self, source):
+        """「高度（球底離波導頂面）」與「球心 Z」互相換算；低於波導頂面時標紅。"""
+        base = self._yig_z_base()
+        if base is None:
+            self.lbl_yig_zinfo.setText("")
+            return
+        top, r = base
+        fmt = lambda v: f"{v:.4f}".rstrip("0").rstrip(".")
+        try:
+            if source == "z":
+                gap = float(self.edit_yig_z.text()) - r - top
+                self.edit_yig_gap.setText(fmt(round(gap, 6)))
+            else:
+                gap = float(self.edit_yig_gap.text())
+                if not self.edit_yig_z.hasFocus():
+                    self.edit_yig_z.setText(fmt(top + gap + r))
+        except ValueError:
+            return
+        if gap < -1e-9:
+            self.lbl_yig_zinfo.setText(f"⚠️ 球底低於波導頂面！最低：高度 0、球心 Z {fmt(top + r)} mm")
+            self.lbl_yig_zinfo.setStyleSheet("color: #e03131;")
+        else:
+            self.lbl_yig_zinfo.setText(f"波導頂面 Z = {fmt(top)} mm；球底 Z = {fmt(top + gap)}，球心最低 {fmt(top + r)} mm")
+            self.lbl_yig_zinfo.setStyleSheet("color: gray;")
 
     def _yig_mesh_hint(self, *_):
         import yig as _yig
@@ -1292,7 +1338,7 @@ class MainWindow(QMainWindow):
         if params['yig_enable']:
             params.update({
                 'yig_diameter': num(self.edit_yig_d, "YIG 直徑", float, 0.001),
-                'yig_gap': num(self.edit_yig_gap, "YIG 間隙", float, 0),
+                'yig_gap': num(self.edit_yig_gap, "YIG 高度（球底離波導頂面，最低 0）", float, 0),
                 'yig_pos_mode': "auto" if self.combo_yig_pos.currentIndex() == 0 else "abs",
                 'yig_mesh_mm': num(self.edit_yig_mesh, "YIG 網格邊長", float, 1e-4, allow_blank=True),
                 'yig_ms_t': num(self.edit_yig_ms, "4πMs", float, 0.001),

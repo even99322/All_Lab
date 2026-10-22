@@ -138,6 +138,15 @@ def target_exe() -> str:
     return os.path.abspath(sys.executable)
 
 
+def is_onefile() -> bool:
+    """PyInstaller 單一 exe：程式解壓在暫存資料夾（不在 exe 旁邊），外面還有一個解壓用的父程序。"""
+    mei = getattr(sys, "_MEIPASS", "")
+    if not getattr(sys, "frozen", False) or not mei:
+        return False
+    exe_dir = os.path.normcase(os.path.dirname(target_exe()))
+    return not os.path.normcase(os.path.abspath(mei)).startswith(exe_dir)
+
+
 def installed_dir() -> Optional[str]:
     """用安裝程式裝的（exe 旁邊有 unins000.exe）→ 安裝資料夾；單一 exe / 原始碼版 → None。"""
     if not getattr(sys, "frozen", False):
@@ -155,13 +164,17 @@ def setup_script(setup_exe: str, app_exe: str, pids: List[int], old_version: str
     """PowerShell：等程式結束 → 安裝程式 /SILENT（只有進度條）→ 重開裝好的程式 → 刪掉下載的安裝程式。"""
     return "\n".join([
         "$ErrorActionPreference = 'SilentlyContinue'",
-        f"foreach ($p in @({', '.join(str(int(p)) for p in pids)})) {{ Wait-Process -Id $p -Timeout 120 }}",
+        "Start-Transcript -Path (Join-Path $env:TEMP 'hfss_update.log') -Force | Out-Null",
+        f"foreach ($p in @({', '.join(str(int(p)) for p in pids)})) {{ Wait-Process -Id $p -Timeout 60 }}",
         f"$setup = {_ps_quote(setup_exe)}; $app = {_ps_quote(app_exe)}",
+        "Write-Output \"installing $setup\"",
         "$p = Start-Process -FilePath $setup -ArgumentList '/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "
-        "'/CLOSEAPPLICATIONS' -Wait -PassThru",
+        "'/CLOSEAPPLICATIONS', ('/LOG=\"' + (Join-Path $env:TEMP 'hfss_setup.log') + '\"') -Wait -PassThru",
+        "Write-Output \"setup exit $($p.ExitCode)\"",
         f"if (Test-Path -LiteralPath $app) {{ Start-Process -FilePath $app -ArgumentList '--updated-from', {_ps_quote(old_version)} }}",
         "Start-Sleep -Seconds 3",
         "Remove-Item -LiteralPath $setup -Force",
+        "Stop-Transcript | Out-Null",
     ])
 
 
@@ -233,10 +246,12 @@ def install(new_exe: str) -> None:
     if not can_self_update():
         raise UpdateError("只有打包好的 Windows 版能自己更新")
     pids = [os.getpid()]
-    try:
-        pids.append(os.getppid())          # 單一 exe：外層解壓程序
-    except OSError:
-        pass
+    if is_onefile():
+        try:
+            pids.append(os.getppid())      # 單一 exe：外層解壓程序
+        except OSError:
+            pass
+    # v3.6.2：安裝版（資料夾版）只有一個程序；3.6 也等了父程序（= 檔案總管，永遠不會結束）→ 要等 2 分鐘逾時才開始安裝
     if is_setup(new_exe):
         app = os.path.join(installed_dir(), "HFSSTool.exe") if installed_dir() else default_install_exe()
         script = setup_script(new_exe, app, pids, current_version())
