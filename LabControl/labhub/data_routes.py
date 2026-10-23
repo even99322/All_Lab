@@ -35,7 +35,7 @@ _TYPECODES = {"f8": "d", "f4": "f", "u1": "B", "i8": "q", "i4": "i", "u8": "Q", 
 
 # ---- .npz（標準函式庫）-----------------------------------------------------------------------
 def read_npy(raw: bytes) -> Tuple[str, Tuple[int, ...], array]:
-    """一個 .npy → (型別, 形狀, array)。只支援索引程式寫的簡單型別（C 順序、數字）。"""
+    """一個 .npy → (型別, 形狀, array)。只支援索引程式寫的簡單型別（數字）；Fortran 順序（轉置過的 2D）會轉成 C 順序。"""
     if raw[:6] != b"\x93NUMPY":
         raise ValueError("不是 .npy")
     major = raw[6]
@@ -45,8 +45,9 @@ def read_npy(raw: bytes) -> Tuple[str, Tuple[int, ...], array]:
         hlen, start = struct.unpack("<I", raw[8:12])[0], 12
     header = ast.literal_eval(raw[start:start + hlen].decode("latin1"))
     descr, shape = str(header["descr"]), tuple(int(n) for n in header["shape"])
-    if header.get("fortran_order"):
-        raise ValueError("不支援 Fortran 順序")
+    fortran = bool(header.get("fortran_order"))
+    if fortran and len(shape) > 2:
+        raise ValueError("不支援 3 維以上的 Fortran 順序")
     order, kind = descr[0], descr[1:]
     if kind not in _TYPECODES:
         raise ValueError(f"不支援的型別 {descr}")
@@ -59,6 +60,13 @@ def read_npy(raw: bytes) -> Tuple[str, Tuple[int, ...], array]:
         n *= k
     if len(a) != n:
         raise ValueError("資料長度不對")
+    if fortran and len(shape) == 2 and shape[0] > 1 and shape[1] > 1:
+        # 1.0.21：Fortran 順序 (r, c) 的第 i 列 = a[i::r]（例如量測資料轉置後存的預覽）
+        rows = shape[0]
+        c = array(a.typecode)
+        for i in range(rows):
+            c.extend(a[i::rows])
+        a = c
     return kind, shape, a
 
 

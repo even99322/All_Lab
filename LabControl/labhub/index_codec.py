@@ -104,6 +104,7 @@ def encode_preview(preview: Any) -> bytes:
         y, x = _reduce(y, x, 0, PREVIEW_1D)
         meta["shape"] = [int(np.asarray(data.y_values).size)]
         arrays.update(x=x, y=y.astype(np.float32))
+    arrays = {k: np.ascontiguousarray(v) for k, v in arrays.items()}   # 1.0.21：轉置過的資料存成 C 順序（Hub 讀得最快）
     arrays["meta"] = np.frombuffer(json.dumps(_json(meta), ensure_ascii=False).encode("utf-8"), dtype=np.uint8)
     buf = io.BytesIO()
     np.savez_compressed(buf, **arrays)
