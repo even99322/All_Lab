@@ -90,6 +90,7 @@ jobs:
           if ($p.ExitCode -ne 0) {
             throw "self-test 失敗（$($p.ExitCode)）" }
       - name: In-app update end to end (installed copy runs the new installer, which relaunches it)
+        timeout-minutes: 8
         env:
           HFSS_NO_UPDATE_CHECK: "1"
         run: |
@@ -99,7 +100,9 @@ jobs:
           Copy-Item "dist/HFSSTool_v${{ steps.v.outputs.version }}_windows-setup.exe" $setup
           $log = Join-Path $env:TEMP 'hfss_setup.log'
           Remove-Item $log -ErrorAction SilentlyContinue
-          $p = Start-Process -FilePath "$dir\HFSSTool.exe" -ArgumentList '--test-update', "`"$setup`"" -Wait -PassThru
+          # 不能用 -Wait：PowerShell 7 會連子程序（安裝程式、重開的程式）一起等
+          $p = Start-Process -FilePath "$dir\HFSSTool.exe" -ArgumentList '--test-update', "`"$setup`"" -PassThru
+          if (-not $p.WaitForExit(60000)) { throw "--test-update 60 秒沒結束" }
           Write-Output "app exit $($p.ExitCode)"
           $ok = $false
           for ($i = 0; $i -lt 90; $i++) {
