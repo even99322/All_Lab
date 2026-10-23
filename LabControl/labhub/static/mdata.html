@@ -62,6 +62,11 @@
   .nav { display:flex; gap:8px; margin-top:10px; }
   .nav .btn { flex:1; }
   canvas { display:block; width:100%; touch-action:pan-y; }
+  #plot.heat { touch-action:none; }          /* 1.0.24：在 2D 熱圖上選 trace 時頁面不跟著上下滑 */
+  .step { display:flex; align-items:center; gap:8px; margin:4px 0 6px; font-size:13px; }
+  .step .btn { padding:4px 14px; font-size:16px; line-height:1; }
+  .step input[type=range] { flex:1; min-width:80px; accent-color:var(--accent); }
+  .step .pos { min-width:9em; text-align:right; color:var(--muted); font-variant-numeric:tabular-nums; }
   #plot { height:68vw; min-height:240px; max-height:520px; }
   #cut { height:220px; }
   @media (min-width:900px) { #plot { height:460px; } #cut { height:260px; } }
@@ -154,12 +159,25 @@
     </div>
     <div class="card" id="cutCard" style="display:none">
       <div class="seg"><button class="btn" id="cutTrace"></button><button class="btn" id="cutOther"></button><button class="btn" id="cutBoth">兩個都看</button></div>
+      <div class="vbar">
+        <label>Trace 視圖 <select id="cTf" title="trace 自己的視圖（跟熱圖分開）；相位、實部、虛部、I/Q 要有原始資料">
+          <option value="same">跟熱圖一樣</option><option value="db">|S| dB</option><option value="lin">|S| 線性</option>
+          <option value="phase">相位 °</option><option value="uphase">相位 °（展開）</option><option value="rad">相位 rad</option>
+          <option value="re">實部</option><option value="im">虛部</option><option value="iq">I/Q 平面（實部 vs 虛部）</option></select></label>
+        <span class="hint" id="cNote"></span>
+      </div>
+      <div class="step">
+        <button class="btn" id="stepPrev" title="上一條 trace（←）">‹</button>
+        <input type="range" id="stepRange" min="0" max="0" value="0" title="拖曳一條條換 trace">
+        <button class="btn" id="stepNext" title="下一條 trace（→）">›</button>
+        <span class="pos" id="stepPos"></span>
+      </div>
       <div class="cuttitle" id="cutTitle1"></div>
       <canvas id="cut"></canvas>
       <div class="cuttitle" id="cutTitle2" style="display:none"></div>
       <canvas id="cut2" style="display:none"></canvas>
       <div class="probe" id="cutProbe"></div>
-      <div class="hint">在熱圖上點一下（或拖曳）選截面的位置；← → 鍵逐條移動。</div>
+      <div class="hint">在熱圖上點一下（或拖曳）選截面的位置；用 ‹ ›、拖曳上面的滑桿或 ← → 鍵一條條換 trace。</div>
     </div>
     <div class="card" id="mkCard" style="display:none">
       <div class="vbar">
@@ -322,7 +340,7 @@ $("backBtn").onclick = () => history.length > 1 ? history.back() : go("d", cur.d
 // 1.0.23：視圖（dB / 線性 / 相位 / 實部 / 虛部、減背景、微分）、色階與範圍、框選放大、截面預設看「固定電流的 trace」、標記
 let Z = { db:null, re:null, im:null }, zv = null, zvName = "", zvUnit = "", imgCache = null;
 let zoom = null, markers = [], markMode = false, zoomMode = false, band = null;
-const VIEW = { tf:"db", bg:"none", cmap:"", rev:false, range:"auto", lo:null, hi:null, cut:"trace", track:true };
+const VIEW = { tf:"db", bg:"none", cmap:"", rev:false, range:"auto", lo:null, hi:null, cut:"trace", track:true, ctf:"same" };
 try { Object.assign(VIEW, JSON.parse(localStorage.getItem("qel-d-view") || "{}")); } catch (e) {}
 function saveView() { try { localStorage.setItem("qel-d-view", JSON.stringify(VIEW)); } catch (e) {} }
 function b64f32(s) { const raw = Uint8Array.from(atob(s), c => c.charCodeAt(0)); return new Float32Array(raw.buffer); }
@@ -353,7 +371,7 @@ async function openFile(rel) {
       Z.db = b64f32(pv.z);
       swapped = false;
       if (isFreq(pv.x_name, pv.x_unit) && !isFreq(pv.y_name, pv.y_unit)) transpose();
-      if (VIEW.tf !== "db" && pv.complex) await ensureComplex(f);
+      if ((VIEW.tf !== "db" || needsComplexTrace()) && pv.complex) await ensureComplex(f);
       if (file !== f) return;
       computeView();
     }
@@ -486,6 +504,9 @@ function syncBars() {
   $("vBg").value = VIEW.bg; $("vCmap").value = VIEW.cmap; $("vRev").checked = !!VIEW.rev; $("vRange").value = VIEW.range;
   $("vManual").style.display = VIEW.range === "manual" ? "" : "none";
   $("mkTrack").checked = !!VIEW.track;
+  for (const o of $("cTf").options) o.disabled = !["same", "db"].includes(o.value) && !cplx;
+  $("cTf").value = cplx || ["same", "db"].includes(VIEW.ctf) ? VIEW.ctf : "same";
+  $("cNote").textContent = !cplx && !["same", "db"].includes(VIEW.ctf) ? "這個檔還沒有原始資料，trace 先跟熱圖一樣" : "";
   $("axHint").textContent = swapped ? "頻率放在 Y 軸（跟檔案相反）" : "";
   if (!cplx && VIEW.tf !== "db") $("vNote").textContent = "這個檔還沒有原始資料，先顯示 dB";
   else if ($("vNote").textContent.startsWith("這個檔還沒有")) $("vNote").textContent = "";
@@ -515,6 +536,31 @@ $("mkClear").onclick = () => { markers = []; requestAnimationFrame(draw); };
 $("mkTrack").onchange = () => { VIEW.track = $("mkTrack").checked; saveView(); requestAnimationFrame(draw); };
 $("mkMin").onclick = () => extremeMarker(-1);
 $("mkMax").onclick = () => extremeMarker(1);
+function needsComplexTrace() { return !["same", "db"].includes(VIEW.ctf); }
+$("cTf").addEventListener("change", async () => {
+  VIEW.ctf = $("cTf").value; saveView();
+  if (needsComplexTrace() && pv && pv.complex && !Z.re) { await ensureComplex(file); computeView(); }
+  syncBars(); requestAnimationFrame(draw);
+});
+function stepTrace(delta, absolute) {
+  if (!pv || pv.kind !== "2d" || !cutAt) return;
+  const Zm = zoomed(), kind = cutKinds()[0];
+  if (kind === "v") {
+    const up = pv.x[pv.nx - 1] >= pv.x[0], i = absolute != null ? absolute : cutAt.i + delta * (up ? 1 : -1);
+    cutAt = { i:Math.min(Zm.i1, Math.max(Zm.i0, i)), j:cutAt.j };
+  } else {
+    const up = pv.y[pv.ny - 1] >= pv.y[0], j = absolute != null ? absolute : cutAt.j + delta * (up ? 1 : -1);
+    cutAt = { i:cutAt.i, j:Math.min(Zm.j1, Math.max(Zm.j0, j)) };
+  }
+  requestAnimationFrame(draw);
+}
+$("stepPrev").onclick = () => stepTrace(-1);
+$("stepNext").onclick = () => stepTrace(1);
+$("stepRange").addEventListener("input", () => {
+  const kind = cutKinds()[0], Zm = zoomed(), lo = kind === "v" ? Zm.i0 : Zm.j0, hi = kind === "v" ? Zm.i1 : Zm.j1;
+  const coord = kind === "v" ? pv.x : pv.y, up = coord[hi] >= coord[lo], v = +$("stepRange").value;
+  stepTrace(0, up ? v : lo + hi - v);                    // 滑桿左邊 = 座標小的那一端
+});
 $("cutTrace").onclick = () => { VIEW.cut = "trace"; saveView(); requestAnimationFrame(draw); };
 $("cutOther").onclick = () => { VIEW.cut = "other"; saveView(); requestAnimationFrame(draw); };
 $("cutBoth").onclick = () => { VIEW.cut = "both"; saveView(); requestAnimationFrame(draw); };
@@ -637,6 +683,7 @@ function draw() {
   renderMarkers();
 }
 function drawLine() {
+  $("plot").classList.remove("heat");
   $("cbar").style.display = "none"; $("cutCard").style.display = "none";
   const cv = $("plot"), [g, w, h] = setup(cv), xs = pv.x, ys = pv.y;
   const xr = range(xs), yr = pad(range(ys));
@@ -689,6 +736,7 @@ function heatImage(name, lo, hi) {
   return off;
 }
 function drawHeat() {
+  $("plot").classList.add("heat");
   const cv = $("plot"), [g, w, h] = setup(cv), nx = pv.nx, ny = pv.ny, xs = pv.x, ys = pv.y, name = cmapName();
   const Zm = zoomed();
   const xr = [xs[Zm.i0], xs[Zm.i1]], yr = [ys[Zm.j0], ys[Zm.j1]];
@@ -727,15 +775,40 @@ function nearest(arr, v, a = 0, b = arr.length - 1) {
   for (let i = a; i <= b; i++) { if (arr[i] == null) continue; const e = Math.abs(arr[i] - v); if (e < d) { d = e; best = i; } }
   return best;
 }
+// 1.0.24：trace 自己的視圖（跟熱圖分開）；same = 熱圖目前的視圖（含減背景）
+const CTF = { db:["|S| dB", "dB"], lin:["|S| 線性", ""], phase:["相位", "°"], uphase:["相位（展開）", "°"], rad:["相位", "rad"],
+              re:["實部", ""], im:["虛部", ""], iq:["虛部", ""] };
+function traceMode() { return VIEW.ctf !== "same" && (VIEW.ctf === "db" || Z.re) ? VIEW.ctf : "same"; }
+function traceVals(pos) {              // pos：z 的位置（照沿 trace 的順序）→ 這個 trace 視圖的數值
+  const m = traceMode();
+  if (m === "same") return { ys:pos.map(p => zv[p]), name:zvName, unit:zvUnit };
+  const base = pv.channel_name || pv.z_name || "";
+  if (m === "db" && !Z.re) return { ys:pos.map(p => Z.db[p]), name:pv.z_name || base, unit:"dB" };
+  const re = Z.re, im = Z.im;
+  let ys = pos.map(p => {
+    const a = re[p], b = im[p];
+    return m === "db" ? 20 * Math.log10(Math.hypot(a, b)) : m === "lin" ? Math.hypot(a, b) : m === "re" || m === "iq" ? a : m === "im" ? b
+      : m === "rad" ? Math.atan2(b, a) : Math.atan2(b, a) * 180 / Math.PI;
+  });
+  if (m === "uphase") {
+    let off = 0, prev = NaN;
+    ys = ys.map(v => { if (!Number.isFinite(v)) return v; if (Number.isFinite(prev)) { const d = v + off - prev; if (d > 180) off -= 360 * Math.round(d / 360); else if (d < -180) off += 360 * Math.round(-d / 360); } prev = v + off; return prev; });
+  }
+  const out = { ys, name:`${base} ${CTF[m][0]}`, unit:CTF[m][1] };
+  if (m === "iq") out.qs = pos.map(p => im[p]);
+  return out;
+}
 function cutData(kind) {     // v：固定 X = x[i]，沿 Y；h：固定 Y = y[j]，沿 X（放大時只取看得到的範圍）
   const nx = pv.nx, Zm = zoomed();
   if (kind === "v") {
     const idx = []; for (let j = Zm.j0; j <= Zm.j1; j++) idx.push(j);
-    return { kind, idx, xs:idx.map(j => pv.y[j]), ys:idx.map(j => zv[j * nx + cutAt.i]), xn:pv.y_name, xu:pv.y_unit,
+    const t = traceVals(idx.map(j => j * nx + cutAt.i));
+    return { kind, idx, xs:idx.map(j => pv.y[j]), ys:t.ys, qs:t.qs, yn:t.name, yu:t.unit, xn:pv.y_name, xu:pv.y_unit,
              fixed:`${pv.x_name} = ${si(pv.x[cutAt.i], pv.x_unit, 6)}`, on:m => m.i === cutAt.i, pos:m => m.j };
   }
   const idx = []; for (let i = Zm.i0; i <= Zm.i1; i++) idx.push(i);
-  return { kind, idx, xs:idx.map(i => pv.x[i]), ys:idx.map(i => zv[cutAt.j * nx + i]), xn:pv.x_name, xu:pv.x_unit,
+  const t = traceVals(idx.map(i => cutAt.j * nx + i));
+  return { kind, idx, xs:idx.map(i => pv.x[i]), ys:t.ys, qs:t.qs, yn:t.name, yu:t.unit, xn:pv.x_name, xu:pv.x_unit,
            fixed:`${pv.y_name} = ${si(pv.y[cutAt.j], pv.y_unit, 6)}`, on:m => m.j === cutAt.j, pos:m => m.i };
 }
 function extremeIndex(ys, sign) { let k = -1; ys.forEach((v, n) => { if (isFinite(v) && (k < 0 || (sign < 0 ? v < ys[k] : v > ys[k]))) k = n; }); return k; }
@@ -752,27 +825,42 @@ function drawCuts() {
   kinds.forEach((kind, n) => {
     const cv = $(n ? "cut2" : "cut"), title = $(n ? "cutTitle2" : "cutTitle1");
     cv.style.display = ""; title.style.display = "";
-    const d = cutData(kind), [g, w, h] = setup(cv);
-    const xr = range(d.xs), yr = pad(range(d.ys));
-    const [pw, ph] = axes(g, w, h, xr, yr, label(d.xn, d.xu), label(zvName, zvUnit), d.xu, zvUnit);
-    cutGeoms[n ? "cut2" : "cut"] = Object.assign(d, { pw, ph, xr, yr });
-    line(g, d.xs, d.ys, xr, yr, pw, ph, css("--accent"));
+    const d = cutData(kind), [g, w, h] = setup(cv), iq = !!d.qs;
+    // I/Q：橫軸實部、縱軸虛部（等比例看圓）；其他：橫軸頻率 / 電流
+    const X = iq ? d.ys : d.xs, Y = iq ? d.qs : d.ys;
+    let xr = iq ? pad(range(X)) : range(X), yr = pad(range(Y));
+    if (iq) {                                            // 等比例
+      const pw0 = w - MG.l - MG.r, ph0 = h - MG.t - MG.b, sx = (xr[1] - xr[0]) / pw0, sy = (yr[1] - yr[0]) / ph0, k = Math.max(sx, sy);
+      const cx = (xr[0] + xr[1]) / 2, cy = (yr[0] + yr[1]) / 2;
+      xr = [cx - k * pw0 / 2, cx + k * pw0 / 2]; yr = [cy - k * ph0 / 2, cy + k * ph0 / 2];
+    }
+    const xl = iq ? `${pv.channel_name || pv.z_name || ""} 實部` : label(d.xn, d.xu), yl = iq ? `${pv.channel_name || pv.z_name || ""} 虛部` : label(d.yn, d.yu);
+    const [pw, ph] = axes(g, w, h, xr, yr, xl, yl, iq ? "" : d.xu, iq ? "" : d.yu);
+    cutGeoms[n ? "cut2" : "cut"] = Object.assign(d, { pw, ph, xr, yr, X, Y, iq });
+    line(g, X, Y, xr, yr, pw, ph, css("--accent"));
     let txt = d.fixed;
-    if (VIEW.track) {
+    if (VIEW.track && !iq) {
       const k = extremeIndex(d.ys, -1);
       if (k >= 0) {
         dot(g, MG.l + px(d.xs[k], xr, pw), MG.t + ph - px(d.ys[k], yr, ph), "", css("--accent"), "down");
-        txt += ` · 最低 ${si(d.ys[k], zvUnit, 4)} @ ${si(d.xs[k], d.xu, 6)}`;
+        txt += ` · 最低 ${si(d.ys[k], d.yu, 4)} @ ${si(d.xs[k], d.xu, 6)}`;
       }
     }
     markers.forEach((m, mi) => {
       if (m.i == null || !d.on(m)) return;
-      const p = d.pos(m), k = d.idx.indexOf(p);
-      if (k >= 0 && isFinite(d.ys[k])) dot(g, MG.l + px(d.xs[k], xr, pw), MG.t + ph - px(d.ys[k], yr, ph), "M" + (mi + 1), css("--star"));
+      const k = d.idx.indexOf(d.pos(m));
+      if (k >= 0 && isFinite(Y[k])) dot(g, MG.l + px(X[k], xr, pw), MG.t + ph - px(Y[k], yr, ph), "M" + (mi + 1), css("--star"));
     });
-    title.textContent = (kind === t ? "Trace · " : "") + d.fixed;
+    title.textContent = (kind === t ? "Trace · " : "") + d.fixed + (traceMode() !== "same" ? `　（${iq ? "I/Q 平面" : d.yn}）` : "");
     texts.push(txt);
   });
+  // 一條條換 trace：滑桿 / ‹ ›
+  const k0 = kinds[0], Zm = zoomed(), lo = k0 === "v" ? Zm.i0 : Zm.j0, hi = k0 === "v" ? Zm.i1 : Zm.j1;
+  const coord = k0 === "v" ? pv.x : pv.y, at = k0 === "v" ? cutAt.i : cutAt.j, up = coord[hi] >= coord[lo];
+  const r = $("stepRange"); r.min = lo; r.max = hi; r.value = up ? at : lo + hi - at;
+  const nm = k0 === "v" ? pv.x_name : pv.y_name, un = k0 === "v" ? pv.x_unit : pv.y_unit;
+  $("stepPos").textContent = `第 ${(up ? at - lo : hi - at) + 1} / ${hi - lo + 1} 條 · ${nm} ${si(coord[at], un, 6)}`;
+  $("stepPrev").disabled = (up ? at <= lo : at >= hi); $("stepNext").disabled = (up ? at >= hi : at <= lo);
   if (kinds.length < 2) { $("cut2").style.display = "none"; $("cutTitle2").style.display = "none"; }
   $("cutProbe").textContent = texts.join("　|　");
 }
@@ -797,11 +885,22 @@ function renderMarkers() {
   const el = $("mkTable");
   if (!markers.length) { el.innerHTML = `<div class="hint">按「＋ 標記」後在曲線或熱圖上點一下放標記（最多 12 個）；第一個標記是 Δ 的基準。</div>`; return; }
   const two = pv.kind === "2d", u = two ? zvUnit : pv.z_unit, ref = mval(markers[0]);
+  // trace 視圖的值：沿標記所在的那一條 trace 算（展開相位要整條才對）
+  const tm = two ? traceMode() : "same", tv = m => {
+    const kind = cutKinds()[0], Zm = zoomed(), pos = [], idx = [];
+    if (kind === "v") for (let j = Zm.j0; j <= Zm.j1; j++) { pos.push(j * pv.nx + m.i); idx.push(j); }
+    else for (let i = Zm.i0; i <= Zm.i1; i++) { pos.push(m.j * pv.nx + i); idx.push(i); }
+    const t = traceVals(pos), k = Math.max(0, idx.indexOf(kind === "v" ? m.j : m.i));
+    return { v:t.ys[k], q:t.qs ? t.qs[k] : null, u:t.unit, n:t.name };
+  };
+  const tcol = tm !== "same" ? tv(markers[0]) : null;
   let html = `<table class="mk"><tr><th></th><th>${esc(pv.x_name || "X")}</th>${two ? `<th>${esc(pv.y_name || "Y")}</th>` : ""}<th>${esc(two ? zvName : pv.z_name || "值")}</th>` +
+    (tcol ? `<th>${esc(tm === "iq" ? "I / Q" : tcol.n)}</th>` : "") +
     `<th>Δ${esc(pv.x_name || "X")}</th>${two ? `<th>Δ${esc(pv.y_name || "Y")}</th>` : ""}<th>Δ值</th><th></th></tr>`;
   markers.forEach((m, n) => {
     const a = mval(m), d = n ? (x, y) => si(x - y, null, 5) : () => "—";
     html += `<tr><td class="m">M${n + 1}</td><td>${si(a.x, pv.x_unit, 7)}</td>${two ? `<td>${si(a.y, pv.y_unit, 7)}</td>` : ""}<td>${si(a.v, u, 5)}</td>` +
+      (tcol ? (() => { const t = tv(m); return `<td>${tm === "iq" ? `${fmtNum(t.v, 5)}, ${fmtNum(t.q, 5)}` : si(t.v, t.u, 5)}</td>`; })() : "") +
       `<td>${n ? si(a.x - ref.x, pv.x_unit, 5) : "—"}</td>${two ? `<td>${n ? si(a.y - ref.y, pv.y_unit, 5) : "—"}</td>` : ""}<td>${n ? si(a.v - ref.v, u, 5) : "—"}</td>` +
       `<td><button data-del="${n}" title="刪掉">×</button></td></tr>`;
   });
@@ -833,7 +932,9 @@ $("plot").addEventListener("pointerdown", ev => {
   }
   if (x < 0 || y < 0 || x > geom.pw || y > geom.ph) return;
   if (zoomMode) { zstart = [x, y]; band = null; $("plot").setPointerCapture(ev.pointerId); return; }
+  ev.preventDefault();
   dragging = !markMode; pickHeat(x, y, markMode);
+  if (dragging) $("plot").setPointerCapture(ev.pointerId);
 });
 $("plot").addEventListener("pointermove", ev => {
   if (!pv || pv.kind !== "2d" || !geom) return;
@@ -867,9 +968,13 @@ window.addEventListener("pointerup", () => {
 $("plot").addEventListener("dblclick", () => { if (zoom) { zoom = null; requestAnimationFrame(draw); } });
 for (const id of ["cut", "cut2"]) $(id).addEventListener("click", ev => {
   const d = cutGeoms[id]; if (!d) return;
-  const r = ev.target.getBoundingClientRect(), x = ev.clientX - r.left - MG.l;
-  const k = nearest(d.xs, d.xr[0] + (d.xr[1] - d.xr[0]) * Math.max(0, Math.min(1, x / d.pw)));
-  $("cutProbe").textContent = `${d.fixed} · ${si(d.xs[k], d.xu, 7)} · ${si(d.ys[k], zvUnit, 5)}`;
+  const r = ev.target.getBoundingClientRect(), x = ev.clientX - r.left - MG.l, y = ev.clientY - r.top - MG.t;
+  let k;
+  if (d.iq) {                                            // I/Q：離點最近的那一點
+    let best = Infinity; k = 0;
+    d.X.forEach((a, n) => { const dx = MG.l + px(a, d.xr, d.pw) - (x + MG.l), dy = MG.t + d.ph - px(d.Y[n], d.yr, d.ph) - (y + MG.t), e = dx * dx + dy * dy; if (e < best) { best = e; k = n; } });
+  } else k = nearest(d.xs, d.xr[0] + (d.xr[1] - d.xr[0]) * Math.max(0, Math.min(1, x / d.pw)));
+  $("cutProbe").textContent = `${d.fixed} · ${si(d.xs[k], d.xu, 7)} · ` + (d.iq ? `I ${fmtNum(d.ys[k], 5)}　Q ${fmtNum(d.qs[k], 5)}` : si(d.ys[k], d.yu, 5));
   if (markMode) addMarker(d.kind === "v" ? { i:cutAt.i, j:d.idx[k] } : { i:d.idx[k], j:cutAt.j });
 });
 document.addEventListener("keydown", ev => {
@@ -877,6 +982,7 @@ document.addEventListener("keydown", ev => {
   const Zm = zoomed(), mv = { ArrowLeft:[-1, 0], ArrowRight:[1, 0], ArrowUp:[0, 1], ArrowDown:[0, -1] }[ev.key];
   if (!mv) return;
   ev.preventDefault();
+  if (ev.key === "ArrowLeft" || ev.key === "ArrowRight") { stepTrace(ev.key === "ArrowRight" ? 1 : -1); return; }
   const yup = pv.y[pv.ny - 1] >= pv.y[0], xup = pv.x[pv.nx - 1] >= pv.x[0];
   cutAt = { i:Math.min(Zm.i1, Math.max(Zm.i0, cutAt.i + mv[0] * (xup ? 1 : -1))), j:Math.min(Zm.j1, Math.max(Zm.j0, cutAt.j + mv[1] * (yup ? 1 : -1))) };
   const v = zv[cutAt.j * pv.nx + cutAt.i];

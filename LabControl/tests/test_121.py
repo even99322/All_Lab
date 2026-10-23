@@ -73,3 +73,12 @@ def test_data_page_views_and_markers():
     for needle in ('id="vTf"', 'id="vBg"', 'id="vCmap"', 'id="zoomBtn"', 'id="cutTrace"', 'id="cutBoth"', 'id="mkMode"',
                    'id="mkTable"', "complex=1", "function traceKind", "uphase"):
         assert needle in html, needle
+
+
+def test_data_page_trace_stepping_and_views():
+    """1.0.24：熱圖拖曳不捲動頁面、一條條換 trace、trace 自己的視圖。"""
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[1] / "labhub" / "static" / "mdata.html").read_text(encoding="utf-8")
+    for needle in ("#plot.heat { touch-action:none; }", 'id="stepPrev"', 'id="stepRange"', 'id="stepNext"', 'id="cTf"',
+                   'value="iq"', "function stepTrace", "function traceVals"):
+        assert needle in html, needle
