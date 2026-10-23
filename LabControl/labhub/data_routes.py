@@ -4,6 +4,7 @@
     GET /api/data/list?dir=<相對路徑>     → 這個資料夾的子資料夾（含檔案數、最近修改）與檔案
     GET /api/data/search?q=&star=1&limit= → 檔名 / 路徑 / 標籤搜尋（全部數據）
     GET /api/data/preview?path=          → 一個檔的預覽：座標、數值（2D 為 float32 base64）、量測資訊
+                          &complex=1     → 1.0.23：另外帶複數原始資料 zre / zim（有的話；網頁換相位、實部、虛部）
 
 預覽來自索引程式算好的 .npz（labhub/index_codec.py）；Hub 只用標準函式庫讀它（zip + .npy），不需要 numpy。
 權限：用論文庫帳號登入（或裝置 token、數據集散地的 .qel/index_key），與 /api/index/* 相同。
@@ -99,7 +100,7 @@ META_KEYS = ("kind", "log_name", "channel_name", "colormap", "z_min", "z_max", "
              "fixed_dims")
 
 
-def preview_json(blob: bytes) -> Dict[str, Any]:
+def preview_json(blob: bytes, with_complex: bool = False) -> Dict[str, Any]:
     """.npz → 給網頁畫圖的 JSON：1D = x、y 數列；2D = x、y 座標與 z（float32、列優先、base64）。"""
     meta, arrays = read_npz(blob)
     out: Dict[str, Any] = {k: meta.get(k) for k in META_KEYS}
@@ -111,6 +112,9 @@ def preview_json(blob: bytes) -> Dict[str, Any]:
         out["y"] = _floats(arrays["y"][2])
         out["ny"], out["nx"] = (zshape + (1, 1))[:2]
         out["z"] = _f32_b64(z)
+        out["complex"] = "zre" in arrays and "zim" in arrays          # 1.0.23：可以換成相位、實部、虛部
+        if with_complex and out["complex"]:
+            out["zre"], out["zim"] = _f32_b64(arrays["zre"][2]), _f32_b64(arrays["zim"][2])
     else:
         out["y"] = _floats(arrays["y"][2])
     return out
@@ -232,7 +236,8 @@ def _preview(h: Handler) -> None:
         _send_json(h, {"ok": True, "file": info, "preview": None,
                        "reason": row["error"] or ("索引還沒算到這個檔" if row["preview"] is None else "這個檔沒有預覽")})
         return
-    key = (rel, row["size"], row["mtime"])
+    cplx = h._query().get("complex") == "1"                # 1.0.23：要切換相位 / 實部 / 虛部時才送複數資料
+    key = (rel, row["size"], row["mtime"], cplx)
     data = CACHE.get(key)
     if data is None:
         try:
@@ -240,7 +245,7 @@ def _preview(h: Handler) -> None:
         except OSError:
             raise HubHTTPError(404, "預覽檔不見了（索引程式會重新產生）")
         try:
-            data = preview_json(blob)
+            data = preview_json(blob, with_complex=cplx)
         except (ValueError, KeyError, zipfile.BadZipFile) as e:
             raise HubHTTPError(500, f"預覽讀不懂：{e}")
         CACHE.put(key, data)

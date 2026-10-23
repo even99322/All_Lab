@@ -23,12 +23,13 @@ PREVIEW_Y = 400
 PREVIEW_1D = 4000
 
 
-def _reduce(z: np.ndarray, coords: np.ndarray, axis: int, limit: int) -> Tuple[np.ndarray, np.ndarray]:
-    """沿 axis 縮成最多 limit 格；每格取離整體中位數最遠的值，座標取那一格的平均。"""
+def _reduce(z: np.ndarray, coords: np.ndarray, axis: int, limit: int, extra=None):
+    """沿 axis 縮成最多 limit 格；每格取離整體中位數最遠的值，座標取那一格的平均。
+    extra（1.0.23）：同形狀的複數原始資料，取「同一格同一個點」（跟 z 選的點一致）；有給就多回傳一個。"""
     n = z.shape[axis]
     k = int(math.ceil(n / max(1, limit)))
     if k <= 1:
-        return z, coords
+        return (z, coords) if extra is None else (z, coords, extra)
     m = int(math.ceil(n / k))
     pad = m * k - n
     zz = np.moveaxis(z, axis, -1).astype(np.float64, copy=False)
@@ -45,7 +46,13 @@ def _reduce(z: np.ndarray, coords: np.ndarray, axis: int, limit: int) -> Tuple[n
         c = np.concatenate([c, np.full(pad, np.nan)])
     with np.errstate(invalid="ignore"):
         cc = np.nanmean(c.reshape(m, k), axis=1)
-    return np.moveaxis(out, -1, axis), cc
+    if extra is None:
+        return np.moveaxis(out, -1, axis), cc
+    ee = np.moveaxis(np.asarray(extra, dtype=np.complex128), axis, -1)
+    if pad:
+        ee = np.concatenate([ee, np.full(ee.shape[:-1] + (pad,), np.nan + 0j)], axis=-1)
+    eo = np.take_along_axis(ee.reshape(ee.shape[:-1] + (m, k)), pick[..., None], axis=-1)[..., 0]
+    return np.moveaxis(out, -1, axis), cc, np.moveaxis(eo, -1, axis)
 
 
 def _real(values: Any) -> np.ndarray:
@@ -74,8 +81,8 @@ def _json(obj: Any) -> Any:
     return str(obj)
 
 
-def encode_preview(preview: Any) -> bytes:
-    """QuickPreviewData → bytes。"""
+def encode_preview(preview: Any, raw: Any = None) -> bytes:
+    """QuickPreviewData → bytes。raw（1.0.23）：2D 複數原始資料（跟 z 同形狀）→ 另存 zre / zim，網頁可以換成相位、實部、虛部…"""
     data = preview.data
     acq = getattr(preview, "acquisition", None)
     meta: Dict[str, Any] = {
@@ -93,8 +100,19 @@ def encode_preview(preview: Any) -> bytes:
         z = _real(data.z_values)
         x = np.asarray(data.x_values, dtype=np.float64)
         y = np.asarray(data.y_values, dtype=np.float64)
-        z, x = _reduce(z, x, 1, PREVIEW_X)
-        z, y = _reduce(z, y, 0, PREVIEW_Y)
+        cz = None
+        if raw is not None:
+            cz = np.asarray(raw)
+            if cz.shape != z.shape or not np.iscomplexobj(cz):
+                cz = None
+        if cz is None:
+            z, x = _reduce(z, x, 1, PREVIEW_X)
+            z, y = _reduce(z, y, 0, PREVIEW_Y)
+        else:
+            z, x, cz = _reduce(z, x, 1, PREVIEW_X, cz)
+            z, y, cz = _reduce(z, y, 0, PREVIEW_Y, cz)
+            arrays["zre"], arrays["zim"] = cz.real.astype(np.float32), cz.imag.astype(np.float32)
+            meta["complex"] = True
         meta.update(y_name=data.y_name, y_unit=data.y_unit, operation_label=getattr(data, "operation_label", ""),
                     display_unit=getattr(data, "display_unit", None), shape=list(np.asarray(data.z_values).shape))
         arrays.update(x=x.astype(np.float64), y=y.astype(np.float64), z=z.astype(np.float32))

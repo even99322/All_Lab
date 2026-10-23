@@ -33,7 +33,7 @@ log = logging.getLogger("labhub.indexer")
 
 HERE = Path(__file__).resolve().parent
 LLVCORE = HERE / "llvcore"
-SCHEMA = 1
+SCHEMA = 2          # 1.0.23：2D 預覽多存複數原始資料 → 全部重新解析一次
 HDF5_EXTENSIONS = (".hdf5", ".h5", ".nc")
 SKIP_DIRS = {"@eaDir", "#recycle", "#snapshot", "@tmp", "$RECYCLE.BIN", "System Volume Information"}
 WRITING_WINDOW = 60.0                 # 這麼近改過的檔可能還在寫：下一輪再做
@@ -86,6 +86,25 @@ def read_status(data: Optional[Path] = None) -> Optional[Dict[str, Any]]:
     try:
         return json.loads((index_dir(data) / "status.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
+        return None
+
+
+def raw_grid(path: str, pv: Any):
+    """1.0.23：2D 預覽的複數原始資料（網頁切換 dB / 相位 / 實部 / 虛部用）；不是複數或讀不到 → None。"""
+    if getattr(pv, "kind", "") != "2d":
+        return None
+    try:
+        from app.core.labber_parser import load_experiment
+
+        with load_experiment(path) as ex:
+            if not ex.get_channel(pv.channel_name).is_complex:
+                return None
+            dims = ex.list_dimensions(pv.channel_name)
+            if len(dims) != 2:
+                return None
+            g = ex.get_2d_data(dims[0].name, dims[1].name, pv.channel_name, transform="raw")
+            return g.z_values
+    except Exception:  # noqa: BLE001 - 沒有就只有 dB
         return None
 
 
@@ -263,7 +282,8 @@ def index_file(root: Path, rel: str, stat: os.stat_result, data: Optional[Path] 
             try:
                 from app.core.quick_preview import build_quick_preview
 
-                blob = encode_preview(build_quick_preview(str(path)))
+                pv = build_quick_preview(str(path))
+                blob = encode_preview(pv, raw_grid(str(path), pv))
                 pp.parent.mkdir(parents=True, exist_ok=True)
                 tmp = pp.with_suffix(".part")
                 tmp.write_bytes(blob)

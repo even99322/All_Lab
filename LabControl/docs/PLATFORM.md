@@ -245,6 +245,14 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 - 手動步進：`run_defaults.manual_loop: true` → 每一點自動循環量測，直到「記錄並下一點」。
 - 子專案需要論文庫 1.8.0（`projects.parent_id`、schema 8；專案專區「新增子專案」、編輯專案改「上層專案」、同一層名稱不重複、刪除時子專案移到上一層）；舊版論文庫一切照舊（都是最上層）。
 
+### 0u. 1.0.23：網頁數據查看的視圖、截面、標記
+
+- 索引程式 `SCHEMA = 2`：2D 預覽若是複數通道，另外用 `labber_parser.load_experiment` 讀 `transform="raw"` 的格點，
+  `index_codec._reduce(..., extra)` 用 dB 選的同一個點縮小，存成 `zre` / `zim`（float32），meta `complex: true`。SCHEMA 改了 → 全部重新解析。
+- `GET /api/data/preview?path=&complex=1` 才帶 `zre` / `zim`（平常只帶 dB，手機省流量）。`read_npy` 也讀得懂 Fortran 順序（1.0.21）。
+- `mdata.html`：視圖在瀏覽器端算（dB、線性、相位、展開相位〔沿頻率軸〕、實部、虛部；減背景〔每個頻率減所有 trace 的中位數，線性則相除〕、
+  每條 trace 減中位數、對頻率微分）；頻率軸預設放 Y；截面「Trace」= 沿頻率軸、固定另一軸；標記存格點索引，換視圖重算；設定存 localStorage `qel-d-view`。
+
 ### 0t. 1.0.20：授權頁讀授權伺服器（lmstat）、模擬工具 3.5
 
 - 站長設定 `PUT /api/hfss/usage/server {server}`（存在 `data/hfss_usage.json` 的 `license_server`；位址不寫在程式裡）。

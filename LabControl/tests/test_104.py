@@ -92,6 +92,9 @@ def test_indexer_pass(tmp_path, nc_files, llvcore):
     assert row["status"] == "ok" and row["preview"] == "ok" and row["sweep_dimension"].startswith("2D")
     meta, arrays = decode_arrays(indexer.preview_path(row["rel"], data).read_bytes())
     assert meta["kind"] == "2d" and arrays["z"].shape == (3, 11)
+    # 1.0.23：VNA 是複數 → 另存原始資料（網頁可以換相位、實部、虛部）
+    assert meta.get("complex") and arrays["zre"].shape == arrays["zim"].shape == (3, 11)
+    assert np.allclose(20 * np.log10(np.hypot(arrays["zre"], arrays["zim"])), arrays["z"], atol=1e-3)
     assert {r["rel"] for r in ix.con.execute("SELECT rel FROM folders")} == {"proj", "proj/Data_1014"}
     assert ix.pass_once()["indexed"] == 0                              # 沒變：不再解析
     fresh.unlink()
