@@ -137,6 +137,15 @@ def run() -> int:
         return f"{len(sc['verts'])} 個頂點"
     step("YIG 3D 預覽", view3d)
 
+    def yhelp():
+        need_app()
+        from yig_help import YigHelpDialog
+        d = YigHelpDialog(None)
+        r = d.recalc()
+        d.deleteLater()
+        return f"Kittel {r['f_k']:.4f} GHz、線寬 {r['lw']:.3g} MHz"
+    step("YIG 參數說明", yhelp)
+
     def usage():
         import usage as u
         return f"{u.identity()['host']}，AEDT 開著：{u.aedt_status()['running']}"

@@ -119,3 +119,27 @@ def test_update_waits_only_for_itself(monkeypatch):
     assert not updater.is_onefile()                                 # 安裝版（資料夾版）
     monkeypatch.setattr(updater.sys, "_MEIPASS", "/tmp/_MEI12345", raising=False)
     assert updater.is_onefile()
+
+
+def test_yig_help_dialog():
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ["HFSS_NO_UPDATE_CHECK"] = "1"
+    from PyQt6.QtWidgets import QApplication
+    QApplication.instance() or QApplication([])
+    from ui_main import MainWindow
+    w = MainWindow()
+    try:
+        w.edit_yig_bias.setText("250"); w.combo_yig_bmode.setCurrentIndex(0)
+        w.edit_yig_dh.setText("0.2"); w.edit_yig_span.setText("50"); w.edit_yig_pts.setText("1001")
+        w.show_yig_help()
+        d = w.yig_help_dialog
+        r = d.results()
+        assert abs(r["f_k"] - 6.9981) < 1e-3 and abs(r["lw"] - 0.56) < 0.01 and r["ppl"] > 5
+        d.spins["dh"].setValue(0.05)                 # 線寬 0.14 MHz → 點不夠
+        assert "⚠" in d.out.toPlainText()
+        d.spins["bias"].setValue(300)
+        d.apply_to_main()
+        assert w.edit_yig_bias.text() == "300" and w.edit_yig_dh.text() == "0.05"
+        d.close()
+    finally:
+        w.close()

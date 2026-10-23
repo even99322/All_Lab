@@ -469,6 +469,11 @@ class MainWindow(QMainWindow):
         self.step_buttons.append(self.btn_yig_build)
         row.addWidget(self.btn_yig_build)
         row.addWidget(QLabel("（不用重新建模；改了直徑、位置、偏置也是按這個）"))
+        self.btn_yig_help = QPushButton("❓ 參數說明")
+        self.btn_yig_help.setToolTip("每個 YIG 參數影響什麼、即時試算（共振頻率、線寬、掃頻點夠不夠、網格大小）、常見問題")
+        self.btn_yig_help.setStyleSheet(f"font-weight: bold; color: {self._accent()};")
+        self.btn_yig_help.clicked.connect(self.show_yig_help)
+        row.addWidget(self.btn_yig_help)
         row.addStretch(1)
         lay.addLayout(row)
 
@@ -772,6 +777,17 @@ class MainWindow(QMainWindow):
         self.setStatusBar(sb)
         self.lbl_status_project = QLabel("")
         sb.addPermanentWidget(self.lbl_status_project)
+
+    def show_yig_help(self):
+        from yig_help import YigHelpDialog
+        dlg = getattr(self, "yig_help_dialog", None)
+        if dlg is None:
+            dlg = self.yig_help_dialog = YigHelpDialog(self)
+        else:
+            dlg.load_from_main()
+        dlg.show()
+        dlg.raise_()
+        dlg.activateWindow()
 
     def show_mode_help(self):
         from mode_help import ModeHelpDialog
