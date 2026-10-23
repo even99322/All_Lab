@@ -2,7 +2,7 @@
 ;   pyinstaller --noconfirm packaging\hfsstool.spec
 ;   iscc /DAppVersion=3.6 packaging\installer.iss   →  dist\HFSSTool_v3.6_windows-setup.exe
 ; 裝在目前使用者底下（實驗室電腦不用管理員密碼），開始功能表＋桌面捷徑，「新增或移除程式」可以解除安裝。
-; 程式內更新：下載新的安裝程式後用 /SILENT 執行（只顯示進度條），裝完自動重開。
+; 程式內更新：下載新的安裝程式後直接用 /SILENT /RELAUNCH 執行（只顯示進度條），裝完自動重開。
 #ifndef AppVersion
   #define AppVersion "0.0"
 #endif
@@ -54,8 +54,15 @@ Name: "{autodesktop}\HFSS 自動化工具"; Filename: "{app}\HFSSTool.exe"; Task
 
 [Run]
 Filename: "{app}\HFSSTool.exe"; Description: "{cm:LaunchProgram,HFSS 自動化工具}"; Flags: nowait postinstall skipifsilent
+; 程式內更新（v3.6.4）：/SILENT /RELAUNCH /FROM=<舊版> → 裝好自己重開
+Filename: "{app}\HFSSTool.exe"; Parameters: "--updated-from {param:FROM|?}"; Flags: nowait runasoriginaluser; Check: ShouldRelaunch
 
 [Code]
+function ShouldRelaunch: Boolean;
+begin
+  Result := WizardSilent and (Pos('/RELAUNCH', UpperCase(GetCmdTail)) > 0);
+end;
+
 { 從 3.5 以前的單一 exe 版更新時，舊版的更新程式會把這個安裝程式換到舊 exe 的位置（例如 桌面\HFSSTool_v3.5_windows.exe）再執行。
   裝好之後把那個檔刪掉，免得之後點它又跑一次安裝；新的捷徑在開始功能表 / 桌面。 }
 procedure CurStepChanged(CurStep: TSetupStep);

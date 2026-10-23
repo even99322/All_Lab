@@ -253,14 +253,38 @@ def install(new_exe: str) -> None:
             pass
     # v3.6.2：安裝版（資料夾版）只有一個程序；3.6 也等了父程序（= 檔案總管，永遠不會結束）→ 要等 2 分鐘逾時才開始安裝
     if is_setup(new_exe):
-        app = os.path.join(installed_dir(), "HFSSTool.exe") if installed_dir() else default_install_exe()
-        script = setup_script(new_exe, app, pids, current_version())
-    else:
-        script = install_script(new_exe, target_exe(), pids, current_version())
+        # v3.6.4：直接執行安裝程式，不經過 PowerShell（3.6.x 用 DETACHED_PROCESS 開 PowerShell，沒有主控台的 PowerShell
+        # 會直接結束 → 程式關了卻沒有安裝）。安裝程式 /CLOSEAPPLICATIONS 會等 / 關掉還沒結束的舊程式，
+        # /RELAUNCH 讓它裝好後自己重開（installer.iss 的 [Run]），記錄在 %TEMP%\hfss_setup.log。
+        subprocess.Popen(setup_args(new_exe, current_version()), close_fds=True,
+                         creationflags=getattr(subprocess, "DETACHED_PROCESS", 0)
+                         | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        return
+    script = install_script(new_exe, target_exe(), pids, current_version())
     enc = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
-    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+    # PowerShell 一定要有主控台（隱藏的）：不能用 DETACHED_PROCESS
+    flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
     subprocess.Popen(["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden",
                       "-EncodedCommand", enc], creationflags=flags, close_fds=True)
+
+
+def setup_args(setup_exe: str, old_version: str) -> List[str]:
+    log = os.path.join(os.environ.get("TEMP") or SETTINGS_DIR, "hfss_setup.log")
+    return [setup_exe, "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/CURRENTUSER",
+            "/RELAUNCH", f"/FROM={old_version}", f"/LOG={log}"]
+
+
+def cleanup_downloads() -> None:
+    """刪掉之前更新下載的安裝程式（開啟時呼叫；正在用的刪不掉就算了）。"""
+    try:
+        for n in os.listdir(SETTINGS_DIR):
+            if is_setup(n) and n.lower().startswith("hfsstool_v"):
+                try:
+                    os.remove(os.path.join(SETTINGS_DIR, n))
+                except OSError:
+                    pass
+    except OSError:
+        pass
 
 
 def new_exe_path(name: str = "") -> str:

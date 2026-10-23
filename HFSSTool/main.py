@@ -16,6 +16,10 @@ if __name__ == "__main__":
     if "--self-test" in sys.argv:      # 打包檢查：套件都在、介面開得起來、獨立程序可以啟動 (不需要 AEDT)
         from selftest import run
         sys.exit(run())
+    if "--test-update" in sys.argv:    # 打包檢查（CI）：跟按「立即更新」一樣執行安裝程式，然後結束
+        import updater
+        updater.install(sys.argv[sys.argv.index("--test-update") + 1])
+        sys.exit(0)
     try:
         import ctypes
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(f"ansys.hfss.automation.tool.{APP_VERSION}")
@@ -33,4 +37,9 @@ if __name__ == "__main__":
     window.show()
     if "--updated-from" in sys.argv:          # v3.3：自動更新完重開
         window.statusBar().showMessage(f"已更新到 {APP_VERSION}", 15000)
+    try:
+        import updater
+        updater.cleanup_downloads()           # v3.6.4：上次更新下載的安裝程式
+    except Exception:
+        pass
     sys.exit(app.exec())

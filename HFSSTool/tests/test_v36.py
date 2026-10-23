@@ -143,3 +143,10 @@ def test_yig_help_dialog():
         d.close()
     finally:
         w.close()
+
+
+def test_setup_args_relaunch():
+    import updater
+    a = updater.setup_args("C:/x/HFSSTool_v9_windows-setup.exe", "3.6.3")
+    assert a[0].endswith("setup.exe") and "/SILENT" in a and "/RELAUNCH" in a and "/FROM=3.6.3" in a
+    assert any(x.startswith("/LOG=") for x in a) and "/CLOSEAPPLICATIONS" in a
