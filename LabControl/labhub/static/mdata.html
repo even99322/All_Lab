@@ -80,6 +80,8 @@
   @media (min-width:900px) { #detail { display:block; } }
   .hint { font-size:12px; color:var(--muted); margin-top:4px; }
   .warn { color:var(--warn); font-size:13px; margin-top:6px; }
+  .axrow { display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap; }
+  .axrow .btn { padding:4px 12px; }
 </style>
 </head>
 <body>
@@ -111,6 +113,7 @@
       <canvas id="plot"></canvas>
       <div class="cbar" id="cbar"><span id="cLo"></span><i id="cGrad"></i><span id="cHi"></span></div>
       <div class="probe" id="probe"></div>
+      <div class="axrow" id="axRow" style="display:none"><button class="btn" id="swapBtn" title="交換 X、Y 軸（預設頻率放在 Y 軸）">⇄ 交換 X / Y</button><span class="hint" id="axHint"></span></div>
       <div class="warn" id="acq"></div>
     </div>
     <div class="card" id="cutCard" style="display:none">
@@ -129,6 +132,7 @@ const META = { "meta.sweep":"掃描", "meta.single":"單張（沒有掃描）", 
   "meta.points":"點數", "meta.ifbw":"IF 頻寬", "meta.averages":"平均", "meta.power":"功率", "meta.sources":"電源（固定）",
   "meta.data":"數據", "meta.traces":"曲線 × 次數 × 點數", "meta.created":"建立時間", "meta.on":"開", "meta.off":"關" };
 let cur = { dir:"", files:[], folders:[], mode:"dir" }, file = null, pv = null, z = null, cutAt = null, cutKind = "y";
+let swapped = false;     // 1.0.22：這張 2D 圖現在是不是跟檔案裡的 X / Y 交換過（預設把頻率放在 Y 軸）
 let star = false;
 try { star = localStorage.getItem("qel-d-star") === "1"; } catch (e) {}
 
@@ -271,7 +275,7 @@ async function openFile(rel) {
   for (const r of document.querySelectorAll(".row.sel")) r.classList.remove("sel");
   const row = [...document.querySelectorAll(".row")].find(r => r.dataset.rel === rel); if (row) row.classList.add("sel");
   const f = cur.files.find(x => x.rel === rel) || { rel, name:rel.split("/").pop() };
-  file = f; pv = null; z = null; cutAt = null;
+  file = f; pv = null; z = null; cutAt = null; $("axRow").style.display = "none";
   $("dTitle").textContent = f.name;
   const desktop = !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && !(navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
   $("llvRow").style.display = desktop ? "" : "none"; $("llvHint").style.display = desktop ? "" : "none";
@@ -291,7 +295,10 @@ async function openFile(rel) {
     if (pv.kind === "2d") {
       const raw = Uint8Array.from(atob(pv.z), c => c.charCodeAt(0));
       z = new Float32Array(raw.buffer);
+      swapped = false;
+      if (isFreq(pv.x_name, pv.x_unit) && !isFreq(pv.y_name, pv.y_unit)) transpose();
     }
+    axRow();
     plotMsg("");
     renderMeta();
     const a = pv.acquisition;
@@ -300,6 +307,25 @@ async function openFile(rel) {
   } catch (e) {
     if (e.message !== "login" && file === f) plotMsg("讀不到預覽：" + e.message);
   }
+}
+// ---- X / Y（1.0.22：讀檔時預設頻率在 Y 軸）--------------------------------------------------------
+function isFreq(name, unit) {
+  return /freq|頻率/i.test(String(name || "")) || /^(hz|khz|mhz|ghz)$/i.test(String(unit || "").trim());
+}
+function transpose() {
+  const nx = pv.nx, ny = pv.ny, t = new Float32Array(nx * ny);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) t[i * ny + j] = z[j * nx + i];
+  z = t;
+  pv = Object.assign({}, pv, { x: pv.y, y: pv.x, nx: ny, ny: nx, x_name: pv.y_name, y_name: pv.x_name,
+                               x_unit: pv.y_unit, y_unit: pv.x_unit });
+  swapped = !swapped; cutAt = null;
+}
+function axRow() {
+  const two = pv && pv.kind === "2d";
+  $("axRow").style.display = two ? "" : "none";
+  if (!two) return;
+  $("axHint").textContent = swapped ? "已把頻率放在 Y 軸（跟檔案裡的 X / Y 相反）" : "";
+  $("swapBtn").onclick = () => { transpose(); axRow(); requestAnimationFrame(draw); };
 }
 function plotMsg(t) {
   $("plotMsg").textContent = t; $("plotMsg").style.display = t ? "" : "none";

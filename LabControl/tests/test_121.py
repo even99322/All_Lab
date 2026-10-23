@@ -29,3 +29,9 @@ def test_preview_json_with_transposed_z():
     import base64
     got = np.frombuffer(base64.b64decode(out["z"]), dtype=np.float32)
     assert out["ny"] == 2 and out["nx"] == 3 and list(got) == [0, 1, 2, 3, 4, 5]
+
+
+def test_data_page_puts_frequency_on_y():
+    from pathlib import Path
+    html = (Path(__file__).resolve().parents[1] / "labhub" / "static" / "mdata.html").read_text(encoding="utf-8")
+    assert "function isFreq" in html and 'id="swapBtn"' in html and "transpose()" in html
