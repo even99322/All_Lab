@@ -364,6 +364,15 @@ class MainWindow(QMainWindow):
         if app is not None:
             app.installEventFilter(self)
 
+    def import_to_labber_database(self, files=None):
+        """v1.0.10: the open .nc into a Labber database."""
+        from app.gui.labber_db_dialog import open_labber_database
+
+        if files is None:
+            source = getattr(self.experiment, "source_path", "") if getattr(self, "experiment", None) else ""
+            files = [source] if source and str(source).lower().endswith(".nc") else []
+        return open_labber_database(self, files)
+
     def open_convert(self, to: str, files=None):
         """File ▸ Convert: the open file when it has the right type, otherwise ask for files."""
         from app.gui.convert_dialog import open_convert
@@ -450,6 +459,11 @@ class MainWindow(QMainWindow):
         self.convert_to_nc_action.triggered.connect(lambda _checked=False: self.open_convert("nc"))
         self.convert_menu.addAction(self.convert_to_labber_action)
         self.convert_menu.addAction(self.convert_to_nc_action)
+        # v1.0.10: into a Labber database (Database.hdf5)
+        self.labber_db_action = QAction("Import into Labber Database...", self)
+        self.labber_db_action.setObjectName("viewerLabberDatabase")
+        self.labber_db_action.triggered.connect(lambda _checked=False: self.import_to_labber_database())
+        self.convert_menu.addAction(self.labber_db_action)
         file_menu.addMenu(self.convert_menu)
 
         file_menu.addSeparator()

@@ -1,3 +1,15 @@
+"""v1.0.10: Labber database import (merged from the standalone Labber Converter 0.4.2 tests)."""
+import pytest as _pytest
+
+from app.core.labber_db import safe_io as _safe_io
+
+
+@_pytest.fixture(autouse=True)
+def fast_stability_window(monkeypatch):
+    # Production waits one second. Individual race tests inject a writer at this boundary.
+    monkeypatch.setattr(_safe_io, "STABILITY_SECONDS", 0)
+
+
 from pathlib import Path
 import json
 import shutil
@@ -8,9 +20,8 @@ import h5py
 import numpy as np
 import pytest
 
-sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-import converter
-from converter import convert_batch, discover, merge_database, reindex, initialize_database, ConversionError, available_path
+from app.core.labber_db import converter
+from app.core.labber_db.converter import convert_batch, discover, merge_database, reindex, initialize_database, ConversionError, available_path
 
 
 def nc_file(path, *, date="2026-10-20T18:15:00", extra=False):
@@ -484,7 +495,7 @@ def test_network_lock_unsupported_falls_back(tmp_path, monkeypatch):
     monkeypatch.setattr(converter.h5py,"File",fake)
     with converter.h5_open(path) as file:
         assert file.attrs["x"]==1
-    import safe_io
+    from app.core.labber_db import safe_io
     assert safe_io.transient(OSError("[WinError 64] The specified network name is no longer available"))
     err=OSError("x");err.winerror=53
     assert safe_io.transient(err)

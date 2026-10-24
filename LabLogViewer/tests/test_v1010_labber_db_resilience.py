@@ -1,3 +1,15 @@
+"""v1.0.10: Labber database import (merged from the standalone Labber Converter 0.4.2 tests)."""
+import pytest as _pytest
+
+from app.core.labber_db import safe_io as _safe_io
+
+
+@_pytest.fixture(autouse=True)
+def fast_stability_window(monkeypatch):
+    # Production waits one second. Individual race tests inject a writer at this boundary.
+    monkeypatch.setattr(_safe_io, "STABILITY_SECONDS", 0)
+
+
 import errno
 from contextlib import contextmanager
 import json
@@ -10,11 +22,10 @@ import h5py
 import numpy as np
 import pytest
 
-import converter
-import safe_io
-from converter import convert_batch, initialize_database, merge_database, DatabaseBusy
-from safe_io import RetryPolicy
-from test_converter import nc_file
+from app.core.labber_db import converter, safe_io
+from app.core.labber_db.converter import convert_batch, initialize_database, merge_database, DatabaseBusy
+from app.core.labber_db.safe_io import RetryPolicy
+from tests.test_v1010_labber_db_convert import nc_file
 
 
 @pytest.mark.parametrize("stage",["source","output","readback"])

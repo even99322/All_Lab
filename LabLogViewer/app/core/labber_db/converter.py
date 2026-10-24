@@ -25,8 +25,8 @@ import uuid
 import h5py
 import numpy as np
 
-from labber_format import TEXT, CHANNEL_NAME, rows, write_configuration, write_view
-from safe_io import (Cancelled, SourceBusy, RetryPolicy, retry_io, identity, stable_source,
+from .labber_format import TEXT, CHANNEL_NAME, rows, write_configuration, write_view
+from .safe_io import (Cancelled, SourceBusy, RetryPolicy, retry_io, identity, stable_source,
                      require_unchanged, sha256, verified_copy, explicitly_active, atomic_json, pause)
 
 VERSION = "0.4.2"

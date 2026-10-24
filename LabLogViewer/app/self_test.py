@@ -172,6 +172,40 @@ def run() -> int:
 
     check("windows and themes", windows)
 
+    def labber_database():
+        # v1.0.10: File ▸ Import into Labber Database — convert one tiny synthetic Lab Control file in the package
+        import tempfile
+
+        import h5py
+        import numpy as np
+
+        from app.core import labber_db
+        from app.gui.labber_db_dialog import LabberDatabaseDialog
+
+        with tempfile.TemporaryDirectory(prefix="llv-labberdb-") as folder:
+            src = os.path.join(folder, "Data_1022")
+            os.makedirs(src)
+            with h5py.File(os.path.join(src, "t.nc"), "w") as file:
+                file.attrs.update(schema="labcontrol-nc/1", layout="grid", created="2026-10-22T18:00:00", points=2,
+                                  planned_points=2, complete=1, project="", user="test", tags="", labcontrol="{}")
+                axis = file.create_dataset("Current", data=[1., 2.])
+                axis.make_scale("Current")
+                freq = file.create_dataset("Frequency", data=[1e9, 1e9 + 1e3, 1e9 + 2e3])
+                freq.make_scale("Frequency")
+                trace = file.create_dataset("S21", data=np.ones((2, 3), dtype=complex))
+                trace.dims[0].attach_scale(axis)
+                trace.dims[1].attach_scale(freq)
+            report = labber_db.convert_batch([src], os.path.join(folder, "db"))
+            if report["ok"] != 1 or not report.get("database_verified"):
+                raise RuntimeError(f"conversion failed: {report['files']}")
+            dialog = LabberDatabaseDialog(None, [src], os.path.join(folder, "db"))
+            dialog.show()
+            pump(0.2)
+            dialog.close()
+        return f"Labber database import {labber_db.VERSION} ok"
+
+    check("Labber database import", labber_database)
+
     def helper_process():
         from app.figure_builder.process import FigureBuilderLauncher
 

@@ -1890,3 +1890,20 @@ Date: 2026-10-20
     at Browser start, for the newest unread one: Update now (hub_updates.install_now) or Download (opens the
     installer URL when not an installed build), What's new, Later. LABLOGVIEWER_NO_UPDATE_TOAST=1 (tests).
   - tests/test_v1_0_9_viewer.py; test_v106_cross_section / test_v1_0_5_viewer / test_v020_range_spinbox updated.
+
+v1.0.10 - IMPORT INTO LABBER DATABASE (LABBER CONVERTER MERGED)
+Date: 2026-10-24
+
+  - app/core/labber_db/: the Labber Converter 0.4.2 core (converter, labber_format, safe_io) moved from the
+    standalone LabberConverter tool; relative imports. RetryPolicy 5 attempts with exponential backoff, HDF5
+    lock-unsupported fallback (locking=False), backups in .labber-converter-backups (keep 5), point / single-trace
+    layouts, NotConvertible → skipped, reindex(rebuild=True) removes stale labels, Windows pid_alive.
+  - app/gui/labber_db_dialog.py: LabberDatabaseDialog (inputs drag-drop, database root, New Database…, project,
+    local cache, resume, progress / log, Sync Labels… with rebuild, Open in Browser, Show Folder) on a QThread
+    worker; same-name conflicts ask Replace / Skip This File / Keep Both.
+  - Entry points: Browser File ▸ Import into Labber Database… (browserLabberDatabase), Browser context menu on
+    selected .nc files, viewer Convert ▸ Import into Labber Database…; the Browser re-scans when the target is the
+    open database.
+  - zh_TW strings; self-test check "Labber database import".
+  - The standalone LabberConverter folder and its workflow are retired.
+  - tests/test_v1010_labber_db_convert.py, test_v1010_labber_db_resilience.py (ported), test_v1010_labber_db_gui.py.

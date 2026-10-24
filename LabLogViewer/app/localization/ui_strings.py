@@ -601,3 +601,71 @@ PATTERNS.extend([
     ("'{}': {} is not evenly spaced — Labber only keeps start + step.", "「{0}」的 {1} 間距不固定：Labber 只記起點和間距。"),
     ("Cannot open: {}", "打不開：{0}"),
 ])
+
+# v1.0.10: File ▸ Import into Labber Database (merged Labber Converter)
+UI.update({
+    "Import into Labber Database...": "匯入 Labber 資料庫⋯",
+    "Import into Labber Database": "匯入 Labber 資料庫",
+    "Lab Control .nc files (or folders / ZIPs) are converted to Labber data logs and added to a Labber database: the "
+    "files go to <database>/year/month/Data_MMDD and their labels into Database.hdf5. Open the database folder in "
+    "Labber (Open Database → Reload) or in this Browser. Sources are only read.":
+        "量測檔 .nc（也可以是資料夾或 ZIP）會轉成 Labber 資料檔並加進 Labber 資料庫：檔案放在 <資料庫>/年/月/Data_MMDD，"
+        "分類寫進 Database.hdf5。之後在 Labber 用 Open Database（再按 Reload）或在這個 Browser 開資料庫資料夾。來源只讀不改。",
+    "Data to import:": "要匯入的資料：", "Add Folder...": "加入資料夾⋯", "Remove": "移除",
+    "Labber database folder:": "Labber 資料庫資料夾：", "New Database...": "新建資料庫⋯",
+    "The folder that holds (or will hold) Database.hdf5": "放 Database.hdf5 的資料夾（已有或要新建）",
+    "Choose (or make) an empty folder; Database.hdf5 is created there right away.":
+        "選（或新建）一個空資料夾，馬上在裡面建立 Database.hdf5。",
+    "Project prefix:": "專案前綴：",
+    "Optional, e.g. My project → Project label My project/10/1021": "可以留空；例如 My project → 分類 My project/10/1021",
+    "Copy each file to this computer first and verify the result (recommended on the NAS)":
+        "先複製到這台電腦轉換、寫回後驗證（在 NAS 上建議打勾）",
+    "Resume: skip files already imported and verified (same inputs and folder)":
+        "續轉：略過已經匯入且驗證過的檔（同樣的輸入與資料庫）",
+    "Sync Labels...": "同步分類⋯", "Sync Labels": "同步分類", "Open in Browser": "在 Browser 開啟", "Show Folder": "打開資料夾",
+    "Scan the database folder's Labber files and update the labels in Database.hdf5 (optionally remove labels that "
+    "no file uses).": "掃描資料庫資料夾裡的 Labber 檔，更新 Database.hdf5 的分類（也可以移除沒有檔案在用的分類）。",
+    "Open this database in the LabLogViewer Browser": "在讀檔程式的 Browser 開這個資料庫",
+    "Import": "匯入", "Stop": "停止", "Close": "關閉",
+    "Add files or folders to import first.": "請先加入要匯入的檔案或資料夾。",
+    "Also remove labels that no file uses any more?\n\nFor example a project name left by an earlier import that no "
+    "file in this database has now. Database.hdf5 is backed up first.\n\nYes: rebuild the labels from the files\n"
+    "No: only add new labels": "要不要順便移除「沒有任何檔案在用」的分類？\n\n例如以前匯入留下、現在資料庫裡已經沒有檔案用的專案名稱"
+    "（像 mirror）。移除前會先備份 Database.hdf5。\n\n是：依現有檔案重建分類\n否：只加入新分類",
+    "Creating the database…": "建立資料庫⋯", "Scanning the database…": "掃描資料庫⋯", "Checking the inputs…": "檢查輸入⋯",
+    "Checking the source is not being written": "檢查來源沒有在寫入", "Copying to this computer": "複製到這台電腦",
+    "Converting and verifying": "轉換並驗證", "Writing to the database and verifying": "寫入資料庫並驗證",
+    "A file with this name already exists": "已經有同名檔案",
+    "The database already has a file with this name.": "資料庫裡已經有同名的檔案。",
+    "Source:": "來源：", "Existing:": "已有：", "Keep both saves the new one as:": "兩個都保留時，新的會存成：",
+    "Replace": "取代", "Skip This File": "不要轉這個", "Keep Both": "兩個都保留",
+    "Database ready:": "資料庫已就緒：", "Failed": "失敗", "Full report:": "完整報告：",
+    "Removed labels that no file uses:": "已移除沒有檔案在用的分類：",
+    "The source is still being measured; stop the measurement and import again.": "來源還在量測中；停止量測後再匯入。",
+    "not converted:": "不轉換：", "skipped": "已跳過", "already imported (verified)": "已經匯入過（已驗證）",
+    "written; labels will sync next time (Database.hdf5 was busy)": "已寫入；分類下次同步（Database.hdf5 忙碌中）",
+    "copied Labber file": "已複製 Labber 檔", "replaced the existing file": "已取代原本的檔案",
+    "saved under a new name (kept both)": "另存新檔名（兩個都保留）",
+    "Note: Labber's Log Browser only scans year/month/Data_MMDD; this file is in a sub-folder below it.":
+        "注意：Labber 的 Log Browser 只掃 年/月/Data_MMDD；這個檔在它下面的子資料夾。",
+    "Choose Data to Import": "選擇要匯入的資料", "Choose a Data Folder to Import": "選擇要匯入的資料夾",
+    "Choose the Labber Database Folder": "選擇 Labber 資料庫資料夾",
+    "Choose or Create an Empty Folder for the New Database": "選擇或新建一個空資料夾當作新資料庫",
+})
+PATTERNS.extend([
+    ("Import {} Files into Labber Database...", "把 {0} 個檔案匯入 Labber 資料庫⋯"),
+    ("Network / disk hiccup, retrying {}/{}", "網路／磁碟暫時出錯，重試 {0}/{1}"),
+    ("Scanned {} files; the database has {} labels.", "掃描了 {0} 個檔，資料庫共有 {1} 個分類。"),
+    ("Done: {} imported, {} resumed, {} skipped, {} pending, {} failed.",
+     "完成：匯入 {0}、續轉略過 {1}、跳過 {2}、待同步 {3}、失敗 {4}。"),
+    ("{} sweep points × {} trace points", "{0} 個掃描點 × {1} 個曲線點"),
+    ("The measurement was not finished: kept {} of {} points (nothing filled in).", "量測沒有跑完：保留 {0} / {1} 個點（沒有補資料）。"),
+])
+PATTERNS.extend([
+    ("Not a Lab Control .nc (schema={}); supported input: labcontrol-nc/1 or a valid Labber log.",
+     "不是量測檔 .nc（schema={0}）；只轉 labcontrol-nc/1 或 Labber 檔。"),
+])
+UI.update({
+    "No trace channels were found (this version converts traces vs. one sweep axis, or a single trace).":
+        "沒有曲線通道（目前只轉「曲線對一個掃描軸」或單張曲線）。",
+})

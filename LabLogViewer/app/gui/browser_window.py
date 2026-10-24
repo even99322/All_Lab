@@ -268,6 +268,11 @@ class BrowserWindow(QMainWindow):
         self.convert_to_labber_action.triggered.connect(lambda _checked=False: self.convert_selected("hdf5"))
         self.convert_to_nc_action = self.convert_menu.addAction("Labber .hdf5 → Lab Control .nc...")
         self.convert_to_nc_action.triggered.connect(lambda _checked=False: self.convert_selected("nc"))
+        # v1.0.10: Lab Control .nc → a Labber database (Database.hdf5 + year/month/Data_MMDD)
+        self.labber_db_action = QAction("Import into Labber Database...", self)
+        self.labber_db_action.setObjectName("browserLabberDatabase")
+        self.labber_db_action.triggered.connect(lambda _checked=False: self.import_to_labber_database())
+        file_menu.addAction(self.labber_db_action)
         file_menu.addSeparator()
         exit_action = QAction("E&xit", self)
         exit_action.triggered.connect(self.close)
@@ -2127,6 +2132,11 @@ class BrowserWindow(QMainWindow):
                                  else f"Convert {len(to_nc)} Files to Lab Control .nc...")
             act.setObjectName("browserConvertToNc")
             act.triggered.connect(lambda _c=False, f=to_nc: self.convert_selected("nc", f))
+        if to_labber:
+            act = menu.addAction("Import into Labber Database..." if len(to_labber) == 1
+                                 else f"Import {len(to_labber)} Files into Labber Database...")
+            act.setObjectName("browserImportLabberDatabase")
+            act.triggered.connect(lambda _c=False, f=to_labber: self.import_to_labber_database(f))
         self._exec_menu(menu, self.data_list.viewport().mapToGlobal(pos))
 
     def _exec_menu(self, menu, global_pos) -> None:
@@ -2150,6 +2160,27 @@ class BrowserWindow(QMainWindow):
         if dialog is not None:
             dialog.converted.connect(self._after_convert)
         return dialog
+
+    def import_to_labber_database(self, files=None):
+        """v1.0.10: File ▸ Import into Labber Database (the selected .nc, or choose in the dialog)."""
+        from app.gui.labber_db_dialog import open_labber_database
+
+        if files is None:
+            files = [str(e.absolute_path) for e in self._selected_entries()
+                     if Path(str(e.absolute_path)).suffix.lower() == ".nc"]
+        root = ""
+        if self.scanner_root and (Path(self.scanner_root) / "Database.hdf5").is_file():
+            root = self.scanner_root                      # the open database is a Labber database: import into it
+        dialog = open_labber_database(self, files, root)
+        dialog.imported.connect(self._after_labber_import)
+        return dialog
+
+    def _after_labber_import(self, root: str) -> None:
+        if self.scanner_root and Path(root).resolve() == Path(self.scanner_root).resolve():
+            try:
+                self._reconcile_timer.start(200)          # pick the new files up like auto refresh does
+            except Exception:  # noqa: BLE001
+                pass
 
     def _after_convert(self, outputs: list) -> None:
         from app.localization.manager import translate_text
