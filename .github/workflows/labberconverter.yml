@@ -36,7 +36,12 @@ jobs:
       - name: Tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q -p no:cacheprovider tests
+        run: |
+          python -m pytest -q -p no:cacheprovider -rfE --tb=line tests 2>&1 | Tee-Object -Variable out | Out-Host
+          $code = $LASTEXITCODE
+          $fails = @("$out" -split "`n" | Where-Object { $_ -match '^(FAILED|ERROR) |\.py:\d+: ' } | Select-Object -First 9)
+          foreach ($f in $fails) { Write-Output "::error title=pytest::$(($f.Trim()) -replace '%','%25')" }
+          if ($code -ne 0) { throw "tests failed" }
       - name: Version
         id: v
         run: |
