@@ -518,18 +518,29 @@ class MainWindow(QMainWindow):
 
         g = QGroupBox("材料 (YIG)")
         gl = QGridLayout(g)
-        self.edit_yig_ms = _tip(QLineEdit("0.175"), "飽和磁化 μ0·Ms = 4πMs (T)。YIG 約 0.175 T (1750 G)。")
-        self.edit_yig_dh = _tip(QLineEdit("0.2"), "共振線寬 ΔH (Oe)。拋光單晶球約 0.2~0.5 Oe。")
-        self.edit_yig_dhf = _tip(QLineEdit("9.4"), "ΔH 的量測頻率 (GHz)，留空則不設定。")
-        self.edit_yig_er = QLineEdit("15")
-        self.edit_yig_tand = QLineEdit("0.0002")
-        self.edit_yig_g = _tip(QLineEdit("2.0"), "Landé g 因子，只用於計算 Kittel 頻率 (YIG ≈ 2.0)。")
+        rp = yig.PRESETS["room"]
+        self.edit_yig_ms = _tip(QLineEdit(f"{rp['ms']:g}"), "飽和磁化 μ0·Ms = 4πMs (T)。單晶 YIG 球：室溫 0.180 T、10 K 約 0.248 T"
+                                "（Maier-Flaig 2017）；薄膜常用 0.175 T（Serga 2010）。")
+        self.edit_yig_dh = _tip(QLineEdit(f"{rp['dh']:g}"), "共振線寬 ΔH（半高全寬，Oe）。室溫 α ≈ 4×10⁻⁵ → 9.4 GHz 時 0.27 Oe；"
+                                "實際量到的還多了不隨頻率變的部分（表面凹洞散射，約 0.2~1 MHz）。")
+        self.edit_yig_dhf = _tip(QLineEdit(f"{rp['dhf']:g}"), "ΔH 是在哪個頻率量的 (GHz)；AEDT 用它換成阻尼係數（線寬跟頻率成正比）。"
+                                 "低溫時線寬幾乎不隨頻率變 → 填你的工作頻率（Kittel）。")
+        self.edit_yig_er = _tip(QLineEdit(f"{rp['er']:g}"), "YIG 介電常數（常見 15；這幾篇論文沒有量）")
+        self.edit_yig_tand = _tip(QLineEdit(f"{rp['tand']:g}"), "YIG 介電損耗（常見 2×10⁻⁴；這幾篇論文沒有量）")
+        self.edit_yig_g = _tip(QLineEdit(f"{rp['g']:g}"), "Landé g 因子：室溫 2.005、10 K 約 2.010（Maier-Flaig 2017）。\n"
+                               "v3.7 起也寫進 HFSS 的材料（HFSS 預設 2.0），Kittel 頻率用同一個值。")
+        self.combo_yig_preset = _tip(QComboBox(), "套用論文量到的 YIG 單晶球參數（說明見「❓ 參數說明」→ 文獻參數）")
+        self.combo_yig_preset.addItem("文獻預設值…", "")
+        for key, pr in yig.PRESETS.items():
+            self.combo_yig_preset.addItem(pr["label"], key)
+        self.combo_yig_preset.activated.connect(self._apply_yig_preset)
         gl.addWidget(QLabel("4πMs (T):"), 0, 0); gl.addWidget(self.edit_yig_ms, 0, 1)
         gl.addWidget(QLabel("ΔH (Oe):"), 0, 2); gl.addWidget(self.edit_yig_dh, 0, 3)
         gl.addWidget(QLabel("ΔH 頻率 (GHz):"), 0, 4); gl.addWidget(self.edit_yig_dhf, 0, 5)
         gl.addWidget(QLabel("εr:"), 1, 0); gl.addWidget(self.edit_yig_er, 1, 1)
         gl.addWidget(QLabel("tanδ:"), 1, 2); gl.addWidget(self.edit_yig_tand, 1, 3)
         gl.addWidget(QLabel("Landé g:"), 1, 4); gl.addWidget(self.edit_yig_g, 1, 5)
+        gl.addWidget(QLabel("套用:"), 2, 0); gl.addWidget(self.combo_yig_preset, 2, 1, 1, 3)
         lay.addWidget(g)
 
         g = QGroupBox("偏置磁場 (均勻)")
@@ -596,6 +607,26 @@ class MainWindow(QMainWindow):
         self.combo_yig_bmode.currentIndexChanged.connect(self._on_yig_bmode)
         self._yig_bmode_prev = 0
         self._update_yig_calc()
+
+    def _apply_yig_preset(self, idx):
+        key = self.combo_yig_preset.itemData(idx)
+        self.combo_yig_preset.setCurrentIndex(0)
+        pr = yig.PRESETS.get(key)
+        if not pr:
+            return
+        self.edit_yig_ms.setText(f"{pr['ms']:g}"); self.edit_yig_g.setText(f"{pr['g']:g}")
+        self.edit_yig_dh.setText(f"{pr['dh']:g}"); self.edit_yig_er.setText(f"{pr['er']:g}")
+        self.edit_yig_tand.setText(f"{pr['tand']:g}")
+        if pr["dhf"]:
+            self.edit_yig_dhf.setText(f"{pr['dhf']:g}")
+        else:                                  # 低溫：線寬幾乎不隨頻率變 → 量測頻率填目前的 Kittel 頻率
+            try:
+                mode = "external_mT" if self.combo_yig_bmode.currentIndex() == 0 else "internal_Apm"
+                fk = yig.bias_fields(float(self.edit_yig_bias.text()), mode, pr["ms"], pr["g"])["f_kittel"]
+                self.edit_yig_dhf.setText(f"{fk:.3f}")
+            except ValueError:
+                pass
+        self.statusBar().showMessage(f"已套用 {pr['label']}", 8000)
 
     def _yig_z_base(self):
         """(波導頂面 Z, 半徑)；欄位不是數字 → None。"""

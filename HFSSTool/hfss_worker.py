@@ -766,18 +766,32 @@ class HfssWorker:
         # 2) 材料 (語法取自 AEDT 2026.1 錄製腳本)
         try:
             dm = hfss.oproject.GetDefinitionManager()
+            g = float(p.get('yig_g', 2.0))
             args = yig.material_args(yig.YIG_MATERIAL, p['yig_er'], p['yig_tand'], p['yig_ms_t'],
-                                     p['yig_dh_oe'], p.get('yig_dh_freq'))
+                                     p['yig_dh_oe'], p.get('yig_dh_freq'), g=g)
             # v3.6.1：AddMaterial 遇到同名不會報錯，而是另外建 YIG_auto0、YIG_auto1…（球還是用舊參數的那個）→ 先問有沒有
             exists = False
             try:
                 exists = bool(dm.DoesMaterialExist(yig.YIG_MATERIAL))
             except Exception:
                 exists = yig.YIG_MATERIAL.lower() in [m.lower() for m in getattr(hfss.materials, "material_keys", {})]
-            if exists:
-                dm.EditMaterial(yig.YIG_MATERIAL, args)      # 已經有 (重新建模 / 更新 YIG) → 改成目前參數
-            else:
-                dm.AddMaterial(args)
+            def put(a):
+                if exists:
+                    dm.EditMaterial(yig.YIG_MATERIAL, a)     # 已經有 (重新建模 / 更新 YIG) → 改成目前參數
+                else:
+                    dm.AddMaterial(a)
+            try:
+                put(args)
+                self.emit_log(f"   材料：4πMs {p['yig_ms_t']:g} T、g {g:g}、ΔH {p['yig_dh_oe']:g} Oe"
+                              + (f" @ {p['yig_dh_freq']:g} GHz" if p.get('yig_dh_freq') else "")
+                              + f"、εr {p['yig_er']:g}、tanδ {p['yig_tand']:g}")
+            except Exception as e:
+                # v3.7：這版 AEDT 不認得 lande_G_factor → 不帶 g（HFSS 用 2.0）；Kittel 試算也要用 2.0 才對得起來
+                put(yig.material_args(yig.YIG_MATERIAL, p['yig_er'], p['yig_tand'], p['yig_ms_t'],
+                                      p['yig_dh_oe'], p.get('yig_dh_freq')))
+                if abs(g - 2.0) > 1e-9:
+                    self.emit_log(f"   ⚠️ AEDT 沒接受 Landé g（{e}）→ HFSS 用 g = 2.0。請把 YIG 分頁的 g 改成 2.0，"
+                                  f"Kittel 頻點與細掃才會對準 HFSS 的共振（差約 {abs(g / 2 - 1) * 100:.2f}%）。")
         except Exception as e:
             self.emit_log(f"❌ 建立 YIG 材料失敗: {e}")
             return False

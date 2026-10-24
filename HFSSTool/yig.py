@@ -77,7 +77,22 @@ def linewidth_mhz(delta_h_oe, g=2.0):
     return gamma_ghz_per_t(g) * (delta_h_oe * 1e-4) * 1e3
 
 
-def material_args(name, er, tand, sat_mag_t, delta_h_oe, delta_h_freq_ghz=None):
+# v3.7：文獻參數（YIG 單晶球；見 YIG 參數說明視窗「文獻參數」）
+#   室溫：Maier-Flaig et al., PRB 95, 214423 (2017)：μ0Ms(300 K) = 180.0 mT、g = 2.0054、α ≈ 4×10⁻⁵
+#   低溫：同一篇 Fig. 3 / 4：μ0Ms(10 K) ≈ 248 mT、g ≈ 2.010、9.6 GHz 線寬 ≈ 1.4 MHz（雜質主導，幾乎不隨頻率變）
+#   εr、tanδ 不在這幾篇裡：用常見的 YIG 值 15、2×10⁻⁴
+PRESETS = {
+    "room": {"label": "室溫 300 K（Maier-Flaig 2017）", "ms": 0.180, "g": 2.005, "dh": 0.27, "dhf": 9.4, "er": 15.0, "tand": 2e-4},
+    "cold": {"label": "低溫 ≈10 K（Maier-Flaig 2017）", "ms": 0.248, "g": 2.010, "dh": 0.50, "dhf": None, "er": 15.0, "tand": 2e-4},
+}
+
+
+def gilbert_dh_oe(alpha, f_ghz, g=2.0):
+    """Gilbert 阻尼 → 場線寬（半高全寬）：Δf = 2αf、ΔH = Δf / (γ/2π)。"""
+    return 2 * alpha * f_ghz * 1e3 / (gamma_ghz_per_t(g) * 1e3 * 1e-4)   # MHz ÷ (MHz/Oe)
+
+
+def material_args(name, er, tand, sat_mag_t, delta_h_oe, delta_h_freq_ghz=None, g=None):
     args = [
         f"NAME:{name}",
         "CoordinateSystemType:=", "Cartesian",
@@ -91,6 +106,8 @@ def material_args(name, er, tand, sat_mag_t, delta_h_oe, delta_h_freq_ghz=None):
     ]
     if delta_h_freq_ghz:
         args += ["delta_H_freq:=", f"{delta_h_freq_ghz:g}GHz"]
+    if g is not None:                     # v3.7：HFSS 的 Landé g（預設 2）要跟算 Kittel 用的一樣
+        args += ["lande_G_factor:=", f"{g:g}"]
     return args
 
 

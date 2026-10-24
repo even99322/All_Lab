@@ -59,7 +59,8 @@ def test_yig_mesh_estimate_and_hint():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ["HFSS_NO_UPDATE_CHECK"] = "1"
     from PyQt6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
+    global _APP
+    _APP = QApplication.instance() or QApplication([])
     from ui_main import MainWindow
     w = MainWindow()
     try:
@@ -92,7 +93,8 @@ def test_yig_height_and_z_linked():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ["HFSS_NO_UPDATE_CHECK"] = "1"
     from PyQt6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
+    global _APP
+    _APP = QApplication.instance() or QApplication([])
     from ui_main import MainWindow
     w = MainWindow()
     try:
@@ -125,7 +127,8 @@ def test_yig_help_dialog():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ["HFSS_NO_UPDATE_CHECK"] = "1"
     from PyQt6.QtWidgets import QApplication
-    QApplication.instance() or QApplication([])
+    global _APP
+    _APP = QApplication.instance() or QApplication([])
     from ui_main import MainWindow
     w = MainWindow()
     try:
@@ -134,7 +137,7 @@ def test_yig_help_dialog():
         w.show_yig_help()
         d = w.yig_help_dialog
         r = d.results()
-        assert abs(r["f_k"] - 6.9981) < 1e-3 and abs(r["lw"] - 0.56) < 0.01 and r["ppl"] > 5
+        assert abs(r["f_k"] - 250e-3 * float(w.edit_yig_g.text()) * 13.99624493) < 1e-3 and abs(r["lw"] - 0.56) < 0.01 and r["ppl"] > 5
         d.spins["dh"].setValue(0.05)                 # 線寬 0.14 MHz → 點不夠
         assert "⚠" in d.out.toPlainText()
         d.spins["bias"].setValue(300)
@@ -150,3 +153,35 @@ def test_setup_args_relaunch():
     a = updater.setup_args("C:/x/HFSSTool_v9_windows-setup.exe", "3.6.3")
     assert a[0].endswith("setup.exe") and "/SILENT" in a and "/RELAUNCH" in a and "/FROM=3.6.3" in a
     assert any(x.startswith("/LOG=") for x in a) and "/CLOSEAPPLICATIONS" in a
+
+
+def test_yig_literature_presets():
+    """v3.7：文獻參數（Maier-Flaig 2017）與 Landé g 寫進 HFSS 材料。"""
+    import yig
+    assert abs(yig.gilbert_dh_oe(4e-5, 9.4, 2.005) - 0.268) < 0.002          # α = 4e-5 → 0.27 Oe @ 9.4 GHz
+    args = yig.material_args("Y", 15, 2e-4, 0.18, 0.27, 9.4, g=2.005)
+    assert args[-2:] == ["lande_G_factor:=", "2.005"] and "saturation_mag:=" in args
+    assert "lande_G_factor:=" not in yig.material_args("Y", 15, 2e-4, 0.18, 0.27, 9.4)
+    room = yig.PRESETS["room"]
+    assert room["ms"] == 0.180 and room["g"] == 2.005
+    f = yig.bias_fields(250, "external_mT", room["ms"], room["g"])
+    assert abs(f["f_kittel"] - 7.0156) < 1e-3                                  # 跟 Ms 無關
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ["HFSS_NO_UPDATE_CHECK"] = "1"
+    from PyQt6.QtWidgets import QApplication
+    global _APP
+    _APP = QApplication.instance() or QApplication([])
+    from ui_main import MainWindow
+    w = MainWindow()
+    try:
+        w.edit_yig_bias.setText("250"); w.combo_yig_bmode.setCurrentIndex(0)
+        w._apply_yig_preset(w.combo_yig_preset.findData("cold"))
+        assert w.edit_yig_ms.text() == "0.248" and w.edit_yig_g.text() == "2.01" and w.edit_yig_dh.text() == "0.5"
+        assert abs(float(w.edit_yig_dhf.text()) - 0.250 * 2.010 * 13.99624493) < 0.002   # 低溫：ΔH 頻率 = Kittel
+        from yig_help import YigHelpDialog, HTML_LIT
+        assert "180.0" in HTML_LIT and "2.0054" in HTML_LIT
+        d = YigHelpDialog(w)
+        assert d.tabs.count() == 4
+        d.close()
+    finally:
+        w.close()

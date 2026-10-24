@@ -33,12 +33,12 @@ HTML_PARAMS = """
 
 <tr><td colspan="4"><b>材料</b></td></tr>
 <tr><td>4πMs</td><td>飽和磁化。① 外加場換成 HFSS 內部場時要扣 Ms/3（去磁）② 耦合強度約 ∝ √Ms</td>
-<td>內部場變小（偏置不夠時會 ≤ 0、沒飽和）；耦合變強。球的 Kittel 頻率本身跟 Ms 無關</td><td>YIG ≈ 0.175 T</td></tr>
+<td>內部場變小（偏置不夠時會 ≤ 0、沒飽和）；耦合變強。球的 Kittel 頻率本身跟 Ms 無關</td><td>單晶球：室溫 0.180 T、10 K 約 0.248 T（見「文獻參數」）</td></tr>
 <tr><td>ΔH</td><td>鐵磁共振線寬（損耗）→ <b>共振寬度與 Q 值</b>：線寬 ≈ γ·μ0ΔH</td>
-<td>共振變寬、變淺；需要的掃頻點變少</td><td>單晶拋光 YIG 約 0.2–0.5 Oe</td></tr>
+<td>共振變寬、變淺；需要的掃頻點變少</td><td>室溫 0.27 Oe @ 9.4 GHz（α ≈ 4×10⁻⁵）；量到的總線寬約 0.3–0.5 Oe</td></tr>
 <tr><td>ΔH 頻率</td><td>ΔH 是在哪個頻率量的；AEDT 用它換成阻尼係數，讓線寬隨頻率變</td><td>—</td><td>照材料規格（常見 9.4 GHz）；空白 = AEDT 預設</td></tr>
 <tr><td>εr、tanδ</td><td>球的介電性質：高頻的介電共振、少量背景損耗</td><td>介電共振往低頻移；背景損耗變大</td><td>YIG εr ≈ 15、tanδ ≈ 2×10⁻⁴</td></tr>
-<tr><td>Landé g</td><td>只用來算 Kittel 頻率：f = g × 13.996 GHz/T × μ0H<sub>外加</sub></td><td>Kittel 頻率等比例變高</td><td>YIG ≈ 2.0</td></tr>
+<tr><td>Landé g</td><td>Kittel 頻率 f = g × 13.996 GHz/T × μ0H<sub>外加</sub>；v3.7 起也寫進 HFSS 材料（HFSS 預設 2.0）</td><td>共振頻率等比例變高（g 差 0.005 → 7 GHz 差約 17 MHz）</td><td>室溫 2.005、10 K 約 2.010</td></tr>
 
 <tr><td colspan="4"><b>偏置磁場</b></td></tr>
 <tr><td>輸入方式 / 數值</td><td>決定 <b>共振頻率</b>（Kittel）。HFSS 的 Bias 是球體內部場；選「外加磁場」時程式自動扣 Ms/3</td>
@@ -73,6 +73,52 @@ HTML_FAQ = """
 <p>有 YIG（偏置 ferrite）時 AEDT 不接受 Fast 掃頻，工具會自動改 Interpolating；其他情況也會依序退回 Interpolating → Discrete。</p>
 <h4>Port 有「additional propagating mode」訊息</h4>
 <p>Wave Port 太大，多了會傳播的高階模態：用主控制面板建議的 Port 縮放，或把模態數設成 2。不影響 YIG 設定本身。</p>
+"""
+
+
+HTML_LIT = """
+<h3>文獻參數：YIG 單晶球要填什麼</h3>
+<p class="muted">YIG 分頁「材料」→「套用」可以一鍵填入。HFSS 的鐵氧體模型（Polder 張量）只用得到 4πMs、g、ΔH（與量測頻率）、εr、tanδ；
+沒有交換作用、也沒有晶格異向性。</p>
+<table width="100%">
+<tr><th width="17%">HFSS 參數</th><th width="17%">室溫 300 K</th><th width="17%">低溫 ≈10 K</th><th>根據</th></tr>
+<tr><td>4πMs（μ0Ms）</td><td><b>0.180 T</b></td><td><b>0.248 T</b></td>
+<td>Maier-Flaig 2017：μ0Ms(300 K) = 180.0 ± 0.8 mT；Bloch 律擬合 μ0M0 = 249.5 mT（Fig. 3a，10 K 約 248 mT）。
+Serga 2010 的 1750 G（0.175 T）是 LPE 薄膜的常用值。</td></tr>
+<tr><td>Landé g</td><td><b>2.005</b></td><td><b>2.010</b></td>
+<td>Maier-Flaig 2017：g(290 K) = 2.0054，降溫到 10 K 變成約 2.010（至少 +0.2%）。Serga 2010 用 γ = 2.8 MHz/Oe（g ≈ 2.00）。</td></tr>
+<tr><td>ΔH（半高全寬）</td><td><b>0.27 Oe @ 9.4 GHz</b></td><td><b>≈0.5 Oe @ 工作頻率</b></td>
+<td>室溫 Gilbert 阻尼 α ≈ 4×10⁻⁵（Maier-Flaig 2017；Qin 2018 引的塊材值 ≈3×10⁻⁵）：Δf = 2αf → 9.4 GHz 時 0.75 MHz = 0.27 Oe。
+另外有不隨頻率變的非均勻線寬 Δf₀ ≈ 0.2–1 MHz（表面凹洞散射；室溫約 0.3 MHz），HFSS 沒辦法單獨表示；要對齊量測就直接填量到的線寬。
+Serga 2010：塊材 YIG FMR 線寬一般 &lt; 0.5 Oe。<br>
+低溫（&lt;100 K）線寬由稀土雜質主導、<b>不是</b> Gilbert 型（不跟頻率成正比）：9.6 GHz 時約 1.4 MHz（Fig. 4b，5–10 K），
+在 30 K 附近有峰值（約 3 MHz）→ 「ΔH 頻率」填你的工作頻率，HFSS 才不會把它按頻率縮放錯。</td></tr>
+<tr><td>εr、tanδ</td><td>15、2×10⁻⁴</td><td>15、2×10⁻⁴</td><td>這幾篇論文都沒有量介電性質；這是 YIG 常用值。</td></tr>
+<tr><td>偏置（HFSS Bias）</td><td colspan="2">內部場 H<sub>i</sub> = H<sub>0</sub> − Ms/3（球的去磁因子 1/3）</td>
+<td>Walker 1958：H<sub>i</sub> = H<sub>0</sub> − 4πM<sub>0</sub>N<sub>z</sub>。工具選「外加磁場」時自動扣掉；HFSS 的 Bias 是內部場。</td></tr>
+</table>
+
+<h4>共振頻率（工具的 Kittel 試算）</h4>
+<p>球的均勻模（Walker 的 (110) 模）：<b>f = (γ/2π) μ0 (H<sub>0</sub> + H<sub>ani</sub>)</b>，跟 Ms 無關（Maier-Flaig 2017 式 2；Walker 1958）。
+γ/2π = g × 13.996 GHz/T → g = 2.005 時 28.07 GHz/T（2.807 MHz/Oe）。</p>
+<ul>
+<li><b>異向性 H<sub>ani</sub></b>：HFSS 沒有這一項。Maier-Flaig 的球在室溫是 γμ0H<sub>ani</sub>/2π = 68.5 MHz（約 2.4 mT），
+而且跟球的晶軸方向有關（低溫最多約 6 mT）。要對齊實驗就把它加進「外加磁場」。</li>
+<li><b>其他靜磁模（Walker 模）</b>：例如 (440) 模 f = (γ/2π) μ0 (H<sub>0</sub> + H<sub>ani</sub> + Ms/9)，比 Kittel 高約 Ms/9（室溫 ≈ 560 MHz）。
+微波磁場不均勻（球跟訊號線差不多大、或球不在正中央）時會被激發 → S 參數上會多出好幾個小共振，這是正常的（Walker 1958；Maier-Flaig 2017 註 1）。</li>
+<li><b>Ms 可以用兩個模的頻差反推</b>：μ0Ms = 9 (2π/γ) (f<sub>440</sub> − f<sub>110</sub>)（Maier-Flaig 2017 式 4），不受磁場校正誤差影響。</li>
+</ul>
+
+<h4>哪些參數 HFSS 不需要</h4>
+<ul>
+<li><b>交換常數</b>（Serga 2010：α<sub>ex</sub> = q/4π = 3×10⁻¹² cm²）：只影響微米以下波長的自旋波。毫米球的模是靜磁模，交換可以忽略
+（Walker 1958；Herring &amp; Kittel 1951）。</li>
+<li><b>薄膜值</b>（Qin 2018：40 nm PLD 膜 Ms = 115 kA/m、α = 3.5×10⁻⁴）：是奈米薄膜，<b>不要</b>拿來設定單晶球。</li>
+<li>Barker 2016（原子尺度熱自旋動力學：光學 / 聲學磁子、Curie 溫度）、Altland（場論教科書）：理論背景，沒有 HFSS 要填的數字。</li>
+</ul>
+<p class="muted">參考：H. Maier-Flaig et al., PRB 95, 214423 (2017)；A. A. Serga et al., J. Phys. D 43, 264002 (2010)；
+L. R. Walker, J. Appl. Phys. 29, 318 (1958)；C. Herring &amp; C. Kittel, Phys. Rev. 81, 869 (1951)；H. Qin et al., PRB 98, 224422 (2018)；
+J. Barker &amp; G. E. W. Bauer, PRL 117, 217201 (2016)；A. Altland &amp; B. Simons, Condensed Matter Field Theory.</p>
 """
 
 
@@ -210,6 +256,7 @@ class YigHelpDialog(QDialog):
         v.addLayout(row)
         tabs.addTab(w, "② 即時試算")
         tabs.addTab(_browser(HTML_FAQ), "③ 常見問題")
+        tabs.addTab(_browser(HTML_LIT), "④ 文獻參數")
         self.tabs = tabs
 
         close = QPushButton("關閉")
@@ -222,7 +269,7 @@ class YigHelpDialog(QDialog):
 
     # ---- 跟主視窗交換數值 ----
     def _main_values(self) -> dict:
-        vals = {"bias": 250.0, "ms": 0.175, "g": 2.0, "dh": 0.2, "d": 1.2, "mesh": 0.0, "span": 50.0, "pts": 1001}
+        vals = {"bias": 250.0, "ms": 0.180, "g": 2.005, "dh": 0.27, "d": 1.2, "mesh": 0.0, "span": 50.0, "pts": 1001}
         m = self.main
         if m is None:
             return vals
