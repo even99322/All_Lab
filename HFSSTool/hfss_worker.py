@@ -50,6 +50,7 @@ class HfssWorker:
     def __init__(self, params, emit=None):
         self.params = params
         self._emit = emit or (lambda *msg: print(*msg))
+        self._last_export = None
         self.suggested_scale_signal = _Signal(lambda v: self._emit('scale', v))
 
     # ------------------------------------------------------------------
@@ -935,6 +936,13 @@ class HfssWorker:
         adaptive_mode, adaptive_freqs = p['adaptive_mode'], p['adaptive_freqs']
         use_yig = p.get('yig_enable') and self._yig_has_sphere(hfss)
         f_k = self._yig_fields()['f_kittel'] if use_yig else None
+        f_kittel = f_k
+        if use_yig and p.get('yig_cal'):
+            # v3.8：同樣的球 / 位置 / 網格上次模擬出來的共振比 Kittel 公式偏多少 → 這次的頻點與細掃先對準那裡
+            f_k = yig.calibrated(f_kittel, p['yig_cal'])
+            if abs(f_k - f_kittel) > 1e-9:
+                self.emit_log(f"🧲 Kittel 公式 {f_kittel:.4f} GHz；用上次模擬的偏移 "
+                              f"({(f_k / f_kittel - 1) * 100:+.2f}%) 修正 → 預估共振 {f_k:.4f} GHz")
         if use_yig:
             f0, f1 = parse_freq_ghz(p['freq_start']), parse_freq_ghz(p['freq_stop'])
             if not (f0 <= f_k <= f1):
@@ -995,10 +1003,52 @@ class HfssWorker:
         if self._analyze(hfss, S_SETUP_NAME) is False:
             return False
         ok = self._export_s_params(hfss, S_SETUP_NAME, sweep.name)
-        if kittel_sweep:
-            base, ext = os.path.splitext(p['csv_path'])
-            self._export_s_params(hfss, S_SETUP_NAME, kittel_sweep.name, csv_path=f"{base}_kittel{ext}")
+        if use_yig:
+            self._yig_track(hfss, setup, kittel_sweep, f_kittel, f_k, ok)
         return ok
+
+    def _yig_track(self, hfss, setup, kittel_sweep, f_kittel, f_est, exported):
+        """v3.8：從寬頻結果找實際共振；細掃沒蓋到 → 以實際共振為中心重掃一次（沿用同一個網格，不重跑 Adaptive）。"""
+        p = self.params
+        base, ext = os.path.splitext(p['csv_path'])
+        fine_csv = f"{base}_kittel{ext}"
+        res = None
+        if exported and self._last_export is not None:
+            res = yig.find_resonance(self._last_export[0], self._last_export[1], f_est)
+        span = p.get('yig_span_mhz', 50) / 1e3
+        if res is None:
+            self.emit_log(f"🧲 寬頻結果在 {f_est:.4f} GHz ±{yig.SEARCH_FRAC * 100:g}% 內看不出共振"
+                          "（太窄或耦合太弱）→ 細掃維持在預估頻率。")
+        else:
+            d = res['f'] - f_kittel
+            self.emit_log(f"🧲 寬頻結果的實際共振 ≈ {res['f']:.4f} GHz（{res['by']}，深 {res['depth']:g} dB）；"
+                          f"Kittel 公式 {f_kittel:.4f} GHz，差 {d * 1e3:+.1f} MHz（{d / f_kittel * 100:+.2f}%）")
+        if kittel_sweep:
+            center = f_est
+            if res is not None and p.get('yig_track', True) and abs(res['f'] - f_est) > 0.4 * span:
+                center = res['f']
+                self.emit_log(f"🧲 細掃沒有蓋到實際共振 → 以 {center:.4f} GHz 為中心重新細掃"
+                              f"（{center - span:.4f}–{center + span:.4f} GHz，沿用已收斂的網格）...")
+                sw = self._add_sweep(setup, yig.KITTEL_SWEEP, kittel_sweep._qel_mode, max(0.001, center - span),
+                                     center + span, int(p.get('yig_fine_points', 1001)), False,
+                                     float(p.get('yig_fine_tol', 0.1)))
+                if sw:
+                    kittel_sweep = sw
+                    try:
+                        hfss.odesign.Analyze(f"{S_SETUP_NAME} : {sw.name}")
+                    except Exception as e:  # noqa: BLE001
+                        self.emit_log(f"   ⚠️ 重新細掃失敗：{e}")
+                        self._explain_failure(hfss)
+            if self._export_s_params(hfss, S_SETUP_NAME, kittel_sweep.name, csv_path=fine_csv) \
+                    and res is not None and self._last_export is not None:
+                fine = yig.find_resonance(self._last_export[0], self._last_export[1], res['f'],
+                                          frac=max(span / max(res['f'], 1e-9), 1e-4))
+                if fine is not None:
+                    res = fine
+                    self.emit_log(f"🧲 細掃的共振 = {res['f']:.5f} GHz（{res['by']}，深 {res['depth']:g} dB）")
+        if res is not None:
+            self._emit('yig_result', {"f_kittel": f_kittel, "f_res": res['f'], "by": res['by'], "depth": res['depth'],
+                                      "ratio": res['f'] / f_kittel, "key": yig.cal_key(p), "time": time.time()})
 
     def _add_sweep(self, setup, name, mode, f0, f1, points, save_fields, tol):
         """建立掃頻；AEDT 拒絕（InsertFrequencySweep 失敗）時依序退回 Interpolating → Discrete，不讓整個任務中斷。"""
@@ -1080,6 +1130,7 @@ class HfssWorker:
         if csv_dir:
             os.makedirs(csv_dir, exist_ok=True)
         pd.DataFrame(clean_data).to_csv(csv_path, index=False)
+        self._last_export = (clean_data["Frequency_GHz"], clean_data)
         self.emit_log(f"✨ S 參數 CSV 已導出至: {csv_path}")
 
         # 同時匯出 Touchstone，可直接給 ADS / scikit-rf / VNA 軟體使用

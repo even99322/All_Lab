@@ -566,6 +566,16 @@ class MainWindow(QMainWindow):
         self.chk_yig_adapt.setChecked(True)
         self.chk_yig_fine = QCheckBox("在 Kittel 頻率附近另外細掃 (另存 *_kittel.csv)")
         self.chk_yig_fine.setChecked(True)
+        # v3.8
+        self.chk_yig_track = _tip(QCheckBox("先從寬頻結果找實際共振，細掃沒蓋到就自動對準重掃（沿用同一個網格）"),
+                                  "球靠近金屬（鏡像效應）、球的大小、網格都會讓共振偏離 Kittel 公式，可以到 ±1%，"
+                                  "遠大於 MHz 等級的線寬。")
+        self.chk_yig_track.setChecked(True)
+        self.chk_yig_cal = _tip(QCheckBox("用上次模擬的偏移修正預估（球 / 位置 / 網格 / DXF 都一樣時）"),
+                                "記下上次模擬出來的共振比 Kittel 公式偏多少（相對值），下次 Adaptive 頻點與細掃直接對準。")
+        self.chk_yig_cal.setChecked(True)
+        self.chk_yig_cal.toggled.connect(self._update_yig_calc)
+        self.yig_cal_data = None
         self.edit_yig_span = _tip(QLineEdit("50"), "細掃範圍 = Kittel ± 此值 (MHz)")
         self.edit_yig_pts = QLineEdit("1001")
         self.combo_yig_ftype = QComboBox()
@@ -573,14 +583,16 @@ class MainWindow(QMainWindow):
         self.edit_yig_ftol = _tip(QLineEdit("0.1"), "細掃為 Interpolating 時的誤差容許 (%)")
         gl.addWidget(self.chk_yig_adapt, 0, 0, 1, 6)
         gl.addWidget(self.chk_yig_fine, 1, 0, 1, 6)
-        gl.addWidget(QLabel("範圍 ± (MHz):"), 2, 0); gl.addWidget(self.edit_yig_span, 2, 1)
-        gl.addWidget(QLabel("點數:"), 2, 2); gl.addWidget(self.edit_yig_pts, 2, 3)
-        gl.addWidget(QLabel("方式:"), 3, 0); gl.addWidget(self.combo_yig_ftype, 3, 1)
-        gl.addWidget(QLabel("誤差容許 (%):"), 3, 2); gl.addWidget(self.edit_yig_ftol, 3, 3)
+        gl.addWidget(self.chk_yig_track, 2, 0, 1, 6)
+        gl.addWidget(self.chk_yig_cal, 3, 0, 1, 6)
+        gl.addWidget(QLabel("範圍 ± (MHz):"), 4, 0); gl.addWidget(self.edit_yig_span, 4, 1)
+        gl.addWidget(QLabel("點數:"), 4, 2); gl.addWidget(self.edit_yig_pts, 4, 3)
+        gl.addWidget(QLabel("方式:"), 5, 0); gl.addWidget(self.combo_yig_ftype, 5, 1)
+        gl.addWidget(QLabel("誤差容許 (%):"), 5, 2); gl.addWidget(self.edit_yig_ftol, 5, 3)
         lay.addWidget(g)
 
-        note = QLabel("💡 YIG 線寬只有 MHz 等級：一般寬頻掃頻 (數 MHz 間距) 幾乎一定看不到共振，請以 Kittel 細掃結果為準。"
-                      "Fast 掃頻對 ferrite 的準確度請先用 Discrete 驗證。")
+        note = QLabel("💡 YIG 線寬只有 MHz 等級：寬頻掃頻 (MHz 間距) 只能看到大概位置，請以 Kittel 細掃結果為準。"
+                      "實際共振會偏離 Kittel 公式（金屬鏡像、球的尺寸、網格），所以預設先從寬頻結果找到它再細掃。")
         note.setWordWrap(True)
         note.setStyleSheet(f"color: {self._muted()};")
         lay.addWidget(note)
@@ -602,8 +614,11 @@ class MainWindow(QMainWindow):
         self.combo_yig_pos.currentIndexChanged.connect(lambda _i: self.yig_view is not None and self._yig_view_timer.start())
 
         for w in (self.edit_yig_ms, self.edit_yig_bias, self.edit_yig_g, self.edit_yig_dh, self.edit_yig_span,
-                  self.edit_yig_pts):
+                  self.edit_yig_pts, self.edit_yig_d, self.edit_yig_gap, self.edit_yig_x, self.edit_yig_y,
+                  self.edit_yig_mesh):
             w.textChanged.connect(self._update_yig_calc)
+        self.combo_yig_bdir.currentIndexChanged.connect(self._update_yig_calc)
+        self.combo_yig_pos.currentIndexChanged.connect(self._update_yig_calc)
         self.combo_yig_bmode.currentIndexChanged.connect(self._on_yig_bmode)
         self._yig_bmode_prev = 0
         self._update_yig_calc()
@@ -785,11 +800,61 @@ class MainWindow(QMainWindow):
                 txt += f"　|　細掃間距 {step:.3f} MHz" + ("  ⚠ 大於線寬" if step > lw else "")
             except ValueError:
                 pass
+            cal = self.yig_cal_data
+            if cal and fld['H_int'] > 0:
+                d = (float(cal.get("ratio", 1)) - 1) * 100
+                try:
+                    same = cal.get("key") == yig.cal_key(self._yig_key_params())
+                except AttributeError:          # 建構介面途中（其他分頁還沒建立）
+                    same = False
+                if same:
+                    if self.chk_yig_cal.isChecked():
+                        txt += (f"\n上次模擬共振比 Kittel {d:+.2f}% → 這次預估 "
+                                f"{yig.calibrated(fld['f_kittel'], cal):.4f} GHz（頻點與細掃用這個）")
+                    else:
+                        txt += f"\n上次模擬共振比 Kittel {d:+.2f}%（沒有套用）"
+                else:
+                    txt += f"\n上次模擬（球 / 位置 / 網格 / DXF 不同）共振比 Kittel {d:+.2f}%，這次不套用"
             if fld['H_int'] <= 0:
                 txt = "⚠ 偏置場不足：內部場 ≤ 0，YIG 未飽和"
             self.lbl_yig_calc.setText(txt)
         except (ValueError, ZeroDivisionError):
             self.lbl_yig_calc.setText("⚠ 請輸入數字")
+
+    def _yig_key_params(self):
+        """算 yig.cal_key 用（跟 _collect_params 同樣的欄位，但不檢查、不丟例外）。"""
+        auto = self.combo_yig_pos.currentIndex() == 0
+        d = {"dxf_file": self.edit_dxf.text(), "yig_diameter": self.edit_yig_d.text(), "yig_gap": self.edit_yig_gap.text(),
+             "yig_pos_mode": "auto" if auto else "abs", "yig_mesh_mm": self.edit_yig_mesh.text(),
+             "yig_bias_dir": self.combo_yig_bdir.currentText(), "thick_die": self.edit_thick_die.text(),
+             "thick_top": self.edit_thick_top.text()}
+        d["yig_dx" if auto else "yig_x"] = self.edit_yig_x.text()
+        d["yig_dy" if auto else "yig_y"] = self.edit_yig_y.text()
+        return d
+
+    def _report_task_done(self, success, task_name):
+        """v3.8：模擬做完 → 平台推播到手機（平台「🔔 通知」裡可以開關）。"""
+        try:
+            elapsed = time.time() - self.task_start_time if self.task_start_time else 0
+            detail = ""
+            yr = getattr(self, "_task_yig", None)
+            if success and yr and yr.get("time", 0) >= (self.task_start_time or 0):
+                detail = f"YIG 共振 {yr['f_res']:.4f} GHz（Kittel {yr['f_kittel']:.4f}，{(yr['ratio'] - 1) * 100:+.2f}%）"
+            self.usage.task_done(task_name, success, elapsed,
+                                 project=self.confirmed_project or self.edit_project_name.text(), detail=detail,
+                                 aborted=not success and getattr(self, "_user_aborted", False))
+        except Exception:  # noqa: BLE001 - 通知失敗不影響工具
+            pass
+        self._user_aborted = False
+
+    def _yig_result(self, res):
+        """v3.8：工作程序找到的實際共振 → 記下來（下次修正預估）。"""
+        if not isinstance(res, dict) or not res.get("ratio"):
+            return
+        self.yig_cal_data = {k: res.get(k) for k in ("f_kittel", "f_res", "ratio", "key", "by", "time")}
+        self._task_yig = dict(res)
+        self.save_settings()
+        self._update_yig_calc()
 
     def reset_advanced(self):
         self.edit_min_passes.setText("1"); self.combo_basis.setCurrentIndex(0)
@@ -1148,6 +1213,7 @@ class MainWindow(QMainWindow):
             'yig_bias_dir': self.combo_yig_bdir, 'yig_add_adaptive': self.chk_yig_adapt,
             'yig_fine': self.chk_yig_fine, 'yig_span': self.edit_yig_span, 'yig_pts': self.edit_yig_pts,
             'yig_ftype': self.combo_yig_ftype, 'yig_ftol': self.edit_yig_ftol,
+            'yig_track': self.chk_yig_track, 'yig_use_cal': self.chk_yig_cal,
         }
 
     def load_settings(self):
@@ -1184,6 +1250,8 @@ class MainWindow(QMainWindow):
             pass
         self.update_adaptive_ui(self.combo_adaptive_mode.currentText())
         self._yig_bmode_prev = self.combo_yig_bmode.currentIndex()
+        if isinstance(settings.get('yig_cal_data'), dict):
+            self.yig_cal_data = settings['yig_cal_data']
         self._yig_pos_labels(self.combo_yig_pos.currentIndex())
         self._update_yig_calc()
         self.log_msg(f"📁 已讀取設定檔: {SETTINGS_FILE}")
@@ -1197,6 +1265,8 @@ class MainWindow(QMainWindow):
                 settings[key] = w.currentText()
             else:
                 settings[key] = w.text()
+        if self.yig_cal_data:
+            settings['yig_cal_data'] = self.yig_cal_data
         ConfigManager.save_settings(settings)
 
     def open_dxf_editor(self):
@@ -1403,12 +1473,16 @@ class MainWindow(QMainWindow):
                 'yig_fine_points': num(self.edit_yig_pts, "細掃點數", int, 2),
                 'yig_fine_type': self.combo_yig_ftype.currentText(),
                 'yig_fine_tol': num(self.edit_yig_ftol, "細掃誤差容許", float, 0.001),
+                'yig_track': self.chk_yig_track.isChecked(),
             })
             xy_x = num(self.edit_yig_x, "YIG X", float); xy_y = num(self.edit_yig_y, "YIG Y", float)
             if params['yig_pos_mode'] == "auto":
                 params['yig_dx'], params['yig_dy'] = xy_x, xy_y
             else:
                 params['yig_x'], params['yig_y'] = xy_x, xy_y
+            cal = self.yig_cal_data
+            if self.chk_yig_cal.isChecked() and cal and cal.get("key") == yig.cal_key(params):
+                params['yig_cal'] = {"ratio": cal.get("ratio")}
             if yig.bias_fields(params['yig_bias_value'], params['yig_bias_mode'], params['yig_ms_t'])['H_int'] <= 0:
                 raise ValueError("YIG 偏置場不足：換算後的內部場 ≤ 0，請提高偏置場。")
         if params['adaptive_mode'] != 'Broadband':
@@ -1491,6 +1565,8 @@ class MainWindow(QMainWindow):
                 self.lbl_stage.setText(msg[1])
             elif kind == 'scale':
                 self.update_suggested_ui(msg[1])
+            elif kind == 'yig_result':
+                self._yig_result(msg[1])
             elif kind == 'done':
                 self._done_received = True
                 self.on_task_finished(*msg[1:])
@@ -1516,6 +1592,7 @@ class MainWindow(QMainWindow):
         if ans != QMessageBox.StandardButton.Yes:
             return
         self.btn_abort.setEnabled(False)
+        self._user_aborted = True
         self.lbl_stage.setText("中止中…")
         self.log_msg("🛑 使用者要求中止...")
         # 1) 另開程序請 AEDT 停止模擬 (不阻塞介面)
@@ -1542,6 +1619,7 @@ class MainWindow(QMainWindow):
         self.progress.setValue(1 if success else 0)
         self.btn_abort.setEnabled(False)
         self.lbl_stage.setText("完成" if success else "失敗 / 已中止")
+        self._report_task_done(success, task_name)
 
         self.btn_open.setEnabled(True)
         self.btn_pipeline.setEnabled(True)

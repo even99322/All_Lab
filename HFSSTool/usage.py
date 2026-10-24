@@ -128,6 +128,20 @@ def post_ex(payload: Dict, hub_list: List[str], timeout: float = 5.0):
     return None, {}
 
 
+# v3.8：模擬做完（成功或失敗）告訴平台，平台推播到手機（站上「🔔 通知」可以開關）
+EVENT_TASKS = {"SIM_S": "S 參數模擬", "SIM_FIELDS": "場型模擬", "EXPORT_GIF": "匯出場型 GIF", "PIPELINE": "一鍵全流程"}
+
+
+def post_event(payload: Dict, hub_list: List[str], timeout: float = 5.0) -> Optional[str]:
+    for hub in hub_list:
+        try:
+            _open(hub, "/api/hfss/event", payload, timeout)
+            return hub
+        except Exception:  # noqa: BLE001 - 換下一個
+            continue
+    return None
+
+
 def send_lmstat(hub: str, ident: Dict, server: str, runner=run_lmstat) -> Dict:
     """Hub 叫這台去查：跑 lmstat，把原始輸出送回 Hub 解析。"""
     res = runner(server)
@@ -187,6 +201,21 @@ class UsageReporter:
                 finally:
                     self.lm_busy = False
         threading.Thread(target=send, name="hfss-usage", daemon=True).start()
+
+    def task_done(self, task: str, ok: bool, elapsed: float, project: str = "", detail: str = "",
+                  aborted: bool = False) -> bool:
+        """模擬類的任務結束 → 送一則事件給平台（背景執行緒；連不到就算了）。回傳有沒有要送。"""
+        if self.disabled or task not in EVENT_TASKS:
+            return False
+        body = dict(identity(), task=task, label=EVENT_TASKS[task], ok=bool(ok), aborted=bool(aborted),
+                    elapsed=round(float(elapsed or 0), 1), project=str(project or "")[:120], detail=str(detail or "")[:300])
+        hubs = self._hubs()
+
+        def send():
+            hub = post_event(body, hubs)
+            self.hub = hub or self.hub
+        threading.Thread(target=send, name="hfss-event", daemon=True).start()
+        return True
 
     def close(self) -> None:
         """關閉程式：馬上告訴平台（不等 90 秒才變離線）。"""

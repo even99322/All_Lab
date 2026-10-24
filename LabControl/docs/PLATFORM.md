@@ -245,6 +245,23 @@ diagram = 一張圖（直角座標最多兩種單位 = 左右兩軸；Polar / Sm
 - 手動步進：`run_defaults.manual_loop: true` → 每一點自動循環量測，直到「記錄並下一點」。
 - 子專案需要論文庫 1.8.0（`projects.parent_id`、schema 8；專案專區「新增子專案」、編輯專案改「上層專案」、同一層名稱不重複、刪除時子專案移到上一層）；舊版論文庫一切照舊（都是最上層）。
 
+### 0v. 1.0.25：手機推播通知（模擬完成、量測完成）
+
+網頁上方導覽「🔔 通知」（`/notify`）：每台裝置（手機、平板、電腦瀏覽器）自己開關，選要收「量測結束」（Lab Control 量測完成 / 停止 / 失敗）
+與「模擬結束」（HFSS 自動化工具 3.8+ 的 S 參數 / 場型 / GIF / 一鍵全流程），也可以只收某幾台電腦；「送一則測試通知」馬上試。
+
+- 用瀏覽器標準的 Web Push：Hub → 推播服務（Android＝Google FCM、iPhone＝Apple、Firefox＝Mozilla）→ 手機。手機不用開著網頁、
+  不用連 VPN 就收得到；**Hub（NAS 的容器）要能連外網**（https 到 fcm.googleapis.com、web.push.apple.com 等）。
+- **要用 https 網址開**（tailscale 網址，見 0p）。**iPhone / iPad**：iOS 16.4 以上，先 Safari「分享 → 加入主畫面」，
+  從主畫面的 App 打開「🔔 通知」再開。Android：Chrome 直接開即可（裝成 App 也行）。
+- 量測結束：Lab Control 送給 `/api/m/<名稱>/update` 的摘要裡狀態從進行中變成結束時送出（Hub 剛重新啟動時，2 分鐘內結束的才送）。
+  沒有量測模塊權限的帳號收不到量測通知。
+- 模擬結束：模擬工具 `POST /api/hfss/event`（跟授權回報一樣不用登入），標題「✅ S 參數模擬完成」、內容「誰的電腦：專案，耗時」，
+  有 YIG 時附上找到的共振頻率。點通知打開授權頁 / 手機量測頁。
+- 資料：`data/push/vapid.json`（Hub 的推播金鑰，第一次用時產生；刪掉的話所有裝置要重新開通知）、`data/push/subs.json`（各裝置的設定）。
+  推播服務回 404 / 410（裝置取消或過期）→ 自動刪掉；連續失敗 30 次 → 停用。站長在 `/notify` 看得到訂閱數與最近送出的通知。
+- 只用標準函式庫（`labhub/webpush.py` 自己實作 P-256、ES256 VAPID、aes128gcm），容器不用裝套件。
+
 ### 0u. 1.0.23：網頁數據查看的視圖、截面、標記
 
 - 索引程式 `SCHEMA = 2`：2D 預覽若是複數通道，另外用 `labber_parser.load_experiment` 讀 `transform="raw"` 的格點，

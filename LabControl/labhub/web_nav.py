@@ -89,7 +89,8 @@ def items(h: Handler) -> List[Tuple[str, str, str, bool]]:
     """[(key, 文字, 網址, 外部連結?)]"""
     out = [("home", "模塊下載", "/portal#/", False), ("data", "數據查看", "/data", False),
            ("live", "量測查看", "/live", False), ("magnet", "電磁鐵", "/magnet", False),
-           ("setup", "量測設置", "/setup", False), ("licenses", "授權", "/licenses", False)]
+           ("setup", "量測設置", "/setup", False), ("licenses", "授權", "/licenses", False),
+           ("notify", "🔔 通知", "/notify", False)]
     plat = getattr(h.hub, "platform", None)
     paper = plat.paperlib_public if plat is not None and getattr(plat, "paperlib", None) is not None else ""
     if paper:

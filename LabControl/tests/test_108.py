@@ -51,7 +51,7 @@ def test_service_worker_never_caches_api(hubsrv):
     code, body, hdr = _get(_base(hubsrv) + "/sw.js")
     text = body.decode("utf-8")
     assert code == 200 and hdr["Service-Worker-Allowed"] == "/" and "javascript" in hdr["Content-Type"]
-    assert '"/api/"' in text and "/login" in text and "qel-app-v2" in text
+    assert '"/api/"' in text and "/login" in text and "qel-app-v3" in text
     for page in ("/portal", "/data", "/live", "/setup", "/install"):
         assert f'"{page}"' in text
 

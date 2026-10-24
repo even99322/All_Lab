@@ -140,3 +140,85 @@ def sphere_center(params, guide_bbox):
     else:
         x, y = params.get("yig_x", 0.0), params.get("yig_y", 0.0)
     return [x, y, z], r
+
+
+# v3.8：實際共振常常不在 Kittel 公式的位置（球很靠近金屬時的鏡像效應、球的尺寸效應、網格誤差，
+# 加起來可以到 ±1%，遠大於 MHz 等級的線寬）→ 先從寬頻結果找到真正的共振，Kittel 細掃再對準它。
+SEARCH_FRAC = 0.06          # 在 Kittel ±6% 內找
+MIN_DEPTH_DB = 0.5          # 比附近的中位數至少低這麼多才算共振
+
+
+def _pick(cols, *names):
+    for n in names:
+        if n in cols:
+            return n
+    return None
+
+
+def find_resonance(freqs, columns, f_hint, frac=SEARCH_FRAC):
+    """從 S 參數（dB）找 YIG 共振。
+
+    freqs：GHz；columns：{"S21_dB": [...], "S11_dB": [...], ...}（_export_s_params 的欄位）。
+    先看穿透（S21 / S12）最深的 dip，沒有就看反射（S11）最高的峰。
+    回傳 {"f": GHz, "by": "S21", "depth": dB} 或 None（範圍內看不出共振）。
+    """
+    import numpy as np
+    f = np.asarray(freqs, dtype=float)
+    if f.size < 5 or not f_hint:
+        return None
+    lo, hi = f_hint * (1 - frac), f_hint * (1 + frac)
+    sel = np.where((f >= lo) & (f <= hi))[0]
+    if sel.size < 5:
+        return None
+    cols = dict(columns)
+    trans = _pick(cols, "S21_dB", "S12_dB")
+    if trans is None:
+        trans = next((k for k in cols if k.endswith("_dB") and len(k) >= 6 and k[1] != k[2]), None)
+    refl = _pick(cols, "S11_dB", "S22_dB")
+    for name, sign in ((trans, -1.0), (refl, 1.0)):
+        if name is None:
+            continue
+        y = np.asarray(cols[name], dtype=float)[sel] * sign      # 找最大值（dip 先變號）
+        ff = f[sel]
+        ok = np.isfinite(y)
+        if ok.sum() < 5:
+            continue
+        i = int(np.nanargmax(np.where(ok, y, -np.inf)))
+        depth = float(y[i] - np.nanmedian(y[ok]))
+        if depth < MIN_DEPTH_DB:
+            continue
+        fr = float(ff[i])
+        if 0 < i < len(ff) - 1 and np.isfinite(y[i - 1]) and np.isfinite(y[i + 1]):
+            den = y[i - 1] - 2 * y[i] + y[i + 1]                  # 拋物線內插，比格點準
+            if den < 0:
+                d = 0.5 * (y[i - 1] - y[i + 1]) / den
+                if abs(d) <= 1:
+                    fr = float(ff[i] + d * (ff[i + 1] - ff[i - 1]) / 2)
+        return {"f": fr, "by": name.split("_")[0], "depth": round(depth, 2)}
+    return None
+
+
+def calibrated(f_kittel, cal):
+    """用上次模擬的偏移（相對值）修正 Kittel；cal = {"ratio": f_res / f_kittel, ...} 或 None。"""
+    try:
+        r = float((cal or {}).get("ratio") or 0)
+    except (TypeError, ValueError):
+        r = 0
+    return f_kittel * r if 0.8 < r < 1.2 else f_kittel
+
+
+def cal_key(params):
+    """同一組幾何 / 網格才套用上次的偏移（偏置、Ms 改了仍沿用相對偏移）。"""
+    import re
+    keys = ("yig_diameter", "yig_gap", "yig_pos_mode", "yig_dx", "yig_dy", "yig_x", "yig_y", "yig_mesh_mm",
+            "yig_bias_dir", "thick_die", "thick_top")
+    def norm(v):
+        if v is None:
+            return ""
+        try:
+            return f"{float(v):g}"
+        except (TypeError, ValueError):
+            return str(v).strip()
+    vals = [norm(params.get(k)) for k in keys]
+    dxf = re.split(r"[\\/]", str(params.get("dxf_file") or ""))[-1]       # Windows 路徑在哪個系統都只取檔名
+    return "|".join([dxf.lower()] + vals)

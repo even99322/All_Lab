@@ -21,6 +21,8 @@ from .server import STATIC, Handler, HubHTTPError, route
 FRAME_KEYS = ("id", "key", "label", "col_name", "col_unit", "y0", "y1", "y_label")
 ONLINE_S = 45.0                 # 這麼久沒有消息 → 顯示「沒有回報」
 KEEP_S = 7 * 24 * 3600          # 這麼久沒有消息 → 從清單拿掉
+ENDED = ("finished", "aborted", "stopped", "failed")
+ENDED_FRESH_S = 120.0           # 1.0.25：Hub 剛重新啟動、第一次就收到「已結束」→ 結束時間在這之內才通知
 
 
 class MobileStore:
@@ -28,13 +30,31 @@ class MobileStore:
         self.lock = threading.Lock()
         self.stations: Dict[str, Dict[str, Any]] = {}
         self.ver = 0
+        self.ended: list = []           # 1.0.25：量測結束的事件（notify 拿去推播）
+
+    def pop_ended(self) -> list:
+        with self.lock:
+            out, self.ended = self.ended, []
+            return out
 
     def update(self, name: str, body: Dict[str, Any]) -> Dict[str, Any]:
         now = time.time()
         with self.lock:
             st = self.stations.setdefault(name, {"name": name, "frame": None})
             run = body.get("run")
-            old_run = (st.get("run") or {}).get("id")
+            prev = st.get("run") or {}
+            old_run = prev.get("id")
+            if isinstance(run, dict) and run.get("state") in ENDED:
+                same = run.get("id") == old_run and old_run is not None
+                if same and prev.get("state") not in ENDED:
+                    self.ended.append({"station": name, "run": dict(run)})
+                elif not same:                  # Hub 剛重新啟動，或很短的量測在兩次回報之間就做完了
+                    try:
+                        fresh = now - float(run.get("finished") or 0) < ENDED_FRESH_S
+                    except (TypeError, ValueError):
+                        fresh = False
+                    if fresh:
+                        self.ended.append({"station": name, "run": dict(run)})
             for k in ("host", "version", "run", "chan", "log"):
                 if k in body:
                     st[k] = body[k]
@@ -115,7 +135,14 @@ def _update(h: Handler, name: str) -> None:
     body = h._json_body()
     if not isinstance(body, dict):
         raise HubHTTPError(400, "格式錯誤")
-    h._json(store(h).update(name[:80], body))
+    st = store(h)
+    out = st.update(name[:80], body)
+    ended = st.pop_ended()
+    if ended:
+        from .notify import measure_ended
+
+        measure_ended(h, ended)
+    h._json(out)
 
 
 @route("GET", r"/api/m")

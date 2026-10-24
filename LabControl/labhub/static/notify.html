@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>通知</title>
+<style>
+  :root { --bg:#f3f4f6; --card:#fff; --text:#1c1f24; --muted:#6b7280; --line:#e2e5e9; --soft:#eef0f3;
+          --accent:#1971c2; --accent-soft:#e7f1fb; --ok:#2b8a3e; --warn:#e67700; --err:#e03131; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1116; --card:#151a21; --text:#e9ecef; --muted:#8b939d; --line:#2a313b; --soft:#1c222b;
+            --accent:#4dabf7; --accent-soft:#16283a; --ok:#40c057; --warn:#ffa94d; --err:#ff6b6b; }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); }
+  body { font:15px/1.5 -apple-system,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:12px 16px 48px; }
+  h1 { font-size:20px; margin:6px 0 12px; }
+  h2 { font-size:15px; margin:0 0 6px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-bottom:12px; }
+  .card.warn { border-color:var(--warn); } .card.bad { border-color:var(--err); }
+  .muted { color:var(--muted); } .small { font-size:13px; }
+  .row { display:flex; align-items:center; gap:12px; padding:10px 0; border-top:1px solid var(--line); }
+  .row:first-of-type { border-top:0; }
+  .row .t { flex:1; min-width:0; }
+  .row .t b { display:block; font-weight:650; }
+  .sw { position:relative; flex:none; width:50px; height:30px; }
+  .sw input { opacity:0; width:0; height:0; position:absolute; }
+  .sw span { position:absolute; inset:0; background:#adb5bd; border-radius:30px; transition:.2s; cursor:pointer; }
+  .sw span::before { content:""; position:absolute; width:24px; height:24px; left:3px; top:3px; border-radius:50%;
+                     background:#fff; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,.3); }
+  .sw input:checked + span { background:var(--ok); }
+  .sw input:checked + span::before { transform:translateX(20px); }
+  .sw input:disabled + span { opacity:.45; cursor:default; }
+  .big .t b { font-size:17px; }
+  .btn { border:1px solid var(--line); background:var(--soft); color:var(--text); border-radius:9px; padding:7px 14px;
+         font:inherit; cursor:pointer; }
+  .btn.pri { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.del { color:var(--err); background:transparent; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .acts { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  .src { margin:6px 0 0 0; padding:8px 10px; background:var(--soft); border-radius:10px; }
+  .src label { display:flex; align-items:center; gap:8px; padding:4px 0; }
+  .src input { width:18px; height:18px; }
+  .msg { margin-top:8px; font-size:13px; }
+  .msg.ok { color:var(--ok); } .msg.err { color:var(--err); }
+  ol { margin:6px 0 0 18px; padding:0; } li { margin:3px 0; }
+  .hist { font-size:13px; } .hist div { padding:4px 0; border-top:1px solid var(--line); }
+  a { color:var(--accent); }
+</style>
+</head>
+<body>
+<!--QEL-NAV-->
+<main>
+  <h1>🔔 通知</h1>
+  <div id="support" class="card" hidden></div>
+
+  <div class="card">
+    <div class="row big">
+      <div class="t"><b>這台裝置的通知</b><span class="muted small" id="state">讀取中…</span></div>
+      <label class="sw"><input type="checkbox" id="master" disabled><span></span></label>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card" id="catsCard" hidden>
+    <h2>要收哪些</h2>
+    <div id="cats"></div>
+    <div class="acts">
+      <button class="btn" id="test">送一則測試通知</button>
+      <button class="btn del" id="remove">移除這台裝置</button>
+    </div>
+    <div class="msg" id="msg2"></div>
+  </div>
+
+  <div class="card" id="owner" hidden>
+    <h2>全站（站長）</h2>
+    <div class="muted small" id="ownerSum"></div>
+    <div class="hist" id="hist"></div>
+  </div>
+
+  <p class="muted small">每台裝置（手機、平板、電腦的瀏覽器）分開設定。通知由瀏覽器的推播服務送達（Android：Google、iPhone：Apple），
+    Hub 要能連外網；手機不用開著這個網頁，也不用連 VPN 就收得到。點通知會打開對應的頁面（打開時要連得到 Hub）。</p>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const api = (url, opt = {}) => fetch(url, Object.assign({credentials: "same-origin",
+  headers: {"Content-Type": "application/json"}}, opt)).then(async r => {
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
+    return j;
+  });
+let info = null, sub = null, reg = null, browserSub = null;
+
+function setMsg(el, text, ok) { el.textContent = text || ""; el.className = "msg" + (text ? (ok ? " ok" : " err") : ""); }
+function b64ToBytes(s) {
+  s = s.replace(/-/g, "+").replace(/_/g, "/"); s += "===".slice((s.length + 3) % 4);
+  return Uint8Array.from(atob(s), c => c.charCodeAt(0));
+}
+function deviceName() {
+  const ua = navigator.userAgent;
+  const os = /iPhone/.test(ua) ? "iPhone" : /iPad|Macintosh.*Mobile/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android" :
+             /Windows/.test(ua) ? "Windows" : /Mac/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "裝置";
+  const br = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /CriOS|Chrome\//.test(ua) ? "Chrome" :
+             /Safari\//.test(ua) ? "Safari" : "";
+  const app = (matchMedia("(display-mode: standalone)").matches || navigator.standalone) ? "（App）" : "";
+  return (os + " " + br).trim() + app;
+}
+const isIOS = /iPhone|iPad/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const standalone = matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+
+function supportProblem() {
+  if (!window.isSecureContext) {
+    const u = info && info.https_url;
+    return "通知需要 https 網址。" + (u ? `請改用 <a href="${u}/notify">${u}</a> 開啟（在手機上也可以加入主畫面）。` :
+      "請用站長設定的 https（tailscale）網址開啟。");
+  }
+  if (isIOS && !standalone)
+    return "iPhone / iPad：先按 Safari 的「分享」→「加入主畫面」，再從主畫面的「量子工程」App 打開這一頁開通知（iOS 16.4 以上）。";
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window))
+    return "這個瀏覽器不支援網頁通知。Android 請用 Chrome；iPhone 請先加入主畫面。";
+  return "";
+}
+
+async function init() {
+  try { info = await api("/api/notify"); } catch (e) { $("#state").textContent = "讀不到設定：" + e.message; return; }
+  const prob = supportProblem();
+  if (prob) { const s = $("#support"); s.hidden = false; s.className = "card warn"; s.innerHTML = prob; }
+  if (!prob) {
+    try {
+      reg = await navigator.serviceWorker.register("/sw.js", {scope: "/"});
+      await navigator.serviceWorker.ready;
+      browserSub = await reg.pushManager.getSubscription();
+      if (browserSub) sub = (await api("/api/notify/lookup", {method: "POST", body: JSON.stringify({endpoint: browserSub.endpoint})})).sub;
+    } catch (e) { setMsg($("#msg"), "啟動通知服務失敗：" + e.message); }
+  }
+  showOwner();
+  render(!!prob);
+}
+async function showOwner() {
+  if (!info.owner) return;
+  try { info = Object.assign(info, await api("/api/notify")); } catch (e) { /* 沿用 */ }
+  {
+    $("#owner").hidden = false;
+    $("#ownerSum").textContent = `已訂閱 ${info.count || 0} 台裝置（開著 ${info.enabled || 0} 台）。最近送出的通知：`;
+    $("#hist").innerHTML = (info.history || []).slice().reverse().map(x =>
+      `<div>${new Date(x.time * 1000).toLocaleString()}　<b>${esc(x.title)}</b>　${esc(x.body.split("\n")[0])}` +
+      `<span class="muted">（${x.to} 台）</span></div>`).join("") || '<div class="muted">還沒有</div>';
+  }
+}
+function esc(s) { return String(s || "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c])); }
+
+function render(unsupported) {
+  const on = !!(sub && sub.enabled && browserSub && Notification.permission === "granted");
+  const m = $("#master");
+  m.disabled = !!unsupported;
+  m.checked = on;
+  let st;
+  if (unsupported) st = "這台裝置現在不能開（看上面的說明）";
+  else if (window.Notification && Notification.permission === "denied") st = "瀏覽器封鎖了這個網站的通知：請到瀏覽器 / 系統設定把通知改成允許";
+  else if (on) st = "開著 · " + (sub.device || deviceName());
+  else if (sub) st = "關著（設定還留著，打開就恢復）";
+  else st = "還沒開";
+  $("#state").textContent = st;
+  $("#catsCard").hidden = !sub;
+  if (!sub) return;
+  const srcs = info.sources || [];
+  $("#cats").innerHTML = info.cats.map(c => {
+    const list = srcs.filter(s => s.cat === c.id);
+    const picked = (sub.sources || []).filter(s => s.startsWith(c.id + ":"));
+    const denied = !c.allowed || (sub.denied || []).includes(c.id);
+    const checked = sub.cats && sub.cats[c.id] && !denied;
+    const pick = list.length ? `<details ${picked.length ? "open" : ""}><summary class="small">${picked.length ?
+        `只收 ${picked.length} 台電腦` : "所有電腦"}（點這裡選）</summary><div class="src">` +
+      list.map(s => `<label><input type="checkbox" data-src="${esc(s.id)}" ${picked.includes(s.id) ? "checked" : ""}>` +
+        `<span>${esc(s.label)} <span class="muted small">${esc(s.hint)}</span></span></label>`).join("") +
+      `<div class="muted small">都不勾 = 所有電腦</div></div></details>` : "";
+    return `<div class="row"><div class="t"><b>${esc(c.label)}</b><span class="muted small">${esc(c.desc)}` +
+      `${denied ? "（站長沒有開放你使用量測模塊）" : ""}</span>${checked ? pick : ""}</div>` +
+      `<label class="sw"><input type="checkbox" data-cat="${c.id}" ${checked ? "checked" : ""} ${denied ? "disabled" : ""}><span></span></label></div>`;
+  }).join("");
+}
+
+async function enable() {
+  setMsg($("#msg"), "");
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") { setMsg($("#msg"), "沒有允許通知。要開的話請到瀏覽器 / 系統設定允許這個網站的通知。"); return false; }
+  reg = reg || await navigator.serviceWorker.register("/sw.js", {scope: "/"});
+  await navigator.serviceWorker.ready;
+  browserSub = await reg.pushManager.getSubscription() ||
+    await reg.pushManager.subscribe({userVisibleOnly: true, applicationServerKey: b64ToBytes(info.key)});
+  const body = {subscription: browserSub.toJSON(), origin: location.origin, device: deviceName(), enabled: true};
+  sub = (await api("/api/notify/subscribe", {method: "POST", body: JSON.stringify(body)})).sub;
+  setMsg($("#msg"), "已開啟。可以按「送一則測試通知」試試看。", true);
+  return true;
+}
+
+async function save(patch) {
+  sub = (await api("/api/notify/sub/" + sub.id, {method: "PUT", body: JSON.stringify(patch)})).sub;
+}
+
+$("#master").addEventListener("change", async e => {
+  const want = e.target.checked;
+  e.target.disabled = true;
+  try {
+    if (want) await enable();
+    else if (sub) { await save({enabled: false}); setMsg($("#msg"), "已關閉這台裝置的通知。", true); }
+  } catch (err) { setMsg($("#msg"), (want ? "開啟失敗：" : "關閉失敗：") + err.message); }
+  e.target.disabled = false;
+  render(false);
+  showOwner();
+});
+
+$("#cats").addEventListener("change", async e => {
+  const t = e.target;
+  try {
+    if (t.dataset.cat) await save({cats: {[t.dataset.cat]: t.checked}});
+    else if (t.dataset.src) {
+      const all = [...document.querySelectorAll("[data-src]")].filter(x => x.checked).map(x => x.dataset.src);
+      await save({sources: all});
+    }
+    setMsg($("#msg2"), "已儲存", true);
+  } catch (err) { setMsg($("#msg2"), "儲存失敗：" + err.message); }
+  render(false);
+});
+
+$("#test").addEventListener("click", async () => {
+  setMsg($("#msg2"), "送出中…", true);
+  try {
+    const r = await api("/api/notify/sub/" + sub.id + "/test", {method: "POST", body: "{}"});
+    setMsg($("#msg2"), r.ok ? "已送出，幾秒內會跳出通知（沒有的話看手機的通知設定 / 勿擾模式）。" : "送不出去：" + r.error, r.ok);
+  } catch (err) { setMsg($("#msg2"), "送不出去：" + err.message); }
+});
+
+$("#remove").addEventListener("click", async () => {
+  if (!confirm("移除這台裝置的通知（設定也會刪掉）？")) return;
+  try {
+    if (sub) await api("/api/notify/sub/" + sub.id, {method: "DELETE"});
+    if (browserSub) await browserSub.unsubscribe().catch(() => {});
+    sub = null; browserSub = null;
+    setMsg($("#msg"), "已移除。", true);
+  } catch (err) { setMsg($("#msg"), "移除失敗：" + err.message); }
+  render(false);
+});
+
+init();
+</script>
+</body>
+</html>
