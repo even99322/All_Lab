@@ -185,3 +185,17 @@ def test_yig_literature_presets():
         d.close()
     finally:
         w.close()
+
+
+def test_update_blockers_handled():
+    """v3.7.1：安裝前結束殘留的工具程序；AEDT 不繼承工具的 DLL 路徑；工作程序送完訊息就結束。"""
+    import updater
+    from pathlib import Path
+    iss = (Path(__file__).resolve().parents[1] / "packaging" / "installer.iss").read_text(encoding="utf-8-sig")
+    assert "function PrepareToInstall" in iss and "/F /IM HFSSTool.exe" in iss and "/T" not in iss.split("PrepareToInstall")[1].split("end;")[0]
+    src = (Path(__file__).resolve().parents[1] / "hfss_worker.py").read_text(encoding="utf-8")
+    assert "with plain_dll_search():" in src and "os._exit(0)" in src
+    assert updater.aedt_using_tool_files() == []                     # 原始碼版：不檢查
+    from hfss_worker import plain_dll_search
+    with plain_dll_search() as p:
+        assert p.on is False                                         # 不是 Windows exe：什麼都不做

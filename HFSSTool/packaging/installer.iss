@@ -63,6 +63,17 @@ begin
   Result := WizardSilent and (Pos('/RELAUNCH', UpperCase(GetCmdTail)) > 0);
 end;
 
+{ v3.7.1：安裝前結束所有還在跑的 HFSSTool.exe（包含沒有視窗、還連著 AEDT 的工作程序——它們占著 _internal 的檔案，
+  Windows 的「關閉應用程式」關不掉，安裝就會失敗）。不用 /T：AEDT 本身不會被關掉。 }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  Code: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/F /IM HFSSTool.exe', '', SW_HIDE, ewWaitUntilTerminated, Code);
+  Sleep(800);
+  Result := '';
+end;
+
 { 從 3.5 以前的單一 exe 版更新時，舊版的更新程式會把這個安裝程式換到舊 exe 的位置（例如 桌面\HFSSTool_v3.5_windows.exe）再執行。
   裝好之後把那個檔刪掉，免得之後點它又跑一次安裝；新的捷徑在開始功能表 / 桌面。 }
 procedure CurStepChanged(CurStep: TSetupStep);

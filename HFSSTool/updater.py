@@ -268,6 +268,30 @@ def install(new_exe: str) -> None:
                       "-EncodedCommand", enc], creationflags=flags, close_fds=True)
 
 
+def aedt_using_tool_files() -> List[int]:
+    """v3.7.1：哪些 AEDT（ansysedt.exe）載入了工具資料夾裡的 DLL（3.7 以前的工具啟動的 AEDT 會這樣）→ 更新會失敗，要先關。"""
+    folder = installed_dir() or (os.path.dirname(target_exe()) if getattr(sys, "frozen", False) else None)
+    if not folder:
+        return []
+    try:
+        import psutil
+    except ImportError:
+        return []
+    folder = os.path.normcase(os.path.abspath(folder))
+    hits = []
+    for p in psutil.process_iter(["name"]):
+        try:
+            if (p.info.get("name") or "").lower() not in ("ansysedt.exe", "ansysedt"):
+                continue
+            for m in p.memory_maps(grouped=True):
+                if os.path.normcase(getattr(m, "path", "") or "").startswith(folder):
+                    hits.append(p.pid)
+                    break
+        except Exception:  # noqa: BLE001 - 權限不足等：當作沒有
+            continue
+    return hits
+
+
 def setup_args(setup_exe: str, old_version: str) -> List[str]:
     log = os.path.join(os.environ.get("TEMP") or SETTINGS_DIR, "hfss_setup.log")
     return [setup_exe, "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CLOSEAPPLICATIONS", "/CURRENTUSER",

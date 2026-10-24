@@ -241,6 +241,11 @@ class UpdateController(QObject):
         if busy:
             QMessageBox.information(self.win, "更新", "HFSS 任務還在執行，等它結束再更新。")
             return
+        if updater.aedt_using_tool_files():
+            QMessageBox.warning(self.win, "更新", "AEDT 正在使用這個工具資料夾裡的檔案（是舊版工具開的 AEDT），"
+                                "現在更新會失敗。\n\n請先在 AEDT 存檔並關閉 AEDT，再按一次更新。"
+                                "（3.7.1 起工具開的 AEDT 不會再占用工具的檔案。）")
+            return
         dst = updater.new_exe_path(f.get("name", ""))
         prog = QProgressDialog(f"下載 {app['version']}…", "取消", 0, 100, self.win)
         prog.setWindowTitle("更新")

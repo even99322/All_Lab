@@ -15,6 +15,7 @@ HFSS 工作程序 (適用 AEDT 2026 R1 / PyAEDT >= 1.5)
     ('log', str) / ('stage', str) / ('scale', float) / ('done', ok, task, payload)
 """
 import os
+import sys
 import re
 import time
 
@@ -127,13 +128,14 @@ class HfssWorker:
             self._check_pyaedt()
             from ansys.aedt.core import Hfss
 
-            hfss = Hfss(
-                project=self.params['project_path_local'],
-                design=self.params['design_name'],
-                version=self.params.get('aedt_version', DEFAULT_AEDT_VERSION),
-                non_graphical=False,
-                remove_lock=True,
-            )
+            with plain_dll_search():          # v3.7.1：AEDT 不要繼承工具的 DLL 搜尋路徑
+                hfss = Hfss(
+                    project=self.params['project_path_local'],
+                    design=self.params['design_name'],
+                    version=self.params.get('aedt_version', DEFAULT_AEDT_VERSION),
+                    non_graphical=False,
+                    remove_lock=True,
+                )
             payload['has_model'] = len(hfss.modeler.object_names) > 0
 
             modified = False
@@ -1278,6 +1280,32 @@ class HfssWorker:
 # ======================================================================
 # 程序進入點 (multiprocessing, spawn)
 # ======================================================================
+class plain_dll_search:
+    """v3.7.1：打包好的 exe 把自己的 _internal 設成 DLL 搜尋路徑，而且「子程序會繼承」。
+    PyAEDT 從這裡啟動的 AEDT（ansysedt.exe）因此可能載入工具資料夾裡的 DLL → AEDT 開著時檔案被占用，
+    更新 / 重新安裝會失敗（「HFSS 沒關就裝不了」）。啟動 / 連線 AEDT 的那一段改回系統預設，之後再設回來
+    （工具自己之後載入的套件還需要它）。"""
+
+    def __enter__(self):
+        self.on = sys.platform == "win32" and getattr(sys, "frozen", False)
+        if self.on:
+            try:
+                import ctypes
+                ctypes.windll.kernel32.SetDllDirectoryW(None)
+            except Exception:
+                self.on = False
+        return self
+
+    def __exit__(self, *exc):
+        if self.on:
+            try:
+                import ctypes
+                ctypes.windll.kernel32.SetDllDirectoryW(getattr(sys, "_MEIPASS", os.path.dirname(sys.executable)))
+            except Exception:
+                pass
+        return False
+
+
 def process_entry(params, queue):
     """在獨立程序中執行 HFSS 任務，所有訊息透過 queue 傳回介面。"""
     def emit(*msg):
@@ -1290,13 +1318,22 @@ def process_entry(params, queue):
     except BaseException as e:        # 保證介面一定收得到結束訊號
         emit('log', f"❌ 工作程序異常終止: {type(e).__name__}: {e}")
         emit('done', False, params.get('task', '?'), {})
+    # v3.7.1：AEDT 還開著時，gRPC 的背景執行緒會讓這個程序一直不結束（占著工具的檔案 → 不能更新）。
+    # 訊息送完就直接結束。
+    try:
+        queue.close()
+        queue.join_thread()
+    except Exception:
+        pass
+    os._exit(0)
 
 
 def stop_entry(version, queue):
     """中止用：另外連線到 AEDT，要求停止所有正在執行的模擬 (best effort)。"""
     try:
         from ansys.aedt.core import Desktop
-        d = Desktop(version=version, new_desktop=False, non_graphical=False)
+        with plain_dll_search():
+            d = Desktop(version=version, new_desktop=False, non_graphical=False)
         d.stop_simulations(clean_stop=True)
         d.release_desktop(close_projects=False, close_on_exit=False)
         queue.put(('log', "🛑 已要求 AEDT 停止模擬 (會保留已完成的 pass)。"))
