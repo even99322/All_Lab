@@ -740,6 +740,33 @@ def initialize_database(root):
     return {**result, "operation": "initialize", "database_created": created}
 
 
+def pid_alive(pid):
+    """Is this process still running? 0.4.2: on Windows os.kill(pid, 0) does not test — it TERMINATES the
+    process (and raises for a dead pid), so stale locks could never be reclaimed there."""
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)          # PROCESS_QUERY_LIMITED_INFORMATION
+        if not handle:
+            return kernel32.GetLastError() == 5                     # access denied → exists
+        try:
+            code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return True
+            return code.value == 259                                # STILL_ACTIVE
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 @contextmanager
 def database_lock(root):
     path = root/".labber-converter.lock"
@@ -752,15 +779,12 @@ def database_lock(root):
             lock = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(lock,dict) or lock.get("host") != owner["host"] or int(lock.get("pid",0)) <= 0:
                 raise ValueError("Unverified lock owner")
-            try:
-                os.kill(int(lock["pid"]),0)
-            except ProcessLookupError:
-                if identity(path) != previous:
-                    raise ValueError("Lock changed")
-                path.unlink()
-                fd = os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY)
-            else:
+            if pid_alive(int(lock["pid"])):
                 raise ValueError("Owner is running")
+            if identity(path) != previous:
+                raise ValueError("Lock changed")
+            path.unlink()
+            fd = os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY)
         except (OSError,ValueError,TypeError):
             raise ConversionError(f"Another conversion is using this folder or the lock owner cannot be verified: {path}") from error
     try:
