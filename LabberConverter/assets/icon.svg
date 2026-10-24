@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+ <defs>
+  <linearGradient id="bg" x2=".8" y2="1"><stop stop-color="#202B35"/><stop offset="1" stop-color="#0B0F14"/></linearGradient>
+  <linearGradient id="glass" x2=".1" y2="1"><stop stop-color="#fff" stop-opacity=".84"/><stop offset=".45" stop-color="#E4EBF1" stop-opacity=".24"/><stop offset="1" stop-color="#297FA8" stop-opacity=".35"/></linearGradient>
+  <linearGradient id="rim" x2=".8" y2="1"><stop stop-color="#fff"/><stop offset=".4" stop-color="#BDCDE1" stop-opacity=".2"/><stop offset="1" stop-color="#21C6E8" stop-opacity=".6"/></linearGradient>
+ </defs>
+ <rect x="55" y="55" width="914" height="914" rx="210" fill="url(#bg)"/>
+ <rect x="197" y="196" width="630" height="640" rx="126" fill="#000" opacity=".2"/>
+ <rect x="186" y="176" width="652" height="650" rx="126" fill="url(#glass)" stroke="url(#rim)" stroke-width="5"/>
+ <path d="M336 373h346m-87-87 87 87-87 87M688 626H342m87-87-87 87 87 87" fill="none" stroke="#21C6E8" stroke-width="45" stroke-linecap="round" stroke-linejoin="round"/>
+ <path d="M355 506h46l31-38 44 68 39-52 36 22h116" fill="none" stroke="#F7F4EE" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
