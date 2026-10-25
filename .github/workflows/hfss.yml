@@ -42,7 +42,13 @@ jobs:
       - name: Tests (DXF editor)
         run: |
           python -m pip install pytest
-          python -m pytest -q -p no:cacheprovider tests
+          python -m pytest -q -p no:cacheprovider tests *> pytest.txt
+          $code = $LASTEXITCODE
+          Get-Content pytest.txt -Tail 80
+          if ($code -ne 0) {
+            Select-String -Path pytest.txt -Pattern '^(E |FAILED)' | Select-Object -First 30 | ForEach-Object { Write-Output "::error::$($_.Line)" }
+            exit $code
+          }
       - name: Version
         id: v
         run: |
