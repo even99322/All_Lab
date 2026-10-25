@@ -12,7 +12,7 @@ VERSION = re.search(r'APP_VERSION\s*=\s*"v?([0-9.]+)"', open(os.path.join(ROOT, 
 
 datas = [(os.path.join(ROOT, "icon.ico"), ".")]
 binaries = []
-hiddenimports = ["selftest", "mode_help", "dxf_editor", "dxf_model", "dxf_geom", "update_ui", "updater", "usage", "yig_view", "yig_help", "mpl_toolkits.mplot3d", "shapely", "ezdxf.path", "pythoncom", "pywintypes", "win32com", "win32com.client",
+hiddenimports = ["selftest", "mode_help", "dxf_editor", "dxf_model", "dxf_geom", "update_ui", "updater", "usage", "yig_view", "yig_help", "tline", "aedt_monitor", "yigmap", "map_view", "progress_panel", "mpl_toolkits.mplot3d", "shapely", "ezdxf.path", "pythoncom", "pywintypes", "win32com", "win32com.client",
                  "matplotlib.backends.backend_qtagg", "PIL.Image", "psutil"]
 for pkg in ("ansys.aedt.core",):
     d, b, h = collect_all(pkg)

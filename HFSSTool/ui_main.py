@@ -1,5 +1,7 @@
 import os
 import time
+
+import numpy as np
 import queue as _queue
 import subprocess
 import multiprocessing as mp
@@ -331,6 +333,10 @@ class MainWindow(QMainWindow):
         run_row.addWidget(self.lbl_elapsed)
         run_row.addWidget(self.btn_abort)
         main_layout.addLayout(run_row)
+        # v3.9：執行步驟清單（做到哪、還剩哪些、各花多久）
+        from progress_panel import StepPanel
+        self.steps = StepPanel()
+        main_layout.addWidget(self.steps)
 
         self.log_console = QTextEdit()
         self.log_console.setReadOnly(True)
@@ -597,8 +603,57 @@ class MainWindow(QMainWindow):
         note.setStyleSheet(f"color: {self._muted()};")
         lay.addWidget(note)
 
+        # v3.9：2D 熱圖（偏置 × 頻率）
+        g = QGroupBox("🗺 2D 熱圖（偏置磁場 × 頻率，連續模擬）")
+        gl = QGridLayout(g)
+        self.edit_map_b0 = _tip(QLineEdit("170"), "偏置起點（單位跟上面「輸入方式」一樣：外加 mT 或 HFSS 內部場 A/m）")
+        self.edit_map_b1 = _tip(QLineEdit("190"), "偏置終點")
+        self.edit_map_n = _tip(QLineEdit("11"), "偏置點數（包含頭尾）")
+        self.edit_map_f0 = _tip(QLineEdit(""), "頻率起點 (GHz)；空白 = 自動（涵蓋所有 Kittel ±5%）")
+        self.edit_map_f1 = _tip(QLineEdit(""), "頻率終點 (GHz)；空白 = 自動")
+        self.edit_map_fn = _tip(QLineEdit("401"), "每個偏置的頻率點數")
+        self.combo_map_method = _tip(QComboBox(), "參數掃描：AEDT Optimetrics 一次跑完，第一個偏置跑 Adaptive，其他沿用同一個網格（快）。\n"
+                                                "逐點：每個偏置改數值、各自求解，每算完一點就存檔、可以邊算邊看（慢但最穩）。")
+        self.combo_map_method.addItem("參數掃描（共用網格，快）", "param")
+        self.combo_map_method.addItem("逐點（每點求解，可以邊算邊看）", "loop")
+        self.combo_map_ftype = QComboBox()
+        self.combo_map_ftype.addItems(["Interpolating", "Discrete"])
+        self.lbl_map_unit = QLabel("")
+        self.lbl_map_info = QLabel("")
+        self.lbl_map_info.setWordWrap(True)
+        self.lbl_map_info.setStyleSheet(f"color: {self._muted()};")
+        btn_auto = QPushButton("頻率自動")
+        btn_auto.setToolTip("依偏置範圍算 Kittel 頻率，頻率範圍設成涵蓋全部 ±5%")
+        btn_auto.clicked.connect(self._map_auto_freq)
+        self.btn_map = QPushButton("▶ 跑 2D 熱圖")
+        self.btn_map.setStyleSheet("font-weight: bold;")
+        self.btn_map.setToolTip("需要已經建好的模型（沒有 YIG 球會先建立）")
+        self.btn_map.clicked.connect(self._run_map_task)
+        self.btn_map.setEnabled(False)
+        btn_view = QPushButton("📈 看熱圖…")
+        btn_view.clicked.connect(lambda: self.open_map_viewer())
+        gl.addWidget(QLabel("偏置起點:"), 0, 0); gl.addWidget(self.edit_map_b0, 0, 1)
+        gl.addWidget(QLabel("終點:"), 0, 2); gl.addWidget(self.edit_map_b1, 0, 3)
+        gl.addWidget(QLabel("點數:"), 0, 4); gl.addWidget(self.edit_map_n, 0, 5); gl.addWidget(self.lbl_map_unit, 0, 6)
+        gl.addWidget(QLabel("頻率起點 (GHz):"), 1, 0); gl.addWidget(self.edit_map_f0, 1, 1)
+        gl.addWidget(QLabel("終點:"), 1, 2); gl.addWidget(self.edit_map_f1, 1, 3)
+        gl.addWidget(QLabel("點數:"), 1, 4); gl.addWidget(self.edit_map_fn, 1, 5); gl.addWidget(btn_auto, 1, 6)
+        gl.addWidget(QLabel("方式:"), 2, 0); gl.addWidget(self.combo_map_method, 2, 1, 1, 3)
+        gl.addWidget(QLabel("掃頻:"), 2, 4); gl.addWidget(self.combo_map_ftype, 2, 5)
+        gl.addWidget(self.lbl_map_info, 3, 0, 1, 7)
+        row = QHBoxLayout()
+        row.addWidget(self.btn_map)
+        row.addWidget(btn_view)
+        row.addStretch()
+        gl.addLayout(row, 4, 0, 1, 7)
+        lay.addWidget(g)
+        for w in (self.edit_map_b0, self.edit_map_b1, self.edit_map_n, self.edit_map_f0, self.edit_map_f1, self.edit_map_fn):
+            w.textChanged.connect(self._update_map_info)
+        self.map_viewer = None
+
         # v3.4：3D 座標預覽（第一次切到這個分頁才建立）
         self.yig_view_box = QGroupBox("3D 座標預覽（上基板表面＋波導＋YIG 球；滑鼠移到頂點顯示座標）")
+        self.yig_view_box.setMinimumHeight(420)          # v3.9：內容變多了，寧可捲動也不要把上面的欄位擠扁
         self.yig_view_lay = QVBoxLayout(self.yig_view_box)
         self.yig_view = None
         self.yig_view_msg = QLabel("切到這個分頁時會讀 DXF 畫出來。")
@@ -620,8 +675,99 @@ class MainWindow(QMainWindow):
         self.combo_yig_bdir.currentIndexChanged.connect(self._update_yig_calc)
         self.combo_yig_pos.currentIndexChanged.connect(self._update_yig_calc)
         self.combo_yig_bmode.currentIndexChanged.connect(self._on_yig_bmode)
+        for w in (self.edit_yig_ms, self.edit_yig_g):
+            w.textChanged.connect(self._update_map_info)
+        self.combo_yig_bmode.currentIndexChanged.connect(self._update_map_info)
         self._yig_bmode_prev = 0
         self._update_yig_calc()
+        self._update_map_info()
+
+    # ---- v3.9：2D 熱圖 ----
+    def _map_values(self):
+        import yigmap
+        mode = "external_mT" if self.combo_yig_bmode.currentIndex() == 0 else "internal_Apm"
+        vals = yigmap.bias_points(float(self.edit_map_b0.text()), float(self.edit_map_b1.text()),
+                                  int(self.edit_map_n.text()))
+        fl = yigmap.fields_for(vals, mode, float(self.edit_yig_ms.text()), float(self.edit_yig_g.text()))
+        return mode, vals, fl
+
+    def _map_freq_range(self):
+        import yigmap
+        _mode, _vals, fl = self._map_values()
+        a, b = yigmap.auto_freq_range(fl["f_kittel"])
+        f0 = float(self.edit_map_f0.text()) if self.edit_map_f0.text().strip() else a
+        f1 = float(self.edit_map_f1.text()) if self.edit_map_f1.text().strip() else b
+        return f0, f1
+
+    def _map_auto_freq(self):
+        import yigmap
+        try:
+            _m, _v, fl = self._map_values()
+        except (ValueError, ZeroDivisionError):
+            return
+        a, b = yigmap.auto_freq_range(fl["f_kittel"])
+        self.edit_map_f0.setText(f"{a:.4f}")
+        self.edit_map_f1.setText(f"{b:.4f}")
+
+    def _update_map_info(self, *_):
+        if not hasattr(self, "lbl_map_info"):
+            return
+        mode = "external_mT" if self.combo_yig_bmode.currentIndex() == 0 else "internal_Apm"
+        self.lbl_map_unit.setText("mT" if mode == "external_mT" else "A/m")
+        try:
+            _m, vals, fl = self._map_values()
+            f0, f1 = self._map_freq_range()
+            nf = int(self.edit_map_fn.text())
+            lw = yig.linewidth_mhz(float(self.edit_yig_dh.text()), float(self.edit_yig_g.text()))
+            step_b = abs(fl["b_ext_mT"][-1] - fl["b_ext_mT"][0]) / max(len(vals) - 1, 1)
+            step_f = (f1 - f0) * 1e3 / max(nf - 1, 1)
+            txt = (f"Kittel {fl['f_kittel'].min():.4f} → {fl['f_kittel'].max():.4f} GHz　|　頻率 {f0:.4f} → {f1:.4f} GHz"
+                   f"（間距 {step_f:.3f} MHz）　|　偏置間距 {step_b:.3g} mT ≈ {step_b * 28.0 * float(self.edit_yig_g.text()) / 2:.1f} MHz"
+                   f"　|　共 {len(vals)} × {nf} 點")
+            if np.any(fl["h_int"] <= 0):
+                txt = "⚠ 有偏置點的內部場 ≤ 0（YIG 沒飽和）：提高起點"
+            elif step_f > lw * 3:
+                txt += "\n💡 頻率間距比線寬大很多：共振很窄時要靠 Interpolating 或加點數（模擬裡共振通常被耦合加寬，先看一張再調）"
+            self.lbl_map_info.setText(txt)
+        except (ValueError, ZeroDivisionError):
+            self.lbl_map_info.setText("⚠ 請輸入數字")
+
+    def _run_map_task(self):
+        if not self.chk_yig.isChecked():
+            self.chk_yig.setChecked(True)
+        self.run_task('MAP2D')
+
+    def _map_result(self, path):
+        self.last_map = path
+        if self.map_viewer is not None and self.map_viewer.isVisible():
+            if self.map_viewer.path != path:
+                self.map_viewer.load(path)
+        elif self.current_task == 'MAP2D' and os.path.exists(path):
+            self.open_map_viewer(path)
+
+    def open_map_viewer(self, path=None):
+        from map_view import MapViewer
+        path = path or getattr(self, "last_map", None)
+        if not path:
+            base = os.path.splitext(self._csv_path_guess())[0] + "_yigmap.npz"
+            path = base if os.path.exists(base) else None
+        if self.map_viewer is None:
+            self.map_viewer = MapViewer()
+            icon = self.windowIcon()
+            if not icon.isNull():
+                self.map_viewer.setWindowIcon(icon)
+        if path:
+            self.map_viewer.load(path)
+        else:
+            self.map_viewer.open_dialog()
+        self.map_viewer.show()
+        self.map_viewer.raise_()
+
+    def _csv_path_guess(self):
+        try:
+            return self._paths(self.confirmed_project or None)['csv_path']
+        except Exception:  # noqa: BLE001
+            return ""
 
     def _apply_yig_preset(self, idx):
         key = self.combo_yig_preset.itemData(idx)
@@ -1214,6 +1360,9 @@ class MainWindow(QMainWindow):
             'yig_fine': self.chk_yig_fine, 'yig_span': self.edit_yig_span, 'yig_pts': self.edit_yig_pts,
             'yig_ftype': self.combo_yig_ftype, 'yig_ftol': self.edit_yig_ftol,
             'yig_track': self.chk_yig_track, 'yig_use_cal': self.chk_yig_cal,
+            'map_b0': self.edit_map_b0, 'map_b1': self.edit_map_b1, 'map_n': self.edit_map_n,
+            'map_f0': self.edit_map_f0, 'map_f1': self.edit_map_f1, 'map_fn': self.edit_map_fn,
+            'map_method': self.combo_map_method, 'map_ftype': self.combo_map_ftype,
         }
 
     def load_settings(self):
@@ -1252,6 +1401,9 @@ class MainWindow(QMainWindow):
         self._yig_bmode_prev = self.combo_yig_bmode.currentIndex()
         if isinstance(settings.get('yig_cal_data'), dict):
             self.yig_cal_data = settings['yig_cal_data']
+        if isinstance(settings.get('step_durations'), dict):
+            self.steps.history = {str(k): float(v) for k, v in settings['step_durations'].items()
+                                  if isinstance(v, (int, float))}
         self._yig_pos_labels(self.combo_yig_pos.currentIndex())
         self._update_yig_calc()
         self.log_msg(f"📁 已讀取設定檔: {SETTINGS_FILE}")
@@ -1267,7 +1419,19 @@ class MainWindow(QMainWindow):
                 settings[key] = w.text()
         if self.yig_cal_data:
             settings['yig_cal_data'] = self.yig_cal_data
+        if getattr(self, "steps", None) is not None and self.steps.history:
+            settings['step_durations'] = {k: round(v, 1) for k, v in self.steps.history.items()}
         ConfigManager.save_settings(settings)
+
+    def _substrate_info(self):
+        """v3.9：給 DXF 編輯器的 MS ⇄ CPW 轉換算阻抗用。"""
+        def num(edit):
+            try:
+                v = float(edit.text())
+                return v if v > 0 else None
+            except (TypeError, ValueError):
+                return None
+        return {"er": num(self.edit_er), "h": num(self.edit_thick_die), "material": self.edit_mat_die.text().strip()}
 
     def open_dxf_editor(self):
         """v3.3：DXF 編輯器；存檔後這裡的 DXF 路徑換成存的那個檔。"""
@@ -1278,7 +1442,8 @@ class MainWindow(QMainWindow):
             return
         path = self.edit_dxf.text().strip()
         self.dxf_editor = DxfEditor(path if path and os.path.exists(path) else None,
-                                    mode=self.combo_type.currentText(), on_saved=self._dxf_saved)
+                                    mode=self.combo_type.currentText(), on_saved=self._dxf_saved,
+                                    substrate=self._substrate_info)
         icon = self.windowIcon()
         if not icon.isNull():
             self.dxf_editor.setWindowIcon(icon)
@@ -1475,6 +1640,17 @@ class MainWindow(QMainWindow):
                 'yig_fine_tol': num(self.edit_yig_ftol, "細掃誤差容許", float, 0.001),
                 'yig_track': self.chk_yig_track.isChecked(),
             })
+            if task_name == 'MAP2D':
+                n = num(self.edit_map_n, "2D 熱圖偏置點數", int, 1)
+                nf = num(self.edit_map_fn, "2D 熱圖頻率點數", int, 2)
+                f0, f1 = self._map_freq_range()
+                if f1 <= f0:
+                    raise ValueError("2D 熱圖的頻率終點要大於起點。")
+                params.update({'map_start': num(self.edit_map_b0, "2D 熱圖偏置起點", float),
+                               'map_stop': num(self.edit_map_b1, "2D 熱圖偏置終點", float), 'map_points': n,
+                               'map_f0': f0, 'map_f1': f1, 'map_fpoints': nf,
+                               'map_method': self.combo_map_method.currentData(),
+                               'map_ftype': self.combo_map_ftype.currentText()})
             xy_x = num(self.edit_yig_x, "YIG X", float); xy_y = num(self.edit_yig_y, "YIG Y", float)
             if params['yig_pos_mode'] == "auto":
                 params['yig_dx'], params['yig_dy'] = xy_x, xy_y
@@ -1537,7 +1713,8 @@ class MainWindow(QMainWindow):
         self.current_task = task_name
         self.set_buttons_state(False)
         self.btn_abort.setEnabled(True)
-        self.progress.setRange(0, 0)          # 忙碌動畫
+        self.progress.setRange(0, 0)          # 忙碌動畫（收到步驟清單後改成實際進度）
+        self.steps.set_plan([])
         self.lbl_stage.setText("啟動中…")
         self.task_start_time = time.time()
         self._update_clock()
@@ -1567,6 +1744,18 @@ class MainWindow(QMainWindow):
                 self.update_suggested_ui(msg[1])
             elif kind == 'yig_result':
                 self._yig_result(msg[1])
+            elif kind == 'plan':
+                self.steps.set_plan(msg[1])
+                self.progress.setRange(0, 1000)
+                self.progress.setValue(0)
+            elif kind == 'step':
+                self.steps.set_step(*msg[1:])
+                self._refresh_progress()
+            elif kind == 'progress':
+                self.steps.set_progress(msg[1], msg[2] if len(msg) > 2 else "")
+                self._refresh_progress()
+            elif kind == 'map_result':
+                self._map_result(msg[1])
             elif kind == 'done':
                 self._done_received = True
                 self.on_task_finished(*msg[1:])
@@ -1577,7 +1766,20 @@ class MainWindow(QMainWindow):
             self.log_msg(f"⚠️ 工作程序已結束 (exit code {self.proc.exitcode})。")
             self.on_task_finished(False, self.current_task, {})
 
+    def _refresh_progress(self):
+        frac = self.steps.overall()
+        if frac is not None and self._is_running():
+            self.progress.setRange(0, 1000)
+            self.progress.setValue(int(frac * 1000))
+            self.progress.setToolTip(self.steps.summary())
+            cur = self.steps.current()
+            if cur:
+                self.lbl_stage.setText(self.steps.summary())
+
     def _update_clock(self):
+        if hasattr(self, "steps"):
+            self.steps.tick()
+            self._refresh_progress()
         m, s = divmod(int(time.time() - self.task_start_time), 60)
         h, m = divmod(m, 60)
         self.lbl_elapsed.setText(f"{h:d}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}")
@@ -1619,7 +1821,9 @@ class MainWindow(QMainWindow):
         self.progress.setValue(1 if success else 0)
         self.btn_abort.setEnabled(False)
         self.lbl_stage.setText("完成" if success else "失敗 / 已中止")
+        self.steps.finish(success)
         self._report_task_done(success, task_name)
+        self.save_settings()                   # 記下各步驟花的時間（下次預估用）
 
         self.btn_open.setEnabled(True)
         self.btn_pipeline.setEnabled(True)
@@ -1634,6 +1838,7 @@ class MainWindow(QMainWindow):
             self.btn_build.setEnabled(True)
             self.btn_yig_build.setEnabled(True)
             has_model = payload.get('has_model', False)
+            self.btn_map.setEnabled(has_model or task_name == 'MAP2D')
             if task_name == 'OPEN' and success and has_model:
                 self.log_msg("🔍 偵測到專案內已有 3D 模型，直接為您解鎖模擬功能！")
             for b in (self.btn_sim_s, self.btn_sim_fields, self.btn_gif):

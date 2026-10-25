@@ -64,6 +64,15 @@ def bulge_from_sagitta(p: Point, q: Point, m: Point) -> float:
     return max(-20.0, min(20.0, b))
 
 
+def seg_length(p: Point, q: Point, b: float = 0.0) -> float:
+    """直線 / 圓弧段的長度（v3.9 標長度用）。"""
+    c = _len(_sub(q, p))
+    sweep = abs(4.0 * math.atan(b))
+    if c < EPS or sweep < EPS:
+        return c
+    return c * sweep / (2.0 * math.sin(sweep / 2.0))
+
+
 def arc_mid(p: Point, q: Point, b: float) -> Point:
     """bulge 段的中點（拖曳把手的位置）。"""
     c = _len(_sub(q, p))

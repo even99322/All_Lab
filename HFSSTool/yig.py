@@ -117,7 +117,7 @@ def bias_args(obj_name, h_int_apm, direction):
         f"NAME:{YIG_BIAS}",
         "Objects:=", [obj_name],
         "IsUniformBias:=", True,
-        "Bias:=", f"{h_int_apm:.6g}",
+        "Bias:=", h_int_apm if isinstance(h_int_apm, str) else f"{h_int_apm:.6g}",   # v3.9：也可以是設計變數名稱
         "XAngle:=", xa,
         "YAngle:=", ya,
         "ZAngle:=", za,

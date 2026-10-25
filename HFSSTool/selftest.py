@@ -146,6 +146,42 @@ def run() -> int:
         return f"Kittel {r['f_k']:.4f} GHz、線寬 {r['lw']:.3g} MHz"
     step("YIG 參數說明", yhelp)
 
+    def cad39():
+        need_app()
+        import tline
+        from dxf_editor import ConvertDialog, DxfEditor
+        ed = DxfEditor(mode="MS", substrate=lambda: {"h": 0.813, "material": "Rogers RO4003 (tm)"})
+        ed.run_command("L")
+        for t in ("0,5", "@10,0", ""):
+            ed.run_command(t)
+        n = ed.convert_design("CPW", 1.0, tline.gcpw_gap(50, 1.0, 0.813, 3.55), vias=(1.0, 0.3, 0.2))
+        dlg = ConvertDialog(ed)
+        dlg.deleteLater()
+        ed.dirty = False
+        ed.deleteLater()
+        return f"指令列畫線、MS→CPW（過孔 {n} 個）、MS 50 Ω 線寬 {tline.ms_width(50, 0.813, 3.55):.3f} mm"
+    step("DXF 編輯器 v3.9（指令列、標註、MS⇄CPW）", cad39)
+
+    def map39():
+        need_app()
+        import numpy as np
+        import yigmap
+        from map_view import MapViewer
+        vals = yigmap.bias_points(170, 190, 3)
+        fl = yigmap.fields_for(vals, "external_mT", 0.18, 2.005)
+        f = np.linspace(4.7, 5.4, 21)
+        m = yigmap.MapData(vals, "external_mT", fl, f)
+        for i in range(3):
+            m.set_row("S21", i, np.ones(21, complex))
+        base = os.path.join(tempfile.gettempdir(), "hfss_selftest_yigmap")
+        w = MapViewer(m.save(base))
+        w.deleteLater()
+        m.save_png(base)
+        from progress_panel import StepPanel
+        StepPanel().deleteLater()
+        return "2D 熱圖存檔 / 檢視、步驟清單"
+    step("YIG 2D 熱圖", map39)
+
     def usage():
         import usage as u
         return f"{u.identity()['host']}，AEDT 開著：{u.aedt_status()['running']}"

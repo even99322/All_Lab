@@ -12,6 +12,7 @@ DXF 單位是 mm（建模時以 Scale 0.001 匯入）。圖層照 README「DXF �
     每段可以是圓弧（bulges：DXF 的 bulge）、每個節點可以有圓角（fillets：半徑）→ 存成 DXF 真正的圓弧；
     smooth = "bezier"：Bézier 曲線（點 = 錨、控、控、錨…），存檔時切成細小直線段。
 其他圖元（文字、標註、不認得的）原樣保留。
+標註（v3.9）：圖層 dim 的 DIMENSION（水平 / 垂直 / 對齊），XDATA 存原始的兩點與標註線位置；HFSS 不會匯入這個圖層。
 """
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ os.environ.setdefault("EZDXF_DISABLE_C_EXT", "1")      # 見 main.py：打包後
 
 import copy
 import json
+import math
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
@@ -38,6 +40,8 @@ LAYER_INFO = {
     "b": ("板材", 3), "db": ("下板材", 3), "ub": ("上板材（頂層地）", 30), "g": ("訊號線", 1),
     "h": ("螺絲孔", 8), "v": ("金屬過孔", 5), PATH_LAYER: ("微波線中心線（不匯入）", 6),
 }
+DIM_LAYER = "dim"
+DIM_INFO = ("標註（不匯入）", 2)
 EDGE_TOL = 1e-6
 XDATA_CHUNK = 250
 
@@ -147,6 +151,41 @@ class Shape:
     def translate(self, dx: float, dy: float) -> None:
         self.pts = [(x + dx, y + dy) for x, y in self.pts]
 
+    def center(self) -> Point:
+        if self.kind == "circle":
+            return self.pts[0]
+        x0, y0, x1, y1 = self.bounds()
+        return (x0 + x1) / 2, (y0 + y1) / 2
+
+    def rotate(self, deg: float, pivot: Optional[Point] = None) -> None:
+        """v3.9：繞 pivot（預設圖形中心）逆時針轉 deg 度；圓弧、圓角、Bézier 都不變形。"""
+        cx, cy = pivot if pivot is not None else self.center()
+        c, s_ = math.cos(math.radians(deg)), math.sin(math.radians(deg))
+        self.pts = [(round(cx + (x - cx) * c - (y - cy) * s_, 9), round(cy + (x - cx) * s_ + (y - cy) * c, 9))
+                    for x, y in self.pts]
+
+    def mirror(self, axis: str, pivot: Optional[Point] = None) -> None:
+        """axis = "x"：左右翻（對垂直線）；"y"：上下翻。圓弧方向跟著反過來。"""
+        cx, cy = pivot if pivot is not None else self.center()
+        self.pts = [((2 * cx - x) if axis == "x" else x, (2 * cy - y) if axis == "y" else y) for x, y in self.pts]
+        if not self.bezier and self.kind != "circle":
+            self.norm()
+            self.bulges = [-b for b in self.bulges]
+
+    def snap_points(self) -> List[Tuple[Point, str]]:
+        """物件鎖點：end（節點 / 端點）、mid（直線段中點、弧中點）、cen（圓心）、qua（圓的四分點）。"""
+        if self.kind == "circle":
+            (x, y), r = self.pts[0], self.r
+            return [((x, y), "cen")] + [((x + dx * r, y + dy * r), "qua") for dx, dy in ((1, 0), (0, 1), (-1, 0), (0, -1))]
+        out = [(p, "end") for i, p in enumerate(self.pts) if self.is_anchor(i)]
+        if not self.bezier:
+            self.norm()
+            n = len(self.pts)
+            for k in range(self.n_segs()):
+                a, b = self.pts[k], self.pts[(k + 1) % n]
+                out.append((G.arc_mid(a, b, self.bulges[k]), "mid"))
+        return out
+
     def ends(self) -> Tuple[Point, Point]:
         return self.pts[0], self.pts[-1]
 
@@ -224,11 +263,55 @@ class Shape:
         return True
 
 
+@dataclass
+class Dim:
+    """標註：kind = h（水平距離）、v（垂直距離）、a（兩點真實距離）；base = 標註線經過的點。"""
+    kind: str
+    p1: Point
+    p2: Point
+    base: Point
+
+    def value(self) -> float:
+        (x1, y1), (x2, y2) = self.p1, self.p2
+        if self.kind == "h":
+            return abs(x2 - x1)
+        if self.kind == "v":
+            return abs(y2 - y1)
+        return math.hypot(x2 - x1, y2 - y1)
+
+    def to_dict(self) -> dict:
+        return {"kind": self.kind, "p1": list(self.p1), "p2": list(self.p2), "base": list(self.base)}
+
+    @staticmethod
+    def from_dict(d: dict) -> "Dim":
+        return Dim(str(d.get("kind", "a")), tuple(d["p1"]), tuple(d["p2"]), tuple(d.get("base") or d["p2"]))
+
+    def geometry(self):
+        """畫面用：(延伸線 1 的兩端, 延伸線 2 的兩端, 標註線兩端, 文字位置, 文字角度°)。"""
+        (x1, y1), (x2, y2), (bx, by) = self.p1, self.p2, self.base
+        if self.kind == "h":
+            a, b = (x1, by), (x2, by)
+        elif self.kind == "v":
+            a, b = (bx, y1), (bx, y2)
+        else:
+            dx, dy = x2 - x1, y2 - y1
+            L = math.hypot(dx, dy) or 1e-12
+            nx, ny = -dy / L, dx / L
+            off = (bx - x1) * nx + (by - y1) * ny
+            a, b = (x1 + nx * off, y1 + ny * off), (x2 + nx * off, y2 + ny * off)
+        mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+        ang = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
+        if ang > 90.0001 or ang <= -90:
+            ang -= 180 if ang > 0 else -180
+        return (self.p1, a), (self.p2, b), (a, b), mid, ang
+
+
 # ---- 設計 ---------------------------------------------------------------------------------------
 class Design:
     def __init__(self, mode: str = "MS") -> None:
         self.mode = mode if mode in LAYERS else "MS"
         self.shapes: List[Shape] = []
+        self.dims: List[Dim] = []
         self.auto_ground = False
         self.path: str = ""
         self.doc = None                      # 讀進來的 ezdxf 文件（存檔時保留其他圖元）
@@ -238,12 +321,14 @@ class Design:
 
     # ---- 快照（復原 / 重做）-------------------------------------------------------------------
     def snapshot(self) -> str:
-        return json.dumps({"mode": self.mode, "auto": self.auto_ground, "shapes": [s.to_dict() for s in self.shapes]})
+        return json.dumps({"mode": self.mode, "auto": self.auto_ground, "shapes": [s.to_dict() for s in self.shapes],
+                           "dims": [x.to_dict() for x in self.dims]})
 
     def restore(self, snap: str) -> None:
         d = json.loads(snap)
         self.mode, self.auto_ground = d["mode"], d["auto"]
         self.shapes = [Shape.from_dict(s) for s in d["shapes"]]
+        self.dims = [Dim.from_dict(x) for x in d.get("dims") or []]
 
     # ---- 範本 --------------------------------------------------------------------------------
     @classmethod
@@ -384,6 +469,72 @@ class Design:
             elif s.kind == "poly" and s.layer not in BOARD_LAYERS[self.mode] and not (s.layer == "ub" and _is_rect(s.pts, nb)):
                 s.pts = [_move_to_edge(p, old, nb) for p in s.pts]
 
+    def convert(self, mode: str, width: Optional[float] = None, gap: Optional[float] = None) -> None:
+        """v3.9：MS ⇄ CPW。板材圖層 b ⇄ db；轉成 MS 時拿掉上地 / 過孔；CPW 開自動上地；所有微波線套用新的線寬 / 間隙。"""
+        if mode not in LAYERS:
+            raise DxfError(f"不認得的建模方式 {mode}")
+        old_board, new_board = BOARD_LAYERS[self.mode][0], BOARD_LAYERS[mode][0]
+        for s in self.shapes:
+            if s.layer == old_board:
+                s.layer = new_board
+        if mode == "MS":
+            self.shapes = [s for s in self.shapes if s.layer not in ("ub", "v")]
+            self.auto_ground = False
+        else:
+            self.shapes = [s for s in self.shapes if s.layer != "ub"]      # 手畫的上地 → 改用自動產生
+            self.auto_ground = True
+        self.mode = mode
+        for s in self.shapes:
+            if s.kind == "path":
+                if width:
+                    s.width = float(width)
+                if gap is not None and mode == "CPW":
+                    s.gap = float(gap)
+
+    def via_fence(self, pitch: float, dia: float, clearance: float, rows: int = 1) -> List[Shape]:
+        """CPW 的過孔牆：沿每條微波線兩側、離間隙邊 clearance（到過孔邊）、每 pitch 一個；只放在上地裡面。"""
+        import shapely.geometry as sg
+        from shapely.ops import unary_union
+        paths = [s for s in self.shapes if s.kind == "path" and len(s.pts) >= 2]
+        board = self.board_geom()
+        if not paths or board.is_empty or pitch <= 0 or dia <= 0:
+            return []
+        r = dia / 2
+        cuts = unary_union([sg.Polygon(s.ring(s.gap)).buffer(0) for s in paths if len(s.ring(s.gap)) >= 3])
+        holes = unary_union([sg.Point(*s.pts[0]).buffer(s.r) for s in self.shapes if s.kind == "circle"] or [sg.Point(0, 0).buffer(0)])
+        inner = board.buffer(-(r + pitch / 2))                   # 離板邊（Wave Port）至少半個間距
+        out: List[Shape] = []
+        placed: List[Point] = []
+        for s in paths:
+            line = sg.LineString(s.centerline())
+            if line.length <= 0:
+                continue
+            for row in range(max(1, rows)):
+                off = s.width / 2 + s.gap + clearance + r + row * pitch
+                for side in (1, -1):
+                    try:
+                        side_line = line.offset_curve(side * off, join_style=2)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if side_line.is_empty:
+                        continue
+                    parts = [side_line] if side_line.geom_type == "LineString" else list(getattr(side_line, "geoms", []))
+                    for part in parts:
+                        n = int(part.length // pitch)
+                        start = (part.length - n * pitch) / 2
+                        for k in range(n + 1):
+                            p = part.interpolate(start + k * pitch)
+                            c = sg.Point(p.x, p.y).buffer(r, 16)
+                            if not inner.contains(sg.Point(p.x, p.y)):
+                                continue
+                            if c.distance(cuts) < clearance * 0.999 or c.intersects(holes):
+                                continue
+                            if any(math.hypot(p.x - q[0], p.y - q[1]) < pitch * 0.7 for q in placed):
+                                continue
+                            placed.append((round(p.x, 6), round(p.y, 6)))
+                            out.append(Shape("circle", "v", [placed[-1]], r=r))
+        return out
+
     # ---- 讀檔 --------------------------------------------------------------------------------
     @classmethod
     def load(cls, path: str, mode: Optional[str] = None) -> "Design":
@@ -409,6 +560,12 @@ class Design:
             x = _xdata(e)
             if x.get("gen"):
                 continue                          # 存檔時產生的：重新產生
+            if t == "DIMENSION" and x.get("dim"):
+                try:
+                    d.dims.append(Dim(str(x["dim"]), tuple(x["p1"]), tuple(x["p2"]), tuple(x["base"])))
+                except (KeyError, TypeError, ValueError):
+                    pass
+                continue
             if t == "LWPOLYLINE":
                 raw = [(float(px), float(py), float(b)) for px, py, b in e.get_points("xyb")]
                 if layer == PATH_LAYER:
@@ -469,7 +626,17 @@ class Design:
         keep = {s.handle for s in self.shapes if s.handle} | self.loaded
         # 刪掉之前讀進來（包括已經刪掉的）/ 產生的、現在要重寫的圖元
         for e in list(msp):
-            if e.dxf.handle in keep or _xdata(e).get("gen") or (e.dxftype() == "LWPOLYLINE" and e.dxf.layer == PATH_LAYER):
+            xd = _xdata(e)
+            if e.dxftype() == "DIMENSION" and xd.get("dim"):
+                block = e.dxf.get("geometry")
+                msp.delete_entity(e)
+                if block and block in doc.blocks:
+                    try:
+                        doc.blocks.delete_block(block, safe=False)
+                    except Exception:  # noqa: BLE001
+                        pass
+                continue
+            if e.dxf.handle in keep or xd.get("gen") or (e.dxftype() == "LWPOLYLINE" and e.dxf.layer == PATH_LAYER):
                 msp.delete_entity(e)
         if APPID not in doc.appids:
             doc.appids.new(APPID)
@@ -497,6 +664,8 @@ class Design:
             for verts in polys:
                 e = msp.add_lwpolyline(verts, format="xyb", close=True, dxfattribs={"layer": layer})
                 _set_xdata(e, {"gen": 1})
+        if self.dims:
+            self._save_dims(doc, msp)
         meta = json.dumps({"mode": self.mode, "auto_ground": self.auto_ground})
         cv = doc.header.custom_vars
         if cv.has_tag("QEL_HFSS"):
@@ -511,6 +680,31 @@ class Design:
             raise DxfError(f"存不了：{e}") from None
         self.doc, self.path = doc, path
         self.loaded = {s.handle for s in self.shapes if s.handle}
+
+
+    def _save_dims(self, doc, msp) -> None:
+        if DIM_LAYER not in doc.layers:
+            doc.layers.add(DIM_LAYER, color=DIM_INFO[1])
+        style = "Standard" if "Standard" in doc.dimstyles else next(iter(doc.dimstyles)).dxf.name
+        x0, y0, x1, y1 = self.bounds()
+        txt = max(min(x1 - x0, y1 - y0) / 40, 0.05)           # 字高跟著板子大小
+        ov = {"dimtxt": txt, "dimasz": txt * 0.8, "dimexo": txt * 0.4, "dimexe": txt * 0.6, "dimgap": txt * 0.3,
+              "dimdec": 4, "dimzin": 8, "dimtad": 1}
+        for dm in self.dims:
+            try:
+                if dm.kind in ("h", "v"):
+                    obj = msp.add_linear_dim(base=dm.base, p1=dm.p1, p2=dm.p2, angle=0 if dm.kind == "h" else 90,
+                                             dimstyle=style, override=ov, dxfattribs={"layer": DIM_LAYER})
+                else:
+                    (ax, ay), (bx, by), (cx, cy) = dm.p1, dm.p2, dm.base
+                    L = math.hypot(bx - ax, by - ay) or 1e-12
+                    dist = ((cx - ax) * -(by - ay) + (cy - ay) * (bx - ax)) / L
+                    obj = msp.add_aligned_dim(p1=dm.p1, p2=dm.p2, distance=dist, dimstyle=style, override=ov,
+                                              dxfattribs={"layer": DIM_LAYER})
+                obj.render()
+                _set_xdata(obj.dimension, {"dim": dm.kind, "p1": list(dm.p1), "p2": list(dm.p2), "base": list(dm.base)})
+            except Exception:  # noqa: BLE001 - 標註只是註記，存不了不影響建模
+                continue
 
 
 # ---- 小工具 -----------------------------------------------------------------------------------

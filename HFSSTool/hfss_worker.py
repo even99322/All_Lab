@@ -34,7 +34,31 @@ class StepFailed(Exception):
 
 
 STEP_LABELS = {'OPEN': '開啟專案', 'BUILD': '建模', 'SIM_S': 'S參數模擬', 'SIM_FIELDS': '場型模擬',
-               'EXPORT_GIF': 'GIF 匯出', 'CLOSE': '關閉專案', 'PIPELINE': '一鍵全流程', 'YIG': '建立 / 更新 YIG 球'}
+               'EXPORT_GIF': 'GIF 匯出', 'CLOSE': '關閉專案', 'PIPELINE': '一鍵全流程', 'YIG': '建立 / 更新 YIG 球',
+               'MAP2D': 'YIG 2D 熱圖（偏置 × 頻率）'}
+MAP_SETUP, MAP_SWEEP, MAP_PARAM, MAP_VAR = "Setup_YIGMap", "Sweep_YIGMap", "ParametricSetup_YIGMap", "YIG_Hint"
+POLL_S = 4.0
+START_GRACE_S = 15.0          # 不阻塞求解送出後，最多等這麼久看到「開始算」；呼叫本身就花很久 = 其實已經阻塞算完了
+
+
+def subplan(step, params):
+    """v3.9：每個步驟裡面的小步驟 [(id, 文字)]（介面「執行步驟」清單用）。"""
+    yig_on = bool(params.get('yig_enable'))
+    if step == 'SIM_S':
+        out = [("SIM_S:setup", "設定求解器與掃頻"), ("SIM_S:solve", "AEDT 求解 S 參數（Adaptive ＋ 掃頻）"),
+               ("SIM_S:export", "匯出 S 參數（CSV / Touchstone）")]
+        if yig_on and params.get('yig_fine_sweep', True):
+            out.append(("SIM_S:yig", "YIG：找實際共振、細掃"))
+        return out
+    if step == 'SIM_FIELDS':
+        return [("SIM_FIELDS:solve", "AEDT 求解場型"), ("SIM_FIELDS:plots", "建立場圖")]
+    if step == 'MAP2D':
+        n = int(params.get('map_points') or 0)
+        return [("MAP2D:setup", "設定偏置掃描"), ("MAP2D:solve", f"AEDT 求解 {n} 個偏置"),
+                ("MAP2D:export", "匯出 2D 熱圖")]
+    if step == 'CLOSE':
+        return [("CLOSE", "存檔、關閉並備份")]
+    return [(step, STEP_LABELS.get(step, step))]
 
 
 class _Signal:
@@ -45,7 +69,7 @@ class _Signal:
 
 class HfssWorker:
     # 會修改專案、需要存檔/備份的任務
-    _MODIFYING = {"BUILD", "SIM_S", "SIM_FIELDS", "EXPORT_GIF", "YIG"}
+    _MODIFYING = {"BUILD", "SIM_S", "SIM_FIELDS", "EXPORT_GIF", "YIG", "MAP2D"}
 
     def __init__(self, params, emit=None):
         self.params = params
@@ -61,6 +85,84 @@ class HfssWorker:
 
     def emit_stage(self, text):
         self._emit('stage', text)
+
+    # ---- v3.9：步驟清單與進度 ----
+    def begin(self, sid, label=None):
+        """開始一個小步驟（上一個自動算完成）。"""
+        cur = getattr(self, "_cur_step", None)
+        if cur == sid:
+            return
+        if cur:
+            self._emit('step', cur, 'done', '')
+        self._cur_step = sid
+        self._emit('step', sid, 'run', label or '')
+
+    def finish_step(self, ok=True, info=''):
+        cur = getattr(self, "_cur_step", None)
+        if cur:
+            self._emit('step', cur, 'done' if ok else 'fail', info)
+        self._cur_step = None
+
+    def progress(self, frac=None, text=''):
+        """目前小步驟的進度（0–1；None = 不知道）與說明。"""
+        self._emit('progress', frac, text)
+
+    def _solve(self, hfss, setup_name, label="求解", total_hint=None):
+        """v3.9：AEDT 求解改成不阻塞，每幾秒看還在不在算、讀 Simulation Monitor 顯示進度。
+        舊版 PyAEDT 沒有 blocking 參數 → 照舊阻塞（沒有細的進度）。"""
+        import aedt_monitor as mon
+        p = self.params
+        tasks = max(1, int(p.get('hpc_tasks', 1)))
+        gpus = int(p.get('hpc_gpus', 0)) or None
+        kw = dict(cores=p['hpc_cores'], tasks=tasks, gpus=gpus, use_auto_settings=(tasks == 1))
+        desk = getattr(hfss, "odesktop", None)
+        t0 = time.time()
+        try:
+            ok = hfss.analyze_setup(setup_name, blocking=False, **kw)
+            blocked = time.time() - t0 > 5.0
+        except TypeError:
+            self.progress(None, f"{label}（AEDT 求解中）")
+            ok = hfss.analyze_setup(setup_name, **kw)
+            return self._solve_result(hfss, setup_name, ok)
+        if ok is False:
+            return self._solve_result(hfss, setup_name, ok)
+        started = False
+        saved = False
+        while True:
+            run = mon.running(desk)
+            if run is None:                       # 問不到（舊版 AEDT）：就當它已經阻塞到算完
+                break
+            if run:
+                started = True
+            elif started or blocked or time.time() - t0 > START_GRACE_S:
+                break
+            text = mon.read(desk) if run else None
+            info = mon.parse(text or "")
+            if text and not saved and info:
+                mon.save_sample(text)
+                saved = True
+            elapsed = int(time.time() - t0)
+            frac = None
+            if info.get("variation") and info["variation"][1]:
+                k, n = info["variation"]
+                frac = max(0.0, min(1.0, (k - 1 + (info.get("percent", 0) / 100.0)) / n))
+            elif info.get("percent") is not None:
+                frac = info["percent"] / 100.0
+            desc = mon.describe(info) or "AEDT 求解中"
+            self.progress(frac, f"{label}：{desc}（{elapsed // 60}:{elapsed % 60:02d}）")
+            time.sleep(POLL_S)
+        try:
+            hfss.save_project()
+        except Exception:
+            pass
+        return self._solve_result(hfss, setup_name, ok)
+
+    def _solve_result(self, hfss, setup_name, ok):
+        if ok is False:
+            self.emit_log(f"❌ 求解 {setup_name} 失敗。AEDT 的訊息：")
+            self._explain_failure(hfss)
+            return False
+        return True
 
     def safe_save(self, hfss):
         try:
@@ -115,11 +217,18 @@ class HfssWorker:
             'SIM_FIELDS': self.run_fields_sim,
             'EXPORT_GIF': self.export_field_gifs,
             'YIG': self.task_yig,
+            'MAP2D': self.run_bias_map,
         }
 
+        plan = [("connect", "連線 AEDT、開啟專案")]
+        for st in steps:
+            if st != 'OPEN':
+                plan += subplan(st, self.params)
+        self._emit('plan', [list(x) for x in plan])
         try:
             self.emit_log(f"\n▶️ 開始執行任務: [{task}] {'→'.join(steps) if task == 'PIPELINE' else ''}")
             os.makedirs(self.params['local_dir'], exist_ok=True)
+            self.begin("connect")
             pull = self.params.get('pull_from')
             if pull:
                 self.emit_stage("複製專案到本地")
@@ -145,11 +254,14 @@ class HfssWorker:
                     continue
                 t0 = time.time()
                 self.emit_stage(STEP_LABELS.get(step, step))
+                if step != 'OPEN':
+                    self.begin(subplan(step, self.params)[0][0])
                 if task == 'PIPELINE':
                     self.emit_log(f"\n━━━━━━━━ 步驟 [{step}] ━━━━━━━━")
                 result = handlers[step](hfss)
                 if result is False:
                     raise StepFailed(f"步驟 [{step}] 未成功完成")
+                self.finish_step(True)
                 if step in self._MODIFYING:
                     modified = True
                     self.safe_save(hfss)
@@ -159,6 +271,7 @@ class HfssWorker:
             payload['has_model'] = len(hfss.modeler.object_names) > 0
 
             if 'CLOSE' in steps:
+                self.begin("CLOSE")
                 self.safe_save(hfss)
                 # 先關閉專案 (解除檔案鎖) 再備份，確保拷到 NAS 的檔案是完整一致的
                 hfss.close_project(save=True)
@@ -168,11 +281,14 @@ class HfssWorker:
             elif modified:
                 self.backup_to_nas()
 
+            self.finish_step(True)
         except StepFailed as e:
             success = False
+            self.finish_step(False)
             self.emit_log(f"❌ {e}，流程已停止。")
         except Exception as e:
             success = False
+            self.finish_step(False, f"{type(e).__name__}")
             self.emit_log(f"❌ 執行 [{task}] 時發生錯誤: {type(e).__name__}: {e}")
         finally:
             if hfss:
@@ -958,6 +1074,7 @@ class HfssWorker:
                 else:
                     self.emit_log("🧲 Broadband 無法指定頻點；高 Q 共振建議改用 Multi-Frequencies。")
 
+        self.begin("SIM_S:setup")
         self.emit_log(f"⚙️ 套用求解器 ({adaptive_mode}) 與掃頻 ({p['sweep_mode']}) 設定...")
         setup = self._create_adaptive_setup(hfss, S_SETUP_NAME, adaptive_mode, adaptive_freqs)
 
@@ -1000,10 +1117,14 @@ class HfssWorker:
 
         self.emit_log(f"🚀 開始計算 S 參數 ({p['hpc_cores']} 核心 / {p['hpc_tasks']} 任務"
                       f"{' / ' + str(p['hpc_gpus']) + ' GPU' if p.get('hpc_gpus') else ''})...")
-        if self._analyze(hfss, S_SETUP_NAME) is False:
+        self.begin("SIM_S:solve")
+        if self._solve(hfss, S_SETUP_NAME, "S 參數") is False:
             return False
+        self.begin("SIM_S:export")
         ok = self._export_s_params(hfss, S_SETUP_NAME, sweep.name)
         if use_yig:
+            if kittel_sweep:
+                self.begin("SIM_S:yig")
             self._yig_track(hfss, setup, kittel_sweep, f_kittel, f_k, ok)
         return ok
 
@@ -1035,6 +1156,7 @@ class HfssWorker:
                 if sw:
                     kittel_sweep = sw
                     try:
+                        self.progress(None, "重新細掃（沿用網格）")
                         hfss.odesign.Analyze(f"{S_SETUP_NAME} : {sw.name}")
                     except Exception as e:  # noqa: BLE001
                         self.emit_log(f"   ⚠️ 重新細掃失敗：{e}")
@@ -1049,6 +1171,204 @@ class HfssWorker:
         if res is not None:
             self._emit('yig_result', {"f_kittel": f_kittel, "f_res": res['f'], "by": res['by'], "depth": res['depth'],
                                       "ratio": res['f'] / f_kittel, "key": yig.cal_key(p), "time": time.time()})
+
+    # ------------------------------------------------------------------
+    # v3.9：YIG 2D 熱圖（偏置 × 頻率）
+    # ------------------------------------------------------------------
+    def _s_category(self, hfss):
+        return "Terminal Solution Data" if "Terminal" in str(hfss.solution_type) else "Modal Solution Data"
+
+    def _s_solution(self, hfss, sweep_full, variations=None):
+        """S 參數的 SolutionData 與表達式（全部 S(i,j)）。"""
+        category = self._s_category(hfss)
+        exprs = []
+        try:
+            exprs = hfss.post.available_report_quantities(report_category=category, quantities_category="S Parameter",
+                                                          solution=sweep_full) or []
+        except Exception:
+            pass
+        kw = dict(expressions=exprs or None, setup_sweep_name=sweep_full, report_category=category)
+        if variations:
+            kw.update(variations=variations, primary_sweep_variable="Freq")
+        data = hfss.post.get_solution_data(**kw)
+        if not data:
+            return None, []
+        return data, [e for e in data.expressions if e.startswith(("S(", "St("))]
+
+    @staticmethod
+    def _s_rows(data, exprs):
+        """目前這個變數組合：頻率 (GHz) 與 {S21: 複數陣列}。"""
+        out, freqs = {}, None
+        for expr in exprs:
+            x, re_ = data.get_expression_data(expr, formula="real")
+            _, im_ = data.get_expression_data(expr, formula="imag")
+            if freqs is None:
+                freqs = np.asarray(x, dtype=float)
+            out[s_param_short_name(expr) or expr] = np.asarray(re_) + 1j * np.asarray(im_)
+        if freqs is not None:
+            unit = str(getattr(data, "units_sweeps", {}).get("Freq", "GHz")).lower()
+            scale = {"hz": 1e-9, "khz": 1e-6, "mhz": 1e-3, "ghz": 1.0}.get(unit, 1e-9 if freqs.max() > 1e6 else 1.0)
+            freqs = freqs * scale
+        return freqs, out
+
+    def _set_bias(self, hfss, value):
+        """偏置換成 value（A/m 數字，或設計變數名稱）：刪掉舊的 YIG_Bias 再建一個。"""
+        try:
+            for bnd in list(hfss.boundaries):
+                if bnd.name == yig.YIG_BIAS:
+                    bnd.delete()
+        except Exception:
+            pass
+        hfss.odesign.GetModule("BoundarySetup").AssignMagneticBias(
+            yig.bias_args(yig.YIG_OBJECT, value, self.params['yig_bias_dir']))
+
+    def run_bias_map(self, hfss):
+        import yigmap
+        p = self.params
+        if not p.get('yig_enable'):
+            self.emit_log("❌ 請先勾選「在訊號線上方放置 YIG 球」。")
+            return False
+        if not self._yig_has_sphere(hfss):
+            self.emit_log("🧲 專案裡還沒有 YIG 球 → 先建立。")
+            if self.task_yig(hfss) is False:
+                return False
+        mode, g = p['yig_bias_mode'], float(p.get('yig_g', 2.0))
+        vals = yigmap.bias_points(p['map_start'], p['map_stop'], p['map_points'])
+        fl = yigmap.fields_for(vals, mode, p['yig_ms_t'], g)
+        if np.any(fl["h_int"] <= 0):
+            self.emit_log("❌ 有偏置點的內部場 ≤ 0（YIG 沒飽和）：請提高偏置的起點。")
+            return False
+        f0, f1 = float(p['map_f0']), float(p['map_f1'])
+        nf, n = int(p['map_fpoints']), len(vals)
+        unit = "mT" if mode == "external_mT" else "A/m"
+        self.emit_log(f"🗺 2D 熱圖：偏置 {vals[0]:g} → {vals[-1]:g} {unit}（{n} 點）、頻率 {f0:g} → {f1:g} GHz（{nf} 點）；"
+                      f"Kittel {fl['f_kittel'].min():.4f} → {fl['f_kittel'].max():.4f} GHz")
+        # 求解設定：Adaptive 在頭、中、尾三個 Kittel 頻率（範圍內的）
+        ks = sorted({round(float(fl['f_kittel'][i]), 6) for i in (0, n // 2, n - 1) if f0 <= fl['f_kittel'][i] <= f1})
+        ks = ks or [round((f0 + f1) / 2, 6)]
+        setup = self._create_adaptive_setup(hfss, MAP_SETUP, 'Multi-Frequencies', ", ".join(fmt_ghz(f) for f in ks))
+        sweep = self._add_sweep(setup, MAP_SWEEP, p.get('map_ftype', 'Interpolating'), f0, f1, nf, False,
+                                float(p.get('interp_tol', 0.5)))
+        if not sweep:
+            self.emit_log("❌ 建立熱圖掃頻失敗。")
+            return False
+        base = os.path.splitext(p['csv_path'])[0] + "_yigmap"
+        mp = yigmap.MapData(vals, mode, fl, np.linspace(f0, f1, nf),
+                            {"project": p.get('project_name', ''), "method": p.get('map_method', 'param'),
+                             "g": g, "ms_t": p['yig_ms_t'], "diameter": p.get('yig_diameter'), "gap": p.get('yig_gap'),
+                             "direction": p.get('yig_bias_dir')})
+        method = p.get('map_method', 'param')
+        ok = False
+        if method == 'param':
+            ok = self._map_parametric(hfss, mp, base)
+            if ok is None:
+                self.emit_log("   ⚠️ 參數掃描做不起來 → 改成逐點（每點自己求解）。")
+                method = 'loop'
+        if method == 'loop':
+            ok = self._map_loop(hfss, mp, base)
+        # 偏置回到 YIG 分頁目前的值（之後的 S 參數模擬照常）
+        try:
+            self._set_bias(hfss, self._yig_fields()['H_int'])
+        except Exception as e:  # noqa: BLE001
+            self.emit_log(f"   ⚠️ 偏置改回原本的值失敗：{e}")
+        if not mp.s:
+            return False
+        self.begin("MAP2D:export")
+        path = mp.save(base)
+        try:
+            self.emit_log(f"✨ 2D 熱圖 CSV：{mp.save_csv(base)}")
+            png = mp.save_png(base)
+            if png:
+                self.emit_log(f"✨ 2D 熱圖圖片：{png}")
+        except Exception as e:  # noqa: BLE001
+            self.emit_log(f"   ⚠️ CSV / 圖片存檔失敗（npz 不受影響）：{e}")
+        self.emit_log(f"✨ 2D 熱圖數據：{path}（{mp.done_rows()}/{n} 個偏置）")
+        self._emit('map_result', path)
+        return ok is not False
+
+    def _map_parametric(self, hfss, mp, base):
+        """Optimetrics 參數掃描（複製網格）。回傳 True / False；None = 建不起來（改逐點）。"""
+        import yigmap
+        n = len(mp.bias)
+        self.begin("MAP2D:setup")
+        try:
+            hfss[MAP_VAR] = f"{mp.h_int[0]:.10g}A_per_meter"
+            self._set_bias(hfss, MAP_VAR)
+            opt = hfss.odesign.GetModule("Optimetrics")
+            try:
+                opt.DeleteSetups([MAP_PARAM])
+            except Exception:
+                pass
+            opt.InsertSetup("OptiParametric",
+                            yigmap.parametric_args(MAP_PARAM, MAP_SETUP, MAP_VAR, mp.h_int[0], mp.h_int[-1], n))
+        except Exception as e:  # noqa: BLE001
+            self.emit_log(f"   ⚠️ 建立參數掃描失敗：{type(e).__name__}: {e}")
+            return None
+        self.emit_log(f"🚀 參數掃描 {n} 個偏置（第一個跑 Adaptive，其他沿用同一個網格）...")
+        self.begin("MAP2D:solve")
+        if self._solve(hfss, MAP_PARAM, f"{n} 個偏置") is False:
+            return False
+        self.progress(None, "讀取結果")
+        try:
+            data, exprs = self._s_solution(hfss, f"{MAP_SETUP} : {MAP_SWEEP}", variations={MAP_VAR: ["All"]})
+        except Exception as e:  # noqa: BLE001
+            self.emit_log(f"❌ 讀不到參數掃描的結果：{type(e).__name__}: {e}")
+            return False
+        if data is None or not exprs:
+            self.emit_log("❌ 參數掃描沒有 S 參數結果。")
+            self._explain_failure(hfss)
+            return False
+        got = 0
+        for i, var in enumerate(data.variations):
+            try:
+                data.set_active_variation(i)
+                h = float(var.get(MAP_VAR))
+                freqs, rows = self._s_rows(data, exprs)
+                k = mp.nearest(h)
+                if len(freqs) != len(mp.freq_ghz):
+                    mp.freq_ghz = freqs
+                    mp.s = {}
+                for name, v in rows.items():
+                    mp.set_row(name, k, v)
+                got += 1
+            except Exception as e:  # noqa: BLE001
+                self.emit_log(f"   ⚠️ 第 {i + 1} 個偏置讀取失敗：{e}")
+        self.emit_log(f"   讀到 {got}/{n} 個偏置")
+        return got > 0
+
+    def _map_loop(self, hfss, mp, base):
+        """逐點：每個偏置改數值、求解、讀結果；每算完一點就存檔（中途停下也有已經算好的部分）。"""
+        n = len(mp.bias)
+        self.begin("MAP2D:solve")
+        t_start = time.time()
+        for k in range(n):
+            label = f"偏置 {k + 1}/{n}（{mp.b_ext_mT[k]:.2f} mT）"
+            self.progress(k / n, label)
+            try:
+                self._set_bias(hfss, float(mp.h_int[k]))
+            except Exception as e:  # noqa: BLE001
+                self.emit_log(f"❌ 設定偏置失敗：{e}")
+                return False
+            if self._solve(hfss, MAP_SETUP, label) is False:
+                return k > 0
+            try:
+                data, exprs = self._s_solution(hfss, f"{MAP_SETUP} : {MAP_SWEEP}")
+                freqs, rows = self._s_rows(data, exprs) if data else (None, {})
+            except Exception as e:  # noqa: BLE001
+                self.emit_log(f"   ⚠️ {label} 讀取失敗：{e}")
+                continue
+            if not rows:
+                self.emit_log(f"   ⚠️ {label} 沒有結果")
+                continue
+            if len(freqs) != len(mp.freq_ghz) and k == 0:
+                mp.freq_ghz = freqs
+            for name, v in rows.items():
+                mp.set_row(name, k, v)
+            mp.save(base)
+            self._emit('map_result', base + ".npz")
+            per = (time.time() - t_start) / (k + 1)
+            self.emit_log(f"   ✅ {label}，平均每點 {per / 60:.1f} 分，預計還要 {per * (n - k - 1) / 60:.0f} 分")
+        return True
 
     def _add_sweep(self, setup, name, mode, f0, f1, points, save_fields, tol):
         """建立掃頻；AEDT 拒絕（InsertFrequencySweep 失敗）時依序退回 Interpolating → Discrete，不讓整個任務中斷。"""
@@ -1089,7 +1409,8 @@ class HfssWorker:
         data = hfss.post.get_solution_data(expressions=exprs or None, setup_sweep_name=sweep_full,
                                            report_category=category)
         if not data:
-            self.emit_log("❌ 找不到模擬數據。可能 Sweep 名稱錯誤或計算失敗。")
+            self.emit_log("❌ 找不到模擬數據。可能 Sweep 名稱錯誤或計算失敗。AEDT 的訊息：")
+            self._explain_failure(hfss)
             return False
         exprs = [e for e in data.expressions if e.startswith(("S(", "St("))]
         if not exprs:
@@ -1186,8 +1507,10 @@ class HfssWorker:
 
         self.emit_log(f"🚀 計算場型 @ {', '.join(fmt_ghz(f) for f in freqs)} ({p['hpc_cores']} 核心)...")
         # AEDT 只會計算尚未求解的部分：已收斂的 Adaptive 與 S 參數掃頻會直接沿用
-        if self._analyze(hfss, setup_name) is False:
+        self.begin("SIM_FIELDS:solve")
+        if self._solve(hfss, setup_name, "場型") is False:
             return False
+        self.begin("SIM_FIELDS:plots")
         self.emit_log("✅ 場型數據計算完成！")
         self._create_field_plots(hfss, setup_name, sweep_name, freqs)
         return True
