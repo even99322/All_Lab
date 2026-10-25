@@ -117,6 +117,16 @@ class HfssWorker:
         kw = dict(cores=p['hpc_cores'], tasks=tasks, gpus=gpus, use_auto_settings=(tasks == 1))
         desk = getattr(hfss, "odesktop", None)
         t0 = time.time()
+        mode = p.get('solve_monitor', 'off')
+        if mode not in ('running', 'monitor'):
+            # v3.9.1：預設跟 3.8 一樣阻塞等 AEDT 算完（3.9 的不阻塞＋Simulation Monitor 有 AEDT 當掉的回報）
+            self.progress(None, f"{label}：AEDT 求解中（進階設定「求解中進度」可以打開細的進度）")
+            try:
+                ok = hfss.analyze_setup(setup_name, **kw)
+            except Exception as e:  # noqa: BLE001
+                self._aedt_gone(e)
+                return False
+            return self._solve_result(hfss, setup_name, ok)
         try:
             ok = hfss.analyze_setup(setup_name, blocking=False, **kw)
             blocked = time.time() - t0 > 5.0
@@ -136,7 +146,7 @@ class HfssWorker:
                 started = True
             elif started or blocked or time.time() - t0 > START_GRACE_S:
                 break
-            text = mon.read(desk) if run else None
+            text = mon.read(desk) if run and mode == 'monitor' else None
             info = mon.parse(text or "")
             if text and not saved and info:
                 mon.save_sample(text)
@@ -156,6 +166,12 @@ class HfssWorker:
         except Exception:
             pass
         return self._solve_result(hfss, setup_name, ok)
+
+    def _aedt_gone(self, e):
+        self.emit_log(f"❌ 求解時 AEDT 沒有回應或當掉了：{type(e).__name__}: {e}")
+        self.emit_log("   💡 如果 AEDT 跳出「Please report this problem」：先確認記憶體（YIG 球網格、HPC 核心數），"
+                      "進階設定「求解中進度」維持「關」。AEDT 產生的錯誤 zip 可以寄給 Ansys 或傳給我們看。")
+        raise
 
     def _solve_result(self, hfss, setup_name, ok):
         if ok is False:

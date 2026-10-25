@@ -389,6 +389,15 @@ class MainWindow(QMainWindow):
         gl.addWidget(QLabel("插值最大求解數:"), 0, 2); gl.addWidget(self.edit_interp_max, 0, 3)
         gl.addWidget(self.chk_passivity, 1, 0, 1, 2); gl.addWidget(self.chk_causality, 1, 2, 1, 2)
         gl.addWidget(self.chk_sweep_fields, 2, 0, 1, 4)
+        # v3.9.1：3.9 的「不阻塞求解＋讀 Simulation Monitor」可能讓 AEDT 當掉 → 預設關掉，跟 3.8 一樣等 AEDT 算完
+        self.combo_monitor = _tip(QComboBox(), "求解中要不要問 AEDT 進度。\n"
+                                  "關：跟 3.8 一樣，等 AEDT 算完（最穩，執行步驟清單照樣顯示步驟與時間）。\n"
+                                  "只看還在不在算：不阻塞求解，每幾秒問一次 AreThereSimulationsRunning。\n"
+                                  "讀 Simulation Monitor：另外讀 Adaptive pass、ΔS、百分比（實驗性，3.9 有 AEDT 當掉的回報）。")
+        self.combo_monitor.addItem("關（最穩，等 AEDT 算完）", "off")
+        self.combo_monitor.addItem("只看還在不在算", "running")
+        self.combo_monitor.addItem("讀 Simulation Monitor（實驗性）", "monitor")
+        gl.addWidget(QLabel("求解中進度:"), 3, 0); gl.addWidget(self.combo_monitor, 3, 1, 1, 3)
         g.setLayout(gl)
         lay.addWidget(g)
 
@@ -1007,6 +1016,7 @@ class MainWindow(QMainWindow):
         self.chk_lambda.setChecked(True); self.edit_lambda_target.setText("0.3333"); self.combo_solver.setCurrentIndex(0)
         self.edit_interp_tol.setText("0.5"); self.edit_interp_max.setText("250")
         self.chk_passivity.setChecked(True); self.chk_causality.setChecked(False); self.chk_sweep_fields.setChecked(False)
+        self.combo_monitor.setCurrentIndex(0)
         self.edit_port_modes.setText("1"); self.edit_port_z.setText("50"); self.chk_port_renorm.setChecked(True)
         self.edit_port_deembed.setText("0"); self.combo_port_zdef.setCurrentIndex(0)
         self.combo_boundary.setCurrentIndex(0); self.chk_infinite_gp.setChecked(False)
@@ -1342,7 +1352,7 @@ class MainWindow(QMainWindow):
             'matrix_solver': self.combo_solver,
             'interp_tol': self.edit_interp_tol, 'interp_max_solns': self.edit_interp_max,
             'enforce_passivity': self.chk_passivity, 'enforce_causality': self.chk_causality,
-            'sweep_save_fields': self.chk_sweep_fields,
+            'sweep_save_fields': self.chk_sweep_fields, 'solve_monitor': self.combo_monitor,
             'port_modes': self.edit_port_modes, 'port_impedance': self.edit_port_z,
             'port_renormalize': self.chk_port_renorm, 'port_deembed': self.edit_port_deembed,
             'port_zdef': self.combo_port_zdef,
@@ -1601,6 +1611,7 @@ class MainWindow(QMainWindow):
             'enforce_passivity': self.chk_passivity.isChecked(),
             'enforce_causality': self.chk_causality.isChecked(),
             'sweep_save_fields': self.chk_sweep_fields.isChecked(),
+            'solve_monitor': self.combo_monitor.currentData() or 'off',
             'port_modes': num(self.edit_port_modes, "模態數", int, 1),
             'port_impedance': num(self.edit_port_z, "參考阻抗", float, 0.001),
             'port_renormalize': self.chk_port_renorm.isChecked(),

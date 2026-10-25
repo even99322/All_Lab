@@ -124,7 +124,7 @@ def test_solve_polls_monitor(monkeypatch):
     import hfss_worker
     monkeypatch.setattr(hfss_worker, "POLL_S", 0.0)
     monkeypatch.setattr(hfss_worker, "START_GRACE_S", 0.0)
-    w = _worker()
+    w = _worker({"solve_monitor": "monitor"})
     calls = []
 
     class H:
@@ -148,9 +148,22 @@ def test_solve_polls_monitor(monkeypatch):
                 raise TypeError("unexpected keyword")
             calls.append((name, "blocking"))
             return False
-    w2 = _worker()
+    w2 = _worker({"solve_monitor": "monitor"})
     w2._explain_failure = lambda h: None
     assert w2._solve(Old(), "Setup1") is False and calls[-1] == ("Setup1", "blocking")
+    # v3.9.1：預設（關）= 跟 3.8 一樣阻塞，不問 AEDT 進度
+    w3 = _worker()
+    desk = _Desk([True, False], "Pass Number=2")
+    h = H()
+    h.odesktop = desk
+    calls.clear()
+    assert w3._solve(h, "Setup1") is True
+    assert calls[0][1] is True and desk.asked == 0 and desk.seq == [True, False]
+    # 只看還在不在算：不讀 Simulation Monitor
+    w4 = _worker({"solve_monitor": "running"})
+    desk = _Desk([True, True, False], "Pass Number=2")
+    h.odesktop = desk
+    assert w4._solve(h, "Setup1") is True and desk.asked == 0 and calls[-1][1] is False
 
 
 def test_steps_and_begin():

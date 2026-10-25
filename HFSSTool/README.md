@@ -238,6 +238,11 @@ PyAEDT 呼叫 AEDT 時（特別是 `analyze_setup` 求解期間）會長時間�
 
 ## 版本紀錄
 
+### v3.9.1
+- 修正：3.9 跑模擬時 AEDT 當掉（「Please report this problem」）。3.9 把求解改成不阻塞、每幾秒讀 AEDT 的 Simulation Monitor，
+  這個呼叫在求解中可能讓 AEDT 當掉 → 預設改回跟 3.8 一樣等 AEDT 算完（執行步驟清單照樣顯示步驟、耗時與預估）。
+  進階設定「求解中進度」可以選「只看還在不在算」或「讀 Simulation Monitor（實驗性）」
+
 ### v3.9
 - DXF 編輯器（參考 AutoCAD）：
   - 修正：滾輪縮放會跳回原位 → 現在以游標為中心縮放（放到最大也不會跳）；旁邊面板變寬變窄時畫面也不會跟著跳
