@@ -47,17 +47,18 @@ def test_zoom_keeps_point_under_cursor(ed):
     c = ed.canvas
     pos = QPointF(220, 160)
     under = c.mapToScene(pos.toPoint())
+    tol = 4 * c.px()                                      # 捲軸是整數像素：每次縮放最多差半個像素
     for _ in range(25):
         ev = QWheelEvent(pos, c.viewport().mapToGlobal(pos), QPoint(), QPoint(0, 120), Qt.MouseButton.NoButton,
                          Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False)
         c.wheelEvent(ev)
     after = c.mapToScene(pos.toPoint())
-    assert abs(after.x() - under.x()) < 0.01 and abs(after.y() - under.y()) < 0.01
+    assert abs(after.x() - under.x()) < tol and abs(after.y() - under.y()) < tol
     for _ in range(80):                                   # 放到最大也不會跳回中間
         c.zoom(1.5, pos)
     assert abs(c.transform().m11()) <= 5000.01
     after = c.mapToScene(pos.toPoint())
-    assert abs(after.x() - under.x()) < 0.01 and abs(after.y() - under.y()) < 0.01
+    assert abs(after.x() - under.x()) < tol and abs(after.y() - under.y()) < tol
 
 
 def test_click_node_and_type_coordinates(ed):
