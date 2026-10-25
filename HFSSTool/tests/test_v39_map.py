@@ -216,7 +216,34 @@ class _FakeData:
 
 
 def _map_hfss(fail_param=False):
-    rec = {"bias": [], "opt": [], "vars": {}, "analyze": []}
+    rec = {"bias": [], "opt": [], "vars": {}, "analyze": [], "setups": []}
+
+    class PS:
+        def __init__(self, name, args):
+            self.name, self.args = name, args
+            self.props = {"ProdOptiSetupDataV2": {"SaveFields": False, "CopyMesh": False,
+                                                  "SolveWithCopiedMeshOnly": True}}
+
+        def update(self):
+            rec["opt"].append(dict(self.props["ProdOptiSetupDataV2"]))
+
+        def delete(self):
+            rec["setups"].remove(self.name)
+
+        def analyze(self, **kw):
+            rec["analyze"].append(self.name)
+            return True
+
+    class Par:
+        setups = []
+
+        def add(self, var, h0, h1, n, variation_type="LinearCount", solution=None, name=None):
+            if fail_param:
+                return False
+            ps = PS(name, (var, h0, h1, n, variation_type, solution))
+            self.setups.append(ps)
+            rec["setups"].append(name)
+            return ps
 
     class Mod:
         def __init__(self, name):
@@ -232,6 +259,9 @@ def _map_hfss(fail_param=False):
 
         def DeleteSetups(self, names):
             pass
+
+        def GetSetupNames(self):
+            return list(rec["setups"])
 
     class Design:
         def GetModule(self, name):
@@ -263,6 +293,8 @@ def _map_hfss(fail_param=False):
         def __init__(self):
             self.odesign = Design()
             self.post = Post(self)
+            self.parametrics = Par()
+            self.parametrics.setups = []
 
         def __setitem__(self, k, v):
             rec["vars"][k] = v
@@ -291,6 +323,7 @@ def test_run_bias_map(tmp_path, monkeypatch, method):
               "yig_bias_value": 180, "yig_bias_dir": "+Z (垂直板面)", "map_start": 170, "map_stop": 190,
               "map_points": 5, "map_f0": 4.6, "map_f1": 5.5, "map_fpoints": 91,
               "map_method": "loop" if method == "loop" else "param", "csv_path": str(tmp_path / "S_para.csv"),
+              "hpc_cores": 4, "hpc_tasks": 1, "hpc_gpus": 0,
               "interp_tol": 0.5}
     w = _worker(params)
     hfss, rec = _map_hfss(fail_param=(method == "fallback"))
@@ -314,8 +347,34 @@ def test_run_bias_map(tmp_path, monkeypatch, method):
     assert any(x[0] == "map_result" for x in w.msgs)
     assert rec["bias"][-1] == f"{yig.bias_fields(180, 'external_mT', 0.18, 2.005)['H_int']:.6g}"   # 改回原本的偏置
     if method == "param":
-        assert rec["opt"] and rec["analyze"] == ["ParametricSetup_YIGMap"] and "YIG_Hint" in rec["bias"]
+        assert rec["opt"][-1]["CopyMesh"] is True and rec["analyze"] == ["ParametricSetup_YIGMap"]
+        assert "YIG_Hint" in rec["bias"] and hfss.parametrics.setups[0].args[3] == 5
     else:
         assert rec["analyze"].count("Setup_YIGMap") == 5
         if method == "fallback":
             assert any("改成逐點" in x for x in w.logs)
+
+
+def test_monitor_unavailable_stops_asking(monkeypatch):
+    """AEDT 回「can't get IGenericMonitoringMgr」：只說一次，之後不再問（不然 Message Manager 每 4 秒一條錯誤）。"""
+    import hfss_worker
+    monkeypatch.setattr(hfss_worker, "POLL_S", 0.0)
+    monkeypatch.setattr(hfss_worker, "START_GRACE_S", 0.0)
+
+    class Desk(_Desk):
+        def GetMonitorData(self, req):
+            self.asked += 1
+            raise RuntimeError("Script macro error: can't get IGenericMonitoringMgr")
+
+    class H:
+        odesktop = Desk([True, True, True, True, False], "")
+
+        def analyze_setup(self, name, blocking=True, **kw):
+            return True
+
+        def save_project(self):
+            pass
+    w = _worker({"solve_monitor": "monitor"})
+    h = H()
+    assert w._solve(h, "Setup1") is True
+    assert h.odesktop.asked == 1 and sum("IGenericMonitoringMgr" in x for x in w.logs) == 1

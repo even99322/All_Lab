@@ -238,6 +238,12 @@ PyAEDT 呼叫 AEDT 時（特別是 `analyze_setup` 求解期間）會長時間�
 
 ## 版本紀錄
 
+### v3.9.2
+- 修正：2D 熱圖用「參數掃描」時 AEDT 當掉（Message Manager：There is no solution setup named 'ParametricSetup_YIGMap'）。
+  參數掃描改用 PyAEDT 的 parametrics API 建立，建好先確認真的在專案裡，不在就改成逐點，不再去求解不存在的 setup
+- 2D 熱圖預設改成「逐點」（最穩：每點改偏置、求解、存檔，之後的點從上一點的網格繼續）；參數掃描標為實驗性
+- 「讀 Simulation Monitor」：AEDT 回「can't get IGenericMonitoringMgr」（這個版本 / 模式不提供）時只提示一次，不再每 4 秒問一次
+
 ### v3.9.1
 - 修正：3.9 跑模擬時 AEDT 當掉（「Please report this problem」）。3.9 把求解改成不阻塞、每幾秒讀 AEDT 的 Simulation Monitor，
   這個呼叫在求解中可能讓 AEDT 當掉 → 預設改回跟 3.8 一樣等 AEDT 算完（執行步驟清單照樣顯示步驟、耗時與預估）。

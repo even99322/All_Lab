@@ -146,7 +146,10 @@ class HfssWorker:
                 started = True
             elif started or blocked or time.time() - t0 > START_GRACE_S:
                 break
-            text = mon.read(desk) if run and mode == 'monitor' else None
+            text = mon.read(desk) if run and mode == 'monitor' and getattr(self, "_monitor_ok", True) else None
+            if run and mode == 'monitor' and text is None and getattr(self, "_monitor_ok", True):
+                self._monitor_ok = False            # 例如「can't get IGenericMonitoringMgr」：不再問（不然每 4 秒一條錯誤）
+                self.emit_log("   ℹ️ 這個 AEDT 不提供 Simulation Monitor（can't get IGenericMonitoringMgr）→ 只顯示還在不在算。")
             info = mon.parse(text or "")
             if text and not saved and info:
                 mon.save_sample(text)
@@ -1270,10 +1273,10 @@ class HfssWorker:
             return False
         base = os.path.splitext(p['csv_path'])[0] + "_yigmap"
         mp = yigmap.MapData(vals, mode, fl, np.linspace(f0, f1, nf),
-                            {"project": p.get('project_name', ''), "method": p.get('map_method', 'param'),
+                            {"project": p.get('project_name', ''), "method": p.get('map_method', 'loop'),
                              "g": g, "ms_t": p['yig_ms_t'], "diameter": p.get('yig_diameter'), "gap": p.get('yig_gap'),
                              "direction": p.get('yig_bias_dir')})
-        method = p.get('map_method', 'param')
+        method = p.get('map_method', 'loop')
         ok = False
         if method == 'param':
             ok = self._map_parametric(hfss, mp, base)
@@ -1307,22 +1310,51 @@ class HfssWorker:
         import yigmap
         n = len(mp.bias)
         self.begin("MAP2D:setup")
+        # v3.9.2：用 PyAEDT 的 parametrics API 建（3.9 自己組的 InsertSetup 參數，AEDT 找不到那個 setup 還會當掉），
+        #         建好先確認真的在專案裡，不在就改逐點，不去求解一個不存在的名字。
         try:
             hfss[MAP_VAR] = f"{mp.h_int[0]:.10g}A_per_meter"
             self._set_bias(hfss, MAP_VAR)
-            opt = hfss.odesign.GetModule("Optimetrics")
+            par = getattr(hfss, "parametrics", None)
+            if par is None:
+                raise RuntimeError("這版 PyAEDT 沒有 parametrics")
+            for st in list(getattr(par, "setups", []) or []):
+                if st.name == MAP_PARAM:
+                    try:
+                        st.delete()
+                    except Exception:
+                        pass
+            ps = par.add(MAP_VAR, float(mp.h_int[0]), float(mp.h_int[-1]), n, variation_type="LinearCount",
+                         solution=MAP_SETUP, name=MAP_PARAM)
+            if not ps:
+                raise RuntimeError("parametrics.add 回傳 False")
+            data_opt = ps.props.get("ProdOptiSetupDataV2") or {}
+            data_opt.update({"SaveFields": False, "CopyMesh": True, "SolveWithCopiedMeshOnly": True})
+            ps.props["ProdOptiSetupDataV2"] = data_opt
+            ps.update()
+            names = []
             try:
-                opt.DeleteSetups([MAP_PARAM])
+                names = list(hfss.odesign.GetModule("Optimetrics").GetSetupNames() or [])
             except Exception:
-                pass
-            opt.InsertSetup("OptiParametric",
-                            yigmap.parametric_args(MAP_PARAM, MAP_SETUP, MAP_VAR, mp.h_int[0], mp.h_int[-1], n))
+                names = [x.name for x in getattr(par, "setups", [])]
+            if ps.name not in names:
+                raise RuntimeError(f"專案裡找不到剛建的 {ps.name}（有：{names}）")
         except Exception as e:  # noqa: BLE001
             self.emit_log(f"   ⚠️ 建立參數掃描失敗：{type(e).__name__}: {e}")
             return None
         self.emit_log(f"🚀 參數掃描 {n} 個偏置（第一個跑 Adaptive，其他沿用同一個網格）...")
         self.begin("MAP2D:solve")
-        if self._solve(hfss, MAP_PARAM, f"{n} 個偏置") is False:
+        self.progress(None, f"{n} 個偏置：AEDT 參數掃描中")
+        p = self.params
+        tasks = max(1, int(p.get('hpc_tasks', 1)))
+        try:
+            ok = ps.analyze(cores=p['hpc_cores'], tasks=tasks, gpus=int(p.get('hpc_gpus', 0)),
+                            use_auto_settings=(tasks == 1))
+        except Exception as e:  # noqa: BLE001
+            self._aedt_gone(e)
+        if ok is False:
+            self.emit_log("❌ 參數掃描求解失敗。AEDT 的訊息：")
+            self._explain_failure(hfss)
             return False
         self.progress(None, "讀取結果")
         try:
@@ -1353,6 +1385,8 @@ class HfssWorker:
         return got > 0
 
     def _map_loop(self, hfss, mp, base):
+        if self.params.get('map_method', 'loop') == 'loop':
+            self.begin("MAP2D:setup")
         """逐點：每個偏置改數值、求解、讀結果；每算完一點就存檔（中途停下也有已經算好的部分）。"""
         n = len(mp.bias)
         self.begin("MAP2D:solve")

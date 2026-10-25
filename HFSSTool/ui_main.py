@@ -621,10 +621,10 @@ class MainWindow(QMainWindow):
         self.edit_map_f0 = _tip(QLineEdit(""), "頻率起點 (GHz)；空白 = 自動（涵蓋所有 Kittel ±5%）")
         self.edit_map_f1 = _tip(QLineEdit(""), "頻率終點 (GHz)；空白 = 自動")
         self.edit_map_fn = _tip(QLineEdit("401"), "每個偏置的頻率點數")
-        self.combo_map_method = _tip(QComboBox(), "參數掃描：AEDT Optimetrics 一次跑完，第一個偏置跑 Adaptive，其他沿用同一個網格（快）。\n"
-                                                "逐點：每個偏置改數值、各自求解，每算完一點就存檔、可以邊算邊看（慢但最穩）。")
-        self.combo_map_method.addItem("參數掃描（共用網格，快）", "param")
-        self.combo_map_method.addItem("逐點（每點求解，可以邊算邊看）", "loop")
+        self.combo_map_method = _tip(QComboBox(), "逐點：每個偏置改數值、各自求解（之後的點從上一點的網格繼續），每算完一點就存檔、可以邊算邊看。\n"
+                                                "參數掃描：AEDT Optimetrics 一次跑完、複製網格（實驗性：3.9 在某些 AEDT 會當掉）。")
+        self.combo_map_method.addItem("逐點（每點求解，可以邊算邊看；最穩）", "loop")
+        self.combo_map_method.addItem("參數掃描（共用網格，實驗性）", "param")
         self.combo_map_ftype = QComboBox()
         self.combo_map_ftype.addItems(["Interpolating", "Discrete"])
         self.lbl_map_unit = QLabel("")
