@@ -313,6 +313,7 @@ class Design:
         self.shapes: List[Shape] = []
         self.dims: List[Dim] = []
         self.auto_ground = False
+        self.bridge_gaps = True              # v3.9.4：端對端微波線之間的間隙也挖空
         self.path: str = ""
         self.doc = None                      # 讀進來的 ezdxf 文件（存檔時保留其他圖元）
         self.foreign: List[dict] = []        # 不能編輯、只顯示的圖元（線段）：{"layer", "pts"}
@@ -321,12 +322,14 @@ class Design:
 
     # ---- 快照（復原 / 重做）-------------------------------------------------------------------
     def snapshot(self) -> str:
-        return json.dumps({"mode": self.mode, "auto": self.auto_ground, "shapes": [s.to_dict() for s in self.shapes],
+        return json.dumps({"mode": self.mode, "auto": self.auto_ground, "bridge": self.bridge_gaps,
+                           "shapes": [s.to_dict() for s in self.shapes],
                            "dims": [x.to_dict() for x in self.dims]})
 
     def restore(self, snap: str) -> None:
         d = json.loads(snap)
         self.mode, self.auto_ground = d["mode"], d["auto"]
+        self.bridge_gaps = bool(d.get("bridge", True))
         self.shapes = [Shape.from_dict(s) for s in d["shapes"]]
         self.dims = [Dim.from_dict(x) for x in d.get("dims") or []]
 
@@ -377,10 +380,14 @@ class Design:
             if len(v) >= 3:
                 out["g"].append(v)
         self._ground_holes = 0
+        self._bridges = 0
         if self.mode == "CPW" and self.auto_ground and paths:
             board = self.board_geom()
             if not board.is_empty:
-                cut = unary_union([sg.Polygon(s.ring(s.gap)).buffer(0) for s in paths if len(s.ring(s.gap)) >= 3])
+                cuts = [sg.Polygon(s.ring(s.gap)).buffer(0) for s in paths if len(s.ring(s.gap)) >= 3]
+                bridges = self.gap_bridges(paths) if self.bridge_gaps else []
+                self._bridges = len(bridges)
+                cut = unary_union(cuts + bridges + self.end_gaps(paths))
                 rest = board.difference(cut)
                 polys = [rest] if rest.geom_type == "Polygon" else [g for g in getattr(rest, "geoms", [])
                                                                     if g.geom_type == "Polygon"]
@@ -388,8 +395,59 @@ class Design:
                     if p.is_empty:
                         continue
                     p = p.simplify(G.TOL / 2, preserve_topology=True)
-                    out["ub"].append(G._dedupe([(round(x, 9), round(y, 9), 0.0) for x, y in list(p.exterior.coords)[:-1]]))
                     self._ground_holes += len(p.interiors)
+                    # v3.9.4：DXF 的 LWPOLYLINE 只能存外框；有內孔的地切成沒有內孔的幾塊（HFSS 建模時會合併回一塊），
+                    #         之前內孔直接被丟掉 → 上地蓋過訊號線（短路）
+                    for piece in _split_holes(p):
+                        out["ub"].append(G._dedupe([(round(x, 9), round(y, 9), 0.0)
+                                                    for x, y in list(piece.exterior.coords)[:-1]]))
+        return out
+
+    @staticmethod
+    def _path_ends(paths):
+        """[(路徑索引, 端點, 往外的單位向量, 線寬, 間隙)]。"""
+        ends = []
+        for k, s in enumerate(paths):
+            cl = s.centerline()
+            if len(cl) < 2:
+                continue
+            for a, b in ((cl[1], cl[0]), (cl[-2], cl[-1])):     # (前一點, 端點)
+                dx, dy = b[0] - a[0], b[1] - a[1]
+                n = math.hypot(dx, dy)
+                if n > 1e-12:
+                    ends.append((k, b, (dx / n, dy / n), s.width, s.gap))
+        return ends
+
+    def end_gaps(self, paths):
+        """v3.9.4：微波線的開路端也要離地一個間隙 G（之前端點直接碰到地 = 短路）。在板邊的端點不受影響。"""
+        import shapely.geometry as sg
+        out = []
+        for _k, p, u, w, g in self._path_ends(paths):
+            if g > 0:
+                out.append(sg.LineString([p, (p[0] + u[0] * g, p[1] + u[1] * g)]).buffer(w / 2 + g, cap_style=2))
+        return out
+
+    def gap_bridges(self, paths=None):
+        """v3.9.4：端對端的微波線之間（例如共振腔的耦合間隙）也挖空，槽線才會連續、地才會被切開。
+        兩個端點距離 ≤ 3 ×（W + 2G），而且兩端互相朝向對方 → 中間補一段寬 W + 2G 的槽。"""
+        import shapely.geometry as sg
+        paths = paths if paths is not None else [s for s in self.shapes if s.kind == "path" and len(s.pts) >= 2]
+        ends = self._path_ends(paths)
+        out = []
+        for i in range(len(ends)):
+            for j in range(i + 1, len(ends)):
+                ki, pi, ui, wi, gi = ends[i]
+                kj, pj, uj, wj, gj = ends[j]
+                if ki == kj:
+                    continue
+                vx, vy = pj[0] - pi[0], pj[1] - pi[1]
+                d = math.hypot(vx, vy)
+                half = max(wi, wj) / 2 + max(gi, gj)
+                if d < 1e-9 or d > 6 * half:
+                    continue
+                if (ui[0] * vx + ui[1] * vy) < 0.9 * d or (uj[0] * -vx + uj[1] * -vy) < 0.9 * d:
+                    continue                                   # 沒有面對面
+                out.append(sg.LineString([pi, pj]).buffer(half, cap_style=2))
         return out
 
     def ports(self) -> List[Tuple[Point, str]]:
@@ -422,7 +480,8 @@ class Design:
         if self.mode == "CPW" and self.auto_ground:
             self.generated()
             if self._ground_holes:
-                warn.append("自動產生的上地有內孔（微波線兩端要碰到板邊，地才會被切開）")
+                warn.append("自動產生的上地有被地包住的槽（例如微波線沒碰到板邊、或間隙很大的兩段微波線之間有地）："
+                            "存檔時切成幾塊，HFSS 會合併回去；要確定這是你要的形狀")
         for s in self.shapes:
             if s.kind == "poly" and len(s.pts) < 3:
                 warn.append(f"圖層 {s.layer} 有少於 3 個點的多邊形")
@@ -555,6 +614,7 @@ class Design:
         if mode is None:
             d.mode = meta.get("mode") or ("CPW" if "db" in layers or "ub" in layers else "MS")
         d.auto_ground = bool(meta.get("auto_ground", False))
+        d.bridge_gaps = bool(meta.get("bridge_gaps", True))
         for e in doc.modelspace():
             t, layer = e.dxftype(), e.dxf.layer
             x = _xdata(e)
@@ -666,7 +726,7 @@ class Design:
                 _set_xdata(e, {"gen": 1})
         if self.dims:
             self._save_dims(doc, msp)
-        meta = json.dumps({"mode": self.mode, "auto_ground": self.auto_ground})
+        meta = json.dumps({"mode": self.mode, "auto_ground": self.auto_ground, "bridge_gaps": self.bridge_gaps})
         cv = doc.header.custom_vars
         if cv.has_tag("QEL_HFSS"):
             cv.replace("QEL_HFSS", meta)
@@ -708,6 +768,26 @@ class Design:
 
 
 # ---- 小工具 -----------------------------------------------------------------------------------
+def _split_holes(poly, depth: int = 0) -> list:
+    """有內孔的多邊形 → 沒有內孔的幾塊（沿著內孔中心切一刀，遞迴）。"""
+    from shapely.geometry import LineString
+    from shapely.ops import split
+    if poly.is_empty or not poly.interiors or depth > 40:
+        return [poly] if not poly.is_empty else []
+    hole = poly.interiors[0]
+    cx = hole.centroid.x
+    x0, y0, x1, y1 = poly.bounds
+    try:
+        parts = split(poly, LineString([(cx, y0 - 1), (cx, y1 + 1)]))
+    except Exception:  # noqa: BLE001
+        return [poly]
+    out = []
+    for g in getattr(parts, "geoms", [parts]):
+        if g.geom_type == "Polygon" and g.area > 1e-12:
+            out += _split_holes(g, depth + 1)
+    return out or [poly]
+
+
 def _same(a, b, tol: float = 1e-9) -> bool:
     return abs(a[0] - b[0]) <= tol and abs(a[1] - b[1]) <= tol
 

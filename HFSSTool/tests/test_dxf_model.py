@@ -81,10 +81,10 @@ def test_cpw_auto_ground(tmp_path):
     r = Design.load(f)
     assert r.mode == "CPW" and r.auto_ground
     assert not [s for s in r.shapes if s.layer == "ub"]                           # 產生的上地不會讀成手畫的
-    # 微波線沒碰到右邊：地會有內孔 → 警告
+    # 微波線沒碰到板邊：槽被地包住 → 警告（v3.9.4 起存檔時切成幾塊）
     path = next(s for s in r.shapes if s.kind == "path")
     path.pts = [(5, 10), (20, 10)]
-    assert any("內孔" in w for w in r.check())
+    assert any("被地包住" in w for w in r.check())
 
 
 def test_keeps_foreign_entities_and_deleted_shapes_go(tmp_path):

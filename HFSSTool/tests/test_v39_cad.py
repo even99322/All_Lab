@@ -205,3 +205,28 @@ def test_tline_formulas():
     assert g and tline.gcpw_z0(0.5, g, 0.5, 9.8) == pytest.approx(50, abs=0.01)
     assert tline.material_er("Rogers RO4003 (tm)") == 3.55 and tline.material_er("unknown") is None
     assert tline.ellip_k(0) == pytest.approx(math.pi / 2)
+
+
+def test_cpw_coupling_gaps_and_open_ends():
+    """v3.9.4：共振腔（三段微波線、中間兩個耦合間隙）：槽要連續、地切成上下兩塊；開路端離地一個間隙；
+    有內孔的地切成幾塊存檔（之前內孔被丟掉 → 上地蓋住訊號線）。"""
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+    import dxf_geom as G
+    from dxf_model import Design, Shape
+
+    def ground(d):
+        return unary_union([Polygon(G.ring_points(v)) for v in d.generated()["ub"]])
+    d = Design.template("CPW", w=60, h=14, trace=False)
+    for a, b in (((0, 7), (19.5, 7)), ((20, 7), (40, 7)), ((40.5, 7), (60, 7))):
+        d.shapes.append(Shape("path", "g", [a, b], width=1.0, gap=0.2))
+    assert d.check() == [] and len(d.generated()["ub"]) == 2 and d._bridges == 2
+    assert ground(d).area == pytest.approx(60 * 14 - 60 * 1.4)
+    d.bridge_gaps = False                                 # 不挖空：地伸進間隙，但不會蓋住訊號線
+    g = ground(d)
+    assert any("被地包住" in w for w in d.check())
+    for s in d.shapes[1:]:
+        assert g.intersection(Polygon(s.ring())).area < 1e-9
+    o = Design.template("CPW", w=60, h=14, trace=False)
+    o.shapes.append(Shape("path", "g", [(0, 7), (30, 7)], width=1.0, gap=0.2))
+    assert ground(o).distance(Polygon(o.shapes[-1].ring())) == pytest.approx(0.2)

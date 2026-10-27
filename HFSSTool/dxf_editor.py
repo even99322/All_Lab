@@ -1299,6 +1299,12 @@ class DxfEditor(QMainWindow):
         self.chk_auto = QCheckBox("自動產生上地（板材 − 微波線＋間隙）")
         self.chk_auto.toggled.connect(self._toggle_auto)
         f.addRow(self.chk_auto)
+        self.chk_bridge = QCheckBox("端對端的微波線之間也挖空（耦合間隙）")
+        self.chk_bridge.setToolTip("例如共振腔：兩段微波線頭對頭、中間留耦合間隙時，間隙兩側的槽連起來，地不會伸進間隙裡。\n"
+                                   "兩端距離 ≤ 3 ×（線寬 + 2 × 間隙）而且面對面才算。")
+        self.chk_bridge.setChecked(True)
+        self.chk_bridge.toggled.connect(self._toggle_bridge)
+        f.addRow(self.chk_bridge)
         v.addWidget(g)
 
         # v3.9：點節點就能打座標
@@ -1839,6 +1845,7 @@ class DxfEditor(QMainWindow):
         self._sync = True
         self.combo_mode.setCurrentText(self.design.mode)
         self.chk_auto.setChecked(self.design.auto_ground)
+        self.chk_bridge.setChecked(self.design.bridge_gaps)
         self._sync = False
         self._refresh_layers()
         self._refresh_board()
@@ -1879,6 +1886,7 @@ class DxfEditor(QMainWindow):
         i = self.combo_layer.findData(cur)
         self.combo_layer.setCurrentIndex(i if i >= 0 else 0)
         self.chk_auto.setEnabled(mode == "CPW")
+        self.chk_bridge.setEnabled(mode == "CPW")
 
     def _refresh_board(self) -> None:
         bb = self.design.board_bounds()
@@ -2003,6 +2011,7 @@ class DxfEditor(QMainWindow):
         self._sync = True
         self.combo_mode.setCurrentText(self.design.mode)
         self.chk_auto.setChecked(self.design.auto_ground)
+        self.chk_bridge.setChecked(self.design.bridge_gaps)
         self._sync = False
         self._refresh_layers()
         self._commit()
@@ -2241,6 +2250,13 @@ class DxfEditor(QMainWindow):
         self.chk_auto.setChecked(self.design.auto_ground)
         self._sync = False
         self._refresh_layers()
+        self._commit()
+
+    def _toggle_bridge(self, on: bool) -> None:
+        if self._sync or on == self.design.bridge_gaps:
+            return
+        self.checkpoint()
+        self.design.bridge_gaps = on
         self._commit()
 
     def _toggle_auto(self, on: bool) -> None:
