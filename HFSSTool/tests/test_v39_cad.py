@@ -230,3 +230,20 @@ def test_cpw_coupling_gaps_and_open_ends():
     o = Design.template("CPW", w=60, h=14, trace=False)
     o.shapes.append(Shape("path", "g", [(0, 7), (30, 7)], width=1.0, gap=0.2))
     assert ground(o).distance(Polygon(o.shapes[-1].ring())) == pytest.approx(0.2)
+
+
+def test_help_dialog(ed):
+    ed.show_help()
+    h = ed._help
+    try:
+        assert h.tabs.count() == 3 and "MS" in h.tabs.tabText(1)
+        r = h.calc.recalc()
+        assert r["w50"] == pytest.approx(1.833, abs=0.01) and 1 < r["ms_e"] < 3.55 and 1 < r["cp_e"] < 3.55
+        assert r["lg_cp"] == pytest.approx(299.792458 / 5 / math.sqrt(r["cp_e"]))
+        h.calc.sp_f.setValue(10)
+        assert "λg/20" in h.calc.out.text()
+        h.tabs.setCurrentIndex(1)
+        QTest.qWait(30)
+        assert h.grab().width() > 0
+    finally:
+        h.close()

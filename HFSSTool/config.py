@@ -20,7 +20,7 @@ LEGACY_SETTINGS_FILE = os.path.join(SCRIPT_DIR, "hfss_settings.json")   # v3.0 �
 
 DEFAULT_LOCAL_ROOT = r"C:\Temp\HFSS_Local"
 
-APP_VERSION = "v3.9.4"
+APP_VERSION = "v3.9.5"
 
 # AEDT 版本：之後升級 (例如 2026.2 / 2027.1) 只要在 UI 下拉選單改，或改這裡的預設值即可
 DEFAULT_AEDT_VERSION = "2026.1"

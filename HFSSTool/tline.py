@@ -52,9 +52,23 @@ def _kk(k: float) -> float:
 
 
 # ---- 微帶線 ----
+def ms_eeff(w: float, h: float, er: float) -> float:
+    """微帶線的有效介電常數（準靜態）。"""
+    u = w / h
+    return (er + 1) / 2 + (er - 1) / 2 / math.sqrt(1 + 12 / u)
+
+
+C0_MM_GHZ = 299.792458        # 光速：mm·GHz
+
+
+def guided_mm(f_ghz: float, eeff: float) -> float:
+    """導波波長 λg = c / (f √εeff)，mm。"""
+    return C0_MM_GHZ / (f_ghz * math.sqrt(eeff))
+
+
 def ms_z0(w: float, h: float, er: float) -> float:
     u = w / h
-    eeff = (er + 1) / 2 + (er - 1) / 2 / math.sqrt(1 + 12 / u)
+    eeff = ms_eeff(w, h, er)
     if u <= 1:
         return 60 / math.sqrt(eeff) * math.log(8 / u + u / 4)
     return 120 * math.pi / math.sqrt(eeff) / (u + 1.393 + 0.667 * math.log(u + 1.444))

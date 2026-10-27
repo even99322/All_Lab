@@ -157,6 +157,10 @@ def run() -> int:
         n = ed.convert_design("CPW", 1.0, tline.gcpw_gap(50, 1.0, 0.813, 3.55), vias=(1.0, 0.3, 0.2))
         dlg = ConvertDialog(ed)
         dlg.deleteLater()
+        from cad_help import CadHelpDialog
+        hd = CadHelpDialog(None, {"h": 0.813}, 1.0, 0.14)
+        hd.calc.recalc()
+        hd.deleteLater()
         ed.dirty = False
         ed.deleteLater()
         return f"指令列畫線、MS→CPW（過孔 {n} 個）、MS 50 Ω 線寬 {tline.ms_width(50, 0.813, 3.55):.3f} mm"

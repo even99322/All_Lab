@@ -1275,6 +1275,11 @@ class DxfEditor(QMainWindow):
         conv.setToolTip("依板材 εr、厚度與目標阻抗（50 Ω）自動算線寬 / 間隙，切換建模方式；CPW 可以自動加過孔")
         conv.triggered.connect(self.convert_dialog)
         tb3.addAction(conv)
+        hlp = QAction("❓ 說明", self)
+        hlp.setToolTip("功能介紹、MS 與 CPW 的區別與原理、繪製時要注意的細節（Shift+F1）")
+        hlp.setShortcut(QKeySequence("Shift+F1"))
+        hlp.triggered.connect(self.show_help)
+        tb3.addAction(hlp)
         tb3.addSeparator()
         tb3.addWidget(QLabel("  Alt：不吸附　Shift：0/45/90°　方向鍵：微調　右鍵：結束 / 選單"))
 
@@ -2265,6 +2270,18 @@ class DxfEditor(QMainWindow):
         self.checkpoint()
         self.design.auto_ground = on
         self._commit()
+
+    def show_help(self) -> None:
+        from cad_help import CadHelpDialog
+        s = self._selected()
+        paths = [x for x in self.design.shapes if x.kind == "path"]
+        ref = s if s is not None and s.kind == "path" else (paths[0] if paths else None)
+        w = ref.width if ref else self.new_width.value()
+        g = ref.gap if ref else self.new_gap.value()
+        if getattr(self, "_help", None) is None or not self._help.isVisible():
+            self._help = CadHelpDialog(self, self.substrate() or {}, w, max(g, 0.01))
+        self._help.show()
+        self._help.raise_()
 
     def convert_dialog(self) -> None:
         dlg = ConvertDialog(self)
