@@ -62,6 +62,11 @@ def test_map_viewer(tmp_path):
     w = MapViewer(path)
     try:
         assert w.combo_s.currentText() == "S21" and "6/9" in w.windowTitle()
+        width = w.ax_map.get_position().width
+        for _ in range(30):                              # v3.9.3：逐點模擬每點重畫一次，熱圖不能越畫越窄
+            w.redraw()
+            w.canvas.draw()
+        assert w.ax_map.get_position().width == pytest.approx(width) and len(w.fig.axes) == 4
         for k in range(w.combo_view.count()):
             w.combo_view.setCurrentIndex(k)
         w.combo_bg.setCurrentIndex(1)

@@ -83,11 +83,14 @@ class MapViewer(QWidget):
         v.addWidget(self.canvas, 1)
         self.lbl = QLabel("")
         v.addWidget(self.lbl)
-        gs = self.fig.add_gridspec(2, 2, width_ratios=[1.6, 1], height_ratios=[1.6, 1], hspace=0.32, wspace=0.25)
+        # v3.9.3：色階條有自己固定的一格。之前每次重畫都 colorbar(ax=…) 從熱圖再切一塊，
+        #         逐點模擬每算完一點就重畫一次 → 熱圖越來越窄（51 點後幾乎看不到）
+        gs = self.fig.add_gridspec(2, 4, width_ratios=[1.6, 0.045, 0.22, 1], height_ratios=[1.6, 1], hspace=0.32,
+                                   wspace=0.06, left=0.07, right=0.97, top=0.95, bottom=0.08)
         self.ax_map = self.fig.add_subplot(gs[0, 0])
-        self.ax_tr = self.fig.add_subplot(gs[0, 1])
+        self.ax_cb = self.fig.add_subplot(gs[0, 1])
+        self.ax_tr = self.fig.add_subplot(gs[0, 3])            # 第 3 格空著：色階條的字不會壓到右圖
         self.ax_cut = self.fig.add_subplot(gs[1, :])
-        self.cbar = None
         self.canvas.mpl_connect("button_press_event", self._click)
         self.timer = QTimer(self)
         self.timer.setInterval(3000)
@@ -155,14 +158,8 @@ class MapViewer(QWidget):
     def redraw(self) -> None:
         d = self.data
         z = self.values()
-        for ax in (self.ax_map, self.ax_tr, self.ax_cut):
+        for ax in (self.ax_map, self.ax_cb, self.ax_tr, self.ax_cut):
             ax.clear()
-        if self.cbar is not None:
-            try:
-                self.cbar.remove()
-            except Exception:  # noqa: BLE001
-                pass
-            self.cbar = None
         if d is None or z is None:
             self.canvas.draw_idle()
             return
@@ -172,10 +169,14 @@ class MapViewer(QWidget):
         vmin, vmax = (np.percentile(finite, 1), np.percentile(finite, 99)) if finite.size else (0, 1)
         im = self.ax_map.pcolormesh(x, d.freq_ghz, z.T, shading="nearest", cmap=self.combo_cmap.currentText(),
                                     vmin=vmin, vmax=vmax)
-        self.cbar = self.fig.colorbar(im, ax=self.ax_map, label=unit)
+        self.fig.colorbar(im, cax=self.ax_cb)                  # 單位在標題，不另外標（會跟右圖的字疊在一起）
         if self.chk_kittel.isChecked():
             self.ax_map.plot(x, d.f_kittel, "w--", lw=1)
         self.ax_map.set_ylim(d.freq_ghz.min(), d.freq_ghz.max())
+        if len(x) > 1:
+            dx = (np.nanmax(x) - np.nanmin(x)) / (len(x) - 1) / 2
+            self.ax_map.set_xlim(np.nanmin(x) - dx, np.nanmax(x) + dx)
+        self.ax_tr.yaxis.set_label_position("left")
         self.ax_map.set_xlabel(xlabel)
         self.ax_map.set_ylabel("Frequency (GHz)")
         self.ax_map.set_title(f"{self.combo_s.currentText()}   {unit}", fontsize=10)

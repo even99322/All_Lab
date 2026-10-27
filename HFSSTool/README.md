@@ -238,6 +238,10 @@ PyAEDT 呼叫 AEDT 時（特別是 `analyze_setup` 求解期間）會長時間�
 
 ## 版本紀錄
 
+### v3.9.3
+- 修正：「看熱圖」的 2D 熱圖越來越窄（逐點模擬每算完一點重畫一次，每次都從熱圖再切一塊給色階條；51 點後幾乎看不到）。
+  色階條改成固定的一格；熱圖的範圍固定為全部偏置
+
 ### v3.9.2
 - 修正：2D 熱圖用「參數掃描」時 AEDT 當掉（Message Manager：There is no solution setup named 'ParametricSetup_YIGMap'）。
   參數掃描改用 PyAEDT 的 parametrics API 建立，建好先確認真的在專案裡，不在就改成逐點，不再去求解不存在的 setup
