@@ -72,7 +72,7 @@ def cmd_resources(args) -> int:
 
     def show(r):
         sug = f"  → 建議驅動：{', '.join(r.suggested)}" if r.suggested else ""
-        print(f"{r.address:45s} {r.idn or ('（' + r.error + '）' if r.error else '')}{sug}", flush=True)
+        print(f"{r.address:45s} {r.describe()}{sug}", flush=True)
     try:
         res = scan_resources(identify=not args.no_idn, include_serial=args.serial, progress=show)
     except Exception as e:  # noqa: BLE001

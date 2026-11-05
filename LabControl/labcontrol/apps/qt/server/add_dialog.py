@@ -31,6 +31,22 @@ def selectable_drivers() -> List[str]:
     return [n for n in DRIVERS.names() if not n.startswith("sim.") and n != "rs.vna"]
 
 
+def _scan_summary(res) -> str:
+    """掃描結果一行摘要；同型號多台時提醒依序號挑選。"""
+    if not res:
+        return ("沒有找到 VISA 資源：請確認儀器已開機、USB 線已接；USB 儀器要設成 USB-TMC 模式，"
+                "並安裝 NI-VISA。")
+    text = f"找到 {len(res)} 個 VISA 資源"
+    by_drv: Dict[str, int] = {}
+    for r in res:
+        if r.serial and r.suggested:
+            by_drv[r.suggested[0]] = by_drv.get(r.suggested[0], 0) + 1
+    many = [d for d, n in by_drv.items() if n > 1]
+    if many:
+        text += f"<br>⚠ 偵測到多台 {', '.join(many)}：請依序號選擇，避免連錯儀器。"
+    return text
+
+
 class AddInstrumentDialog(QtWidgets.QDialog):
     def __init__(self, station: Station, parent=None, preset: Optional[Dict[str, Any]] = None) -> None:
         super().__init__(parent)
@@ -183,13 +199,13 @@ class AddInstrumentDialog(QtWidgets.QDialog):
 
         def done(res):
             self.b_scan.setEnabled(True)
-            used = {str(i.options.get("address", "")) for i in self.station.instruments.values()}
+            used = {str(i.options.get("address", "")).upper() for i in self.station.instruments.values()}
             self.address.clear()
             for r in res:
-                tag = "（已在清單）" if r.address in used else ""
-                text = f"{r.address}　{r.idn or r.error}{tag}"
-                self.address.addItem(text, {"address": r.address, "suggested": r.suggested})
-            self.msg.setText(f"找到 {len(res)} 個 VISA 資源" if res else "沒有找到 VISA 資源")
+                tag = "（已在清單）" if r.address.upper() in used else ""
+                text = f"{r.address}　{r.describe()}{tag}"
+                self.address.addItem(text, {"address": r.address, "suggested": r.suggested, "serial": r.serial})
+            self.msg.setText(_scan_summary(res))
 
         def fail(m):
             self.b_scan.setEnabled(True)
@@ -204,7 +220,8 @@ class AddInstrumentDialog(QtWidgets.QDialog):
         self.address.setEditText(data["address"])
         if data["suggested"]:
             self.select_driver(data["suggested"][0])
-            self.msg.setText(f"依 *IDN? 建議驅動：{', '.join(data['suggested'])}")
+            self.msg.setText(f"建議驅動：{', '.join(data['suggested'])}"
+                             + (f"　（USB 序號 {data['serial']}）" if data.get("serial") else ""))
 
     def _addr(self) -> str:
         t = self.address.currentText().strip()
@@ -214,24 +231,24 @@ class AddInstrumentDialog(QtWidgets.QDialog):
         addr = self._addr()
         if not addr:
             return
-        from ....core.transport import VisaTransport
+        from ....diagnostics import probe_resource
 
         self.msg.setText(f"連線測試 {addr} …")
         pat = driver_info(self.driver())["idn"]
+        tmo = self.timeout.value()
 
-        def fn():
-            t = VisaTransport(addr, timeout_ms=self.timeout.value(),
-                              backend=str(setting("server.visa_backend", "") or ""))
-            try:
-                return t.query("*IDN?")
-            finally:
-                t.close()
-
-        def done(idn):
-            ok = not pat or re.search(pat, idn, re.I)
-            self.msg.setText(f"✔ *IDN? = {idn}" + ("" if ok else
-                             f"<br><span style='color:{theme.c('warn')}'>⚠ 與 {self.driver()} 預期的型號不同</span>"))
-        run_bg(fn, done, lambda m: self.msg.setText(f"<span style='color:{theme.c('err')}'>❌ {m}</span>"))
+        def done(r):
+            ok = not pat or re.search(pat, r.idn, re.I)
+            lines = [f"✔ *IDN? = {r.idn}"]
+            if r.maker or r.model:
+                lines.append(f"廠牌 {r.maker}　型號 {r.model}　序號 {r.idn_serial or '—'}")
+            if r.warning:
+                lines.append(f"<span style='color:{theme.c('warn')}'>⚠ {r.warning}，請確認位址是否對到正確的儀器</span>")
+            if not ok:
+                lines.append(f"<span style='color:{theme.c('warn')}'>⚠ 與 {self.driver()} 預期的型號不同</span>")
+            self.msg.setText("<br>".join(lines))
+        run_bg(lambda: probe_resource(addr, timeout_ms=tmo), done,
+               lambda m: self.msg.setText(f"<span style='color:{theme.c('err')}'>❌ {m}</span>"))
 
     # ---- 結果 ------------------------------------------------------------
     def options(self) -> Dict[str, Any]:

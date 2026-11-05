@@ -56,11 +56,11 @@ class ScanDialog(QtWidgets.QDialog):
         def done(res):
             for r in res:
                 state = f"已在清單（{used[r.address]}）" if r.address in used else ("無回應" if r.error else "")
-                it = QtWidgets.QTreeWidgetItem([r.address, r.idn or r.error, ", ".join(r.suggested), state])
+                it = QtWidgets.QTreeWidgetItem([r.address, r.describe(), ", ".join(r.suggested), state])
                 it.setData(0, Qt.ItemDataRole.UserRole, {"address": r.address,
                                                          "driver": r.suggested[0] if r.suggested else "",
-                                                         "label": r.idn.split(",")[1].strip() if r.idn.count(",") >= 2
-                                                         else ""})
+                                                         "label": (f"{r.model} {r.idn_serial or r.serial}".strip()
+                                                                   if r.model else "")})
                 if r.address in used:
                     for c in range(4):
                         it.setForeground(c, QtGui.QBrush(theme.qc("muted")))

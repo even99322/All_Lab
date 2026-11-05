@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from .errors import ConfigError, InstrumentBusy
 from .transport import Transport, VisaTransport
@@ -196,6 +196,8 @@ class Instrument(Node):
     TRACES: List[str] = []
     #: *IDN? 應該符合的樣式（正規表示式）；驅動測試與 VISA 掃描用來確認 / 建議驅動
     IDN_PATTERN: Optional[str] = None
+    #: USB-TMC 的 (VID, PID)；VISA 掃描用來在 *IDN? 失敗時也能建議驅動
+    USB_IDS: List[Tuple[int, int]] = []
     #: 讀錯誤佇列的指令；None = 儀器不支援
     ERROR_QUERY: Optional[str] = ":SYST:ERR?"
     #: simulate 模式下改用哪個 driver（例如 "sim.current_source"）

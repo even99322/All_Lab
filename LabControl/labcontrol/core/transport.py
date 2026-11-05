@@ -68,18 +68,91 @@ class Transport(ABC):
 # VISA
 # ---------------------------------------------------------------------------
 _rm_lock = threading.Lock()
-_shared_rm = None
+_shared_rms: Dict[str, object] = {}
+#: 實際使用的 VISA 函式庫（key = 設定值）→ 說明文字（掃描 / 錯誤訊息顯示用）
+rm_info: Dict[str, str] = {}
+
+#: Windows 上 NI-VISA 的固定位置。系統預設的 visa32.dll 有時被 R&S VISA / 其他廠商的 VISA 接手，
+#: 結果 USB-TMC 儀器（例如 Yokogawa GS210）列不到或打不開；明確指定 NI-VISA 才穩定。
+NI_VISA_DLLS = (r"C:\Windows\System32\nivisa64.dll",)
+#: 開啟資源時等待鎖定的時間（pyvisa 預設 0 ms，USB 儀器剛插上或被其他程式短暫占用時會直接失敗）
+OPEN_TIMEOUT_MS = 3000
+
+
+def visa_candidates(backend: str = "") -> List[str]:
+    """依序嘗試的 VISA 函式庫。backend 有設就只用它；空白 / "auto" = NI-VISA → 系統預設 → pyvisa-py。"""
+    import os
+    import sys
+
+    b = (backend or "").strip()
+    if b and b.lower() != "auto":
+        return [b]
+    out: List[str] = []
+    if sys.platform.startswith("win"):
+        out += [p for p in NI_VISA_DLLS if os.path.exists(p)]
+    out += ["", "@py"]
+    return out
 
 
 def shared_resource_manager(backend: str = ""):
-    """全程式共用一個 pyvisa ResourceManager。"""
-    global _shared_rm
-    with _rm_lock:
-        if _shared_rm is None:
-            import pyvisa  # 延遲載入：模擬模式不需要安裝 pyvisa
+    """全程式共用 pyvisa ResourceManager（每種 backend 一個）。
 
-            _shared_rm = pyvisa.ResourceManager(backend) if backend else pyvisa.ResourceManager()
-        return _shared_rm
+    backend：settings 的 server.visa_backend。空白 / "auto" 時優先用 NI-VISA（nivisa64.dll），
+    失敗再用系統預設 VISA，最後 pyvisa-py（"@py"）。
+    """
+    key = (backend or "").strip()
+    with _rm_lock:
+        rm = _shared_rms.get(key)
+        if rm is not None:
+            return rm
+        import pyvisa  # 延遲載入：模擬模式不需要安裝 pyvisa
+
+        errors = []
+        for cand in visa_candidates(key):
+            try:
+                rm = pyvisa.ResourceManager(cand) if cand else pyvisa.ResourceManager()
+            except Exception as e:  # noqa: BLE001
+                errors.append(f"{cand or '系統預設 VISA'}：{e}")
+                continue
+            _shared_rms[key] = rm
+            rm_info[key] = cand or "系統預設 VISA"
+            log.info("VISA 函式庫：%s", rm_info[key])
+            return rm
+        raise RuntimeError("無法載入 VISA 函式庫（請安裝 NI-VISA）：" + "；".join(errors))
+
+
+def reset_resource_managers() -> None:
+    """關閉並丟掉共用的 ResourceManager（改 visa_backend 設定或測試用）。"""
+    with _rm_lock:
+        for rm in _shared_rms.values():
+            try:
+                rm.close()
+            except Exception:  # noqa: BLE001
+                pass
+        _shared_rms.clear()
+        rm_info.clear()
+
+
+def open_visa_resource(rm, address: str, timeout_ms: int = 5000, write_termination: Optional[str] = "\n",
+                       read_termination: Optional[str] = "\n", open_timeout_ms: int = OPEN_TIMEOUT_MS):
+    """開啟 VISA 資源並設定逾時 / 結束字元（掃描、連線測試與 VisaTransport 共用同一套做法）。"""
+    try:
+        res = rm.open_resource(address, open_timeout=open_timeout_ms)
+    except TypeError:  # 舊版 / 假的 ResourceManager 不收 open_timeout
+        res = rm.open_resource(address)
+    try:
+        res.timeout = timeout_ms
+        if write_termination is not None:
+            res.write_termination = write_termination
+        if read_termination is not None:
+            res.read_termination = read_termination
+    except Exception:
+        try:
+            res.close()
+        except Exception:  # noqa: BLE001
+            pass
+        raise
+    return res
 
 
 class VisaTransport(Transport):
@@ -90,16 +163,13 @@ class VisaTransport(Transport):
         write_termination: Optional[str] = "\n",
         read_termination: Optional[str] = "\n",
         backend: str = "",
+        open_timeout_ms: int = OPEN_TIMEOUT_MS,
     ) -> None:
         super().__init__()
         self.address = address
         rm = shared_resource_manager(backend)
-        self._res = rm.open_resource(address)
-        self._res.timeout = timeout_ms
-        if write_termination is not None:
-            self._res.write_termination = write_termination
-        if read_termination is not None:
-            self._res.read_termination = read_termination
+        self._res = open_visa_resource(rm, address, timeout_ms, write_termination, read_termination,
+                                       open_timeout_ms)
 
     @property
     def resource(self):

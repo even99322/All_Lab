@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.26 — 2026-11-05
+
+儀器伺服器「新增儀器」：VISA 掃描與連線測試改用實機驗證過的做法（優先 NI-VISA、`list_resources("?*")`、open_timeout、`\n` 結束字元），USB 儀器依 VID / PID 認型號並核對序號。詳見 [docs/releases/v1.0.26.md](docs/releases/v1.0.26.md)。
+
+---
+
 ## 1.0.25 — 2026-10-24
 
 手機推播通知：網頁「🔔 通知」每台裝置自己開關，量測結束、模擬結束（HFSS 自動化工具 3.8+）推到手機；可以只收某幾台電腦。詳見 [docs/releases/v1.0.25.md](docs/releases/v1.0.25.md)。

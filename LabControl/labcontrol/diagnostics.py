@@ -386,6 +386,57 @@ class Resource:
     idn: str = ""
     error: str = ""
     suggested: List[str] = field(default_factory=list)
+    #: USB 資源的 VID / PID / 序號（從位址解析；非 USB 為 None / ""）
+    vid: Optional[int] = None
+    pid: Optional[int] = None
+    serial: str = ""
+    #: 例如「USB 序號與 *IDN? 序號不一致」
+    warning: str = ""
+
+    @property
+    def idn_fields(self) -> List[str]:
+        return [x.strip() for x in self.idn.split(",")] if self.idn else []
+
+    @property
+    def maker(self) -> str:
+        f = self.idn_fields
+        return f[0] if f else ""
+
+    @property
+    def model(self) -> str:
+        f = self.idn_fields
+        return f[1] if len(f) > 1 else ""
+
+    @property
+    def idn_serial(self) -> str:
+        f = self.idn_fields
+        return f[2] if len(f) > 2 else ""
+
+    def describe(self) -> str:
+        """一行說明：型號 + 序號；*IDN? 失敗時改用 USB ID 推得的型號。"""
+        if self.idn:
+            text = self.idn
+        elif self.vid is not None:
+            names = ", ".join(self.suggested) or "未知型號"
+            text = f"USB {self.vid:#06x}:{self.pid:#06x}（{names}）序號 {self.serial}" + \
+                (f"　*IDN? 失敗：{self.error}" if self.error else "")
+        else:
+            text = self.error
+        return text + (f"　⚠ {self.warning}" if self.warning else "")
+
+
+_USB_RE = re.compile(r"USB\d*$", re.I)
+
+
+def parse_usb_address(address: str) -> Optional[Tuple[int, int, str]]:
+    """USB0::VID::PID::Serial[::Interface]::INSTR → (vid, pid, serial)；不是 USB INSTR 回傳 None。"""
+    parts = str(address).split("::")
+    if len(parts) not in (5, 6) or not _USB_RE.fullmatch(parts[0]) or parts[-1].upper() != "INSTR":
+        return None
+    try:
+        return int(parts[1], 0), int(parts[2], 0), parts[3]
+    except ValueError:
+        return None
 
 
 def suggest_drivers(idn: str) -> List[str]:
@@ -398,10 +449,72 @@ def suggest_drivers(idn: str) -> List[str]:
     return out
 
 
+def suggest_drivers_usb(vid: Optional[int], pid: Optional[int]) -> List[str]:
+    """依 driver 的 USB_IDS（[(VID, PID), …]）建議驅動；*IDN? 失敗時也能認出儀器。"""
+    if vid is None:
+        return []
+    return [n for n in DRIVERS.names() if (vid, pid) in set(getattr(DRIVERS.get(n), "USB_IDS", ()) or ())]
+
+
+def check_usb_serial(r: Resource) -> None:
+    """USB 位址的序號應與 *IDN? 第三欄相同；不同代表位址對到別台（或儀器回應錯亂）。"""
+    if r.serial and r.idn_serial and r.serial.upper() != r.idn_serial.upper():
+        r.warning = f"USB 序號 {r.serial} 與 *IDN? 序號 {r.idn_serial} 不一致"
+
+
+def _new_resource(address: str) -> Resource:
+    r = Resource(str(address))
+    usb = parse_usb_address(r.address)
+    if usb:
+        r.vid, r.pid, r.serial = usb
+        r.suggested = suggest_drivers_usb(r.vid, r.pid)
+    return r
+
+
+def identify_resource(rm, r: Resource, timeout_ms: int, open_timeout_ms: Optional[int] = None) -> Resource:
+    """開啟資源（open_timeout、\\n 結束字元）→ *IDN? → 建議驅動並比對 USB 序號。唯讀。"""
+    from .core.transport import OPEN_TIMEOUT_MS, open_visa_resource
+
+    try:
+        res = open_visa_resource(rm, r.address, timeout_ms,
+                                 open_timeout_ms=OPEN_TIMEOUT_MS if open_timeout_ms is None else open_timeout_ms)
+        try:
+            r.idn = res.query("*IDN?").strip()
+        finally:
+            res.close()
+        by_idn = suggest_drivers(r.idn)
+        r.suggested = by_idn + [d for d in r.suggested if d not in by_idn]
+        check_usb_serial(r)
+    except Exception as e:  # noqa: BLE001
+        r.error = str(e)
+    return r
+
+
+def list_instr_resources(rm) -> List[str]:
+    """列出所有 ::INSTR 資源（query "?*"：有些 VISA 用預設查詢會漏掉 USB-TMC 儀器），去重、保持順序。"""
+    try:
+        raw = rm.list_resources("?*")
+    except TypeError:
+        raw = rm.list_resources()
+    out: List[str] = []
+    seen = set()
+    for a in raw:
+        a = str(a)
+        if not a.upper().endswith("::INSTR") or a.upper() in seen:
+            continue
+        seen.add(a.upper())
+        out.append(a)
+    return out
+
+
 def scan_resources(identify: bool = True, include_serial: Optional[bool] = None,
                    timeout_ms: Optional[int] = None, backend: Optional[str] = None,
                    progress: Optional[Callable[[Resource], None]] = None) -> List[Resource]:
-    """列出 VISA 資源；identify=True 時對每個資源送 *IDN?（唯讀）並建議驅動。"""
+    """列出 VISA 資源；identify=True 時對每個資源送 *IDN?（唯讀）並建議驅動。
+
+    做法與實機驗證過的 GS210 連線程式相同：NI-VISA → list_resources("?*") → 只留 ::INSTR →
+    open_resource(open_timeout=3000) → 設 \\n 結束字元 → *IDN? → 比對 USB 序號。
+    """
     from .core.transport import shared_resource_manager
     from .settings import setting
 
@@ -409,20 +522,33 @@ def scan_resources(identify: bool = True, include_serial: Optional[bool] = None,
     timeout_ms = int(setting("server.scan_timeout_ms", 1500) if timeout_ms is None else timeout_ms)
     rm = shared_resource_manager(setting("server.visa_backend", "") if backend is None else backend)
     out = []
-    for addr in rm.list_resources():
-        r = Resource(str(addr))
+    for addr in list_instr_resources(rm):
+        r = _new_resource(addr)
         if identify and (include_serial or not r.address.upper().startswith("ASRL")):
-            try:
-                res = rm.open_resource(r.address)
-                res.timeout = timeout_ms
-                try:
-                    r.idn = res.query("*IDN?").strip()
-                finally:
-                    res.close()
-                r.suggested = suggest_drivers(r.idn)
-            except Exception as e:  # noqa: BLE001
-                r.error = str(e)
+            identify_resource(rm, r, timeout_ms)
         out.append(r)
         if progress:
             progress(r)
     return out
+
+
+def probe_resource(address: str, timeout_ms: int = 5000, backend: Optional[str] = None) -> Resource:
+    """「連線測試」：用與掃描相同的方式開啟一個位址並讀 *IDN?；失敗時丟出含提示的例外。"""
+    from .core.transport import rm_info, shared_resource_manager
+    from .settings import setting
+
+    key = str(setting("server.visa_backend", "") if backend is None else backend or "")
+    rm = shared_resource_manager(key)
+    r = identify_resource(rm, _new_resource(address.strip()), timeout_ms)
+    if r.error:
+        hint = ""
+        if r.vid is not None:
+            try:
+                listed = {a.upper() for a in list_instr_resources(rm)}
+            except Exception:  # noqa: BLE001
+                listed = set()
+            if r.address.upper() not in listed:
+                hint = ("（VISA 沒有列出這個位址：請檢查儀器的 USB 是否為 USB-TMC 模式、USB 線，"
+                        "以及是否安裝 NI-VISA）")
+        raise ConnectionError(f"{r.error}{hint}　[VISA：{rm_info.get(key.strip(), '?')}]")
+    return r

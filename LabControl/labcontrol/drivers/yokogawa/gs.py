@@ -283,6 +283,8 @@ class YokogawaSMU(Instrument):
 class GS200(YokogawaSMU):
     """IM GS210-01EN §13.2"""
     IDN_PATTERN = r"YOKOGAWA.*GS2\d\d"
+    #: GS210 實機確認的 USB VID / PID（*IDN? 失敗時掃描仍能認出）
+    USB_IDS = [(0x0B21, 0x0039)]
     RANGES = GS200_RANGES
     SCPI = {
         "func_q": ":SOUR:FUNC?", "func_w": ":SOUR:FUNC {func}",
