@@ -412,10 +412,22 @@ class Resource:
         f = self.idn_fields
         return f[2] if len(f) > 2 else ""
 
+    @property
+    def product(self) -> str:
+        """產品名稱：*IDN? 型號碼 → 型錄上的名稱（Yokogawa GS200 回報的型號碼是 GS210）。"""
+        return product_name(self.maker, self.model)
+
     def describe(self) -> str:
-        """一行說明：型號 + 序號；*IDN? 失敗時改用 USB ID 推得的型號。"""
+        """一行說明：廠牌 型號 序號；*IDN? 失敗時改用 USB ID 推得的型號。"""
         if self.idn:
-            text = self.idn
+            f = self.idn_fields
+            if len(f) >= 3:
+                text = f"{self.maker} {self.product}"
+                if self.product != self.model:
+                    text += f"（*IDN? 型號碼 {self.model}）"
+                text += f"　序號 {self.idn_serial}" + (f"　韌體 {f[3]}" if len(f) > 3 and f[3] else "")
+            else:
+                text = self.idn
         elif self.vid is not None:
             names = ", ".join(self.suggested) or "未知型號"
             text = f"USB {self.vid:#06x}:{self.pid:#06x}（{names}）序號 {self.serial}" + \
@@ -423,6 +435,14 @@ class Resource:
         else:
             text = self.error
         return text + (f"　⚠ {self.warning}" if self.warning else "")
+
+
+#: *IDN? 的型號碼 → 型錄名稱（大寫比對）
+PRODUCT_NAMES = {("YOKOGAWA", "GS210"): "GS200", ("YOKOGAWA", "GS211"): "GS200"}
+
+
+def product_name(maker: str, model: str) -> str:
+    return PRODUCT_NAMES.get((str(maker).strip().upper(), str(model).strip().upper()), model)
 
 
 _USB_RE = re.compile(r"USB\d*$", re.I)
@@ -512,7 +532,7 @@ def scan_resources(identify: bool = True, include_serial: Optional[bool] = None,
                    progress: Optional[Callable[[Resource], None]] = None) -> List[Resource]:
     """列出 VISA 資源；identify=True 時對每個資源送 *IDN?（唯讀）並建議驅動。
 
-    做法與實機驗證過的 GS210 連線程式相同：NI-VISA → list_resources("?*") → 只留 ::INSTR →
+    做法與實機驗證過的 GS200 連線程式相同：NI-VISA → list_resources("?*") → 只留 ::INSTR →
     open_resource(open_timeout=3000) → 設 \\n 結束字元 → *IDN? → 比對 USB 序號。
     """
     from .core.transport import shared_resource_manager

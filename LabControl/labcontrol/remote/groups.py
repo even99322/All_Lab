@@ -18,7 +18,7 @@
 """
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .instruments import instrument_key, is_network_key
 
@@ -95,7 +95,8 @@ def build_groups(local: List[Dict[str, Any]], registry: List[Dict[str, Any]], no
               "label": opts.get("label", ""), "idn": e.get("idn", ""), "connected": bool(e.get("connected")),
               "lease": e.get("lease"), "status": e.get("status", ""), "options": opts,
               "in_file": e.get("in_file", True), "virtual": bool(opts.get("sources")),
-              "enabled": opts.get("enabled", True) is not False, "hosts": [me]}
+              "enabled": opts.get("enabled", True) is not False, "hosts": [me],
+              "hidden": bool(opts.get("hidden")), "synced_from": opts.get("synced_from")}
         if key:
             local_keys.add(key)
         own = owners.get(key) if key else None
@@ -140,7 +141,8 @@ def build_groups(local: List[Dict[str, Any]], registry: List[Dict[str, Any]], no
               "options": (src or conf_any or {}).get("options"), "hosts": hosts,
               "connected_on": r.get("connected_on") or [], "shared": key in shared, "owned": bool(own),
               "detected_only": not any(x.get("configured") for x in entries), "level": e.get("level"),
-              "unit": e.get("unit"), "output": e.get("output")}
+              "unit": e.get("unit"), "output": e.get("output"),
+              "hidden": bool(((src or conf_any or {}).get("options") or {}).get("hidden"))}
         if target is None:
             unassigned.append(it)
         else:
@@ -153,6 +155,10 @@ def build_groups(local: List[Dict[str, Any]], registry: List[Dict[str, Any]], no
         if same is not None:                             # 那台已經回報了，用它的即時狀態
             same["pinned"] = e["foreign"]
             same["local_name"] = e["name"]
+            lo = e.get("opts") or {}
+            if "hidden" in lo:
+                same["hidden"] = bool(lo["hidden"])
+            same["synced_from"] = lo.get("synced_from")
             continue
         opts = e.get("opts") or {}
         g["items"].append({
@@ -161,7 +167,7 @@ def build_groups(local: List[Dict[str, Any]], registry: List[Dict[str, Any]], no
             "address": str(opts.get("address") or "") or "、".join(opts.get("sources") or []),
             "label": opts.get("label", ""), "idn": "", "connected": False, "lease": None, "online": g["online"],
             "options": opts, "hosts": [], "virtual": bool(opts.get("sources")), "pinned": e["foreign"],
-            "local_name": e["name"],
+            "local_name": e["name"], "hidden": bool(opts.get("hidden")), "synced_from": opts.get("synced_from"),
             "status": f"instruments.yaml 指定接在 {e['foreign']}", "owned": False})
 
     # 別台量測節點的虛擬儀器（電磁鐵組）：Hub 的儀器登錄不含虛擬儀器，從節點狀態補上
@@ -182,7 +188,8 @@ def build_groups(local: List[Dict[str, Any]], registry: List[Dict[str, Any]], no
                 "address": "、".join(opts.get("sources") or []), "label": r.get("label") or opts.get("label", ""),
                 "idn": r.get("idn", ""), "connected": bool(r.get("connected")), "lease": r.get("lease"),
                 "online": True, "options": opts, "hosts": [g["host"]], "virtual": True, "owned": False,
-                "level": r.get("level"), "unit": r.get("unit"), "output": r.get("output")})
+                "level": r.get("level"), "unit": r.get("unit"), "output": r.get("output"),
+                "hidden": bool(opts.get("hidden"))})
 
     mine = groups.pop(_low(me))
     others = sorted(groups.values(), key=lambda g: (not g["node"], not g["online"], _low(g["host"])))
@@ -221,6 +228,23 @@ def nest_members(items: List[Dict[str, Any]]) -> None:
         it["members"] = members
     if taken:
         items[:] = [i for i in items if _low(i.get("name")) not in taken]
+
+
+def filter_hidden(items: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+    """1.0.27：拿掉隱藏的儀器（電磁鐵組隱藏 → 整組；成員隱藏 → 只拿掉那個成員）。回傳 (剩下的, 隱藏了幾台)。"""
+    out: List[Dict[str, Any]] = []
+    n = 0
+    for it in items:
+        members = it.get("members") or []
+        if it.get("hidden"):
+            n += 1 + len(members)
+            continue
+        if members:
+            keep = [m for m in members if not m.get("hidden")]
+            n += len(members) - len(keep)
+            it = {**it, "members": keep}
+        out.append(it)
+    return out, n
 
 
 def all_names(items: List[Dict[str, Any]]) -> List[str]:

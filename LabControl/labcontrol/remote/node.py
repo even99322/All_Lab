@@ -118,6 +118,9 @@ class NodeService:
         self._out_ev = threading.Event()
         self.owners: Dict[str, str] = {}              # Hub 的共用儀器歸屬（key → 電腦名稱）
         self.shared: List[str] = []                   # 多台電腦都偵測到的網路儀器（未歸屬時不可連線）
+        from .instsync import InstrumentSync
+
+        self.sync = InstrumentSync(self)              # 1.0.27：量測電腦之間同步儀器清單
 
     # ---- 生命週期 -----------------------------------------------------------
     def start(self) -> "NodeService":
@@ -144,7 +147,7 @@ class NodeService:
             self.station.connect_guard = owner_guard(lambda: self.owners, self.station, hostname, lambda: self.shared)
         for fn, nm in ((self._loop, "node-loop"), (self._cmd_loop, "node-commands"), (self._worker, "node-worker"),
                        (self._live_worker, "node-live"),
-                       (self._uploader, "node-upload")):
+                       (self._uploader, "node-upload"), (self._sync_loop, "node-sync")):
             th = threading.Thread(target=fn, daemon=True, name=nm)
             th.start()
             self._threads.append(th)
@@ -260,6 +263,17 @@ class NodeService:
                 self._note_error("回報 Hub 失敗", e)
                 self._stop.wait(2.0)
             self._stop.wait(min(live, hb) / 2)
+
+    def _sync_loop(self) -> None:
+        """1.0.27：這台的儀器清單有變就放到 Hub；別台的清單有變就同步過來（見 remote/instsync.py）。"""
+        self._stop.wait(3.0)
+        while not self._stop.is_set():
+            if setting("remote.instrument_sync", True):
+                try:
+                    self.sync.tick()
+                except Exception as e:  # noqa: BLE001
+                    log.debug("儀器清單同步失敗：%s", e)
+            self._stop.wait(max(3.0, float(setting("remote.instrument_sync_s", 15))))
 
     def _uploader(self) -> None:
         """即時資料的上傳執行緒：量測執行緒只把事件放進佇列，網路慢或斷線都不會拖住量測。"""
@@ -797,12 +811,46 @@ class NodeService:
             path = self.station.config_path or lab_path(setting("app.instruments_file", "instruments.yaml"))
             if any(n == name for n, _o in labfile.configured(path)):
                 # 已經在設定檔裡（node: 指定給別台而沒載入）→ 改成指定給這台
-                labfile.update_instrument(path, name, {"node": opts.get("node") or self.name})
+                labfile.update_instrument(path, name, {"node": opts.get("node") or self.name},
+                                          remove=("synced_from",))
             else:
                 labfile.add_instrument(path, name, {"driver": driver, **opts})
         self.station.bus.log(f"🛰 {sender.get('user')} 新增儀器 {name}（{driver}）")
         self._status_now.set()
+        self._publish_soon()
         return {"added": True, "name": name}
+
+    def cmd_rename_instrument(self, sender, old: str, new: str) -> Dict[str, Any]:
+        """1.0.27：儀器伺服器（別台電腦）改這台的儀器 / 電磁鐵組名稱。"""
+        from ..core import instedit
+
+        self._check_set()
+        try:
+            res = instedit.rename_instrument(self.station, self._instruments_path(), old, new)
+        except Exception as e:  # noqa: BLE001
+            raise CommandError(str(e))
+        self.station.bus.log(f"🛰 {sender.get('user')} 把 {old} 改名為 {res['name']}")
+        self._status_now.set()
+        self._publish_soon()
+        return res
+
+    def cmd_set_hidden(self, sender, name: str, hidden: bool = True) -> Dict[str, Any]:
+        """1.0.27：隱藏 / 取消隱藏這台的儀器（只影響儀器伺服器的顯示）。"""
+        from ..core import instedit
+
+        try:
+            instedit.set_hidden(self.station, self._instruments_path(), name, bool(hidden))
+        except Exception as e:  # noqa: BLE001
+            raise CommandError(str(e))
+        self._status_now.set()
+        self._publish_soon()
+        return {"name": name, "hidden": bool(hidden)}
+
+    def _publish_soon(self) -> None:
+        try:
+            self.sync.publish_if_changed()
+        except Exception as e:  # noqa: BLE001
+            log.debug("發佈儀器清單失敗：%s", e)
 
     # ---- 1.0.7：Hub 網頁「量測設置」----------------------------------------------
     def cmd_catalog(self, sender) -> Dict[str, Any]:

@@ -73,7 +73,7 @@ _shared_rms: Dict[str, object] = {}
 rm_info: Dict[str, str] = {}
 
 #: Windows 上 NI-VISA 的固定位置。系統預設的 visa32.dll 有時被 R&S VISA / 其他廠商的 VISA 接手，
-#: 結果 USB-TMC 儀器（例如 Yokogawa GS210）列不到或打不開；明確指定 NI-VISA 才穩定。
+#: 結果 USB-TMC 儀器（例如 Yokogawa GS200）列不到或打不開；明確指定 NI-VISA 才穩定。
 NI_VISA_DLLS = (r"C:\Windows\System32\nivisa64.dll",)
 #: 開啟資源時等待鎖定的時間（pyvisa 預設 0 ms，USB 儀器剛插上或被其他程式短暫占用時會直接失敗）
 OPEN_TIMEOUT_MS = 3000

@@ -59,7 +59,7 @@ class ScanDialog(QtWidgets.QDialog):
                 it = QtWidgets.QTreeWidgetItem([r.address, r.describe(), ", ".join(r.suggested), state])
                 it.setData(0, Qt.ItemDataRole.UserRole, {"address": r.address,
                                                          "driver": r.suggested[0] if r.suggested else "",
-                                                         "label": (f"{r.model} {r.idn_serial or r.serial}".strip()
+                                                         "label": (f"{r.product} {r.idn_serial or r.serial}".strip()
                                                                    if r.model else "")})
                 if r.address in used:
                     for c in range(4):

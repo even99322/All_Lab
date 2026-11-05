@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.27 — 2026-11-05
+
+儀器伺服器：儀器 / 電磁鐵組改名、隱藏暫時不用的儀器；兩台量測電腦經 Hub 同步儀器清單（USB 歸接著的那台，網路儀器兩台都載入）；GS200 正確顯示（*IDN? 型號碼 GS210）。詳見 [docs/releases/v1.0.27.md](docs/releases/v1.0.27.md)。
+
+---
+
 ## 1.0.26 — 2026-11-05
 
 儀器伺服器「新增儀器」：VISA 掃描與連線測試改用實機驗證過的做法（優先 NI-VISA、`list_resources("?*")`、open_timeout、`\n` 結束字元），USB 儀器依 VID / PID 認型號並核對序號。詳見 [docs/releases/v1.0.26.md](docs/releases/v1.0.26.md)。

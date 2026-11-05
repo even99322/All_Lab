@@ -1,6 +1,6 @@
 """「＋ 電磁鐵組…」：把兩個電源輸出配成一組電磁鐵（virtual.interleaved_pair）。
 
-可以配的：單通道電源（GS200 / GS210 → DC1）或多通道電源的通道（GS820 → DC5.ch1、DC5.ch2）。
+可以配的：單通道電源（GS200 → DC1）或多通道電源的通道（GS820 → DC5.ch1、DC5.ch2）。
 寫入 instruments.yaml::
 
     magnet_C:
@@ -169,7 +169,7 @@ class MagnetDialog(QtWidgets.QDialog):
 
     def problem(self) -> str:
         if not self.outputs:
-            return "沒有可以配對的電源：請先新增電源（GS200 / GS210 / GS820）。"
+            return "沒有可以配對的電源：請先新增電源（GS200 / GS820）。"
         a, b = self.a.currentData(), self.b.currentData()
         n = self.name.text().strip()
         if not n or "." in n or n in self.existing:

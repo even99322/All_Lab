@@ -20,7 +20,7 @@ from ....core import labfile
 from ....core.nodes import foreign_map
 from ....core.station import Station
 from ....paths import lab_path, open_folder
-from ....remote.groups import UNASSIGNED, all_names, build_groups, move_instrument
+from ....remote.groups import UNASSIGNED, all_names, build_groups, filter_hidden, move_instrument
 from ....remote.hub import hostname
 from ....settings import setting
 from .. import theme
@@ -122,6 +122,13 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
                          "配對的電源收在電磁鐵組底下（展開可單獨連線 / 控制），平時只看到電磁鐵組")
         self.a_remove = tb.addAction("移除", self.remove_instrument)
         self.a_enable = tb.addAction("啟用 / 停用", self.toggle_enabled)
+        self.a_rename = tb.addAction("改名…", self.rename_selected)
+        self.a_rename.setToolTip("改儀器或電磁鐵組的名稱（設定檔、電磁鐵組的電源、量測電腦對應一起改；兩台量測電腦同步）")
+        self.a_hide = tb.addAction("隱藏", self.toggle_hidden)
+        self.a_hide.setToolTip("暫時不用的儀器收起來（設定保留、照常載入；兩台量測電腦同步）")
+        self.show_hidden = QtWidgets.QCheckBox("顯示隱藏的儀器")
+        self.show_hidden.toggled.connect(lambda _on: self.refresh())
+        tb.addWidget(self.show_hidden)
         tb.addSeparator()
         self.a_cfg = tb.addAction("控制視窗", self.open_config)
         self.a_conn = tb.addAction("▶ 連線", self.connect_selected)
@@ -284,7 +291,13 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
         groups = self.groups()
         remote_on = self.hub is not None
         n_items = 0
+        n_hidden = 0
+        show_hidden = self.show_hidden.isChecked()
         for g in groups:
+            if not show_hidden:
+                kept, nh = filter_hidden(g["items"])
+                g = {**g, "items": kept, "n_hidden": nh}
+                n_hidden += nh
             if g["id"] == UNASSIGNED and not g["items"] and not remote_on:
                 continue
             gi = QtWidgets.QTreeWidgetItem([g["title"], "", "", "", "", ""])
@@ -295,7 +308,8 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
             f.setPointSizeF(f.pointSizeF() + 1)
             gi.setFont(0, f)
             n_conn = sum(1 for i in g["items"] if i.get("connected"))
-            gi.setText(1, f"{n_conn}/{len(g['items'])} 已連線" if g["id"] != UNASSIGNED else f"{len(g['items'])} 台")
+            gi.setText(1, (f"{n_conn}/{len(g['items'])} 已連線" if g["id"] != UNASSIGNED else f"{len(g['items'])} 台")
+                       + (f"（隱藏 {g['n_hidden']} 台）" if g.get("n_hidden") else ""))
             gi.setForeground(1, QtGui.QBrush(theme.qc("muted")))
             if g["id"] == UNASSIGNED:
                 gi.setForeground(0, QtGui.QBrush(QtGui.QColor(theme.c("warn"))))
@@ -332,7 +346,8 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
                     it.parent().setExpanded(True)
                 self.tree.setCurrentItem(it)
         me = hostname()
-        self.sub.setText(f"{me}  ·  {n_items} 台儀器" + ("  ·  Hub 已連線" if remote_on else "  ·  只顯示這台（未連上 Hub）"))
+        self.sub.setText(f"{me}  ·  {n_items} 台儀器" + (f"（另有 {n_hidden} 台隱藏）" if n_hidden else "")
+                         + ("  ·  Hub 已連線" if remote_on else "  ·  只顯示這台（未連上 Hub）"))
         self._update_actions()
 
     def _group_buttons(self, g: Dict[str, Any]) -> QtWidgets.QWidget:
@@ -386,6 +401,10 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
             extra.append("共用" + ("，已歸屬" if d.get("owned") else "，未歸屬"))
         if d.get("hosts") and (d.get("shared") or d.get("detected_only") or not d.get("configured")):
             extra.append("看得到：" + "、".join(d["hosts"]))
+        if d.get("hidden"):
+            extra.append("隱藏")
+        if d.get("synced_from"):
+            extra.append(f"同步自 {d['synced_from']}")
         label = d.get("label") or ""
         if extra:
             label = (label + "　" if label else "") + "（" + "；".join(extra) + "）"
@@ -395,7 +414,7 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
         f = it.font(0)
         f.setBold(True)
         it.setFont(0, f)
-        if text in ("停用", "未載入", "離線"):
+        if text in ("停用", "未載入", "離線") or d.get("hidden"):
             if text == "未載入":
                 it.setText(5, msg or "不在目前的 Station（重新開啟 Lab Control 後載入，或按「啟用 / 停用」）")
             for c in range(len(COLS)):
@@ -435,6 +454,10 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
         self.a_test.setEnabled(inst is not None and not leased)
         self.a_remove.setEnabled(bool(n) and not leased)
         self.a_enable.setEnabled(bool(n) and not leased)
+        can_edit = bool(d and (d.get("local") or d.get("pinned") or d.get("configured")))
+        self.a_rename.setEnabled(can_edit and not leased and not (d or {}).get("lease"))
+        self.a_hide.setEnabled(can_edit)
+        self.a_hide.setText("取消隱藏" if d and d.get("hidden") else "隱藏")
 
     def _log(self, msg: str) -> None:
         self.log.appendPlainText(f"{_dt.datetime.now():%H:%M:%S}  {msg}")
@@ -461,7 +484,8 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
             else:
                 return
         else:
-            for a in (self.a_cfg, self.a_conn, self.a_disc, None, self.a_test, None, self.a_enable, self.a_remove):
+            for a in (self.a_cfg, self.a_conn, self.a_disc, None, self.a_test, None, self.a_rename, self.a_hide,
+                      self.a_enable, self.a_remove):
                 if a is None:
                     m.addSeparator()
                 elif a.isEnabled():
@@ -568,8 +592,9 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
         self._connect(list(self.station.instruments))
 
     def connect_group(self, g: Dict[str, Any]) -> None:
-        names = [i["name"] for i in g["items"] if i.get("configured", True) and i.get("enabled", True)]
-        names += [m["name"] for i in g["items"] for m in i.get("members") or []
+        items = filter_hidden(g["items"])[0]               # 隱藏的儀器不參加「全部連線」
+        names = [i["name"] for i in items if i.get("configured", True) and i.get("enabled", True)]
+        names += [m["name"] for i in items for m in i.get("members") or []
                   if m.get("configured", True) and m.get("enabled", True) and m["name"] not in names]
         if g["local"]:
             self._connect([n for n in names if n in self.station.instruments])
@@ -648,9 +673,13 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
         if name not in conf:
             raise RuntimeError(f"{name} 不在這台的 instruments.yaml 裡")
         if node:
-            labfile.update_instrument(self.config_path, name, {"node": node})
+            from ....core.nodes import my_names
+
+            mine = node.strip().lower() in my_names()
+            # 標成接在這台 → 變成這台自己的（不再是從別台同步來的）
+            labfile.update_instrument(self.config_path, name, {"node": node}, remove=("synced_from",) if mine else ())
         else:
-            labfile.update_instrument(self.config_path, name, {}, remove=("node",))
+            labfile.update_instrument(self.config_path, name, {}, remove=("node", "synced_from"))
         conf = dict(labfile.configured(self.config_path))
         st = self.station
         if node:
@@ -693,7 +722,8 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
                 if any(n == name for n, _o in labfile.configured(self.config_path)):
                     from ....remote.hub import default_node_name
 
-                    labfile.update_instrument(self.config_path, name, {"node": o.get("node") or default_node_name()})
+                    labfile.update_instrument(self.config_path, name, {"node": o.get("node") or default_node_name()},
+                                              remove=("synced_from",))
                 else:
                     labfile.add_instrument(self.config_path, name, {"driver": driver, **o})
 
@@ -748,6 +778,7 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
                 self._log(f"＋ 已新增 {name}（{driver}），只在這次執行有效")
         except Exception as e:  # noqa: BLE001
             QtWidgets.QMessageBox.critical(self, "新增失敗", str(e))
+        self._publish()
         self.refresh()
 
     def edit_node_map(self) -> None:
@@ -777,6 +808,7 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
             self._log(f"＋ 電磁鐵組 {name}：{' + '.join(opts['sources'])}（寫入 {self.config_path}）")
         except Exception as e:  # noqa: BLE001
             QtWidgets.QMessageBox.critical(self, "新增電磁鐵組失敗", str(e))
+        self._publish()
         self.refresh()
 
     def remove_instrument(self) -> None:
@@ -800,6 +832,7 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
             self._log(f"－ 已移除 {n}")
         except Exception as e:  # noqa: BLE001
             QtWidgets.QMessageBox.critical(self, "移除失敗", str(e))
+        self._publish()
         self.refresh()
 
     def toggle_enabled(self) -> None:
@@ -826,7 +859,154 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
                 self._log(f"已啟用 {n}")
         except Exception as e:  # noqa: BLE001
             QtWidgets.QMessageBox.critical(self, "啟用 / 停用失敗", str(e))
+        self._publish()
         self.refresh()
+
+    # ---- 1.0.27：改名、隱藏 ------------------------------------------------------
+    def _publish(self) -> None:
+        """這台的儀器清單有變：馬上放到 Hub，另一台量測電腦下一次同步就看得到。"""
+        node_svc = getattr(self.remote, "node", None) if self.remote is not None else None
+        sync = getattr(node_svc, "sync", None)
+        if sync is not None:
+            run_bg(sync.publish_if_changed, lambda _r: None, lambda m: self._log(f"⚠ 發佈儀器清單失敗：{m}"))
+
+    def _node_online(self, node: Optional[str]) -> bool:
+        if not node or self.hub is None or self.remote is None:
+            return False
+        return any(str(n.get("name", "")).lower() == str(node).lower() and n.get("online")
+                   for n in getattr(self.remote, "nodes", []) or [])
+
+    def _owner_of(self, d: Dict[str, Any], g: Optional[Dict[str, Any]]):
+        """("local", None)：這台自己的；("node", 節點名稱)：在別台（改名 / 隱藏要送到那台）。"""
+        if d.get("local") and not d.get("synced_from"):
+            return "local", None
+        return "node", d.get("synced_from") or d.get("pinned") or (g or {}).get("node")
+
+    def _local_entry(self, d: Dict[str, Any]) -> Optional[str]:
+        """這台 instruments.yaml 裡對應的名稱（同步來的 / 指定給別台的也算）。"""
+        name = d.get("local_name") or (d.get("name") if d.get("local") else None)
+        if not name:
+            return None
+        try:
+            conf = dict(labfile.configured(self.config_path))
+        except Exception:  # noqa: BLE001
+            return None
+        return name if name in conf else None
+
+    def _call_node(self, node: str, cmd: str, **args):
+        from ....remote.client import RemoteNode
+
+        return RemoteNode(self.hub, node).call(cmd, timeout=60, **args)
+
+    def rename_selected(self) -> None:
+        from ....core import instedit
+
+        d, g = self.selected_item(), self.selected_group()
+        if not d:
+            return
+        kind, node = self._owner_of(d, g)
+        old = d["name"] if kind == "node" else (d.get("local_name") or d["name"])
+        what = "電磁鐵組" if (d.get("options") or {}).get("sources") or d.get("virtual") else "儀器"
+        new, ok = QtWidgets.QInputDialog.getText(
+            self, f"{what}改名", f"{old} 的新名稱：\n（量測方案、範本裡寫到 {old} 的地方不會自動改）",
+            QtWidgets.QLineEdit.EchoMode.Normal, old)
+        new = (new or "").strip()
+        if not ok or not new or new == old:
+            return
+        local_name = self._local_entry(d)
+        if kind == "local":
+            try:
+                conf = dict(labfile.configured(self.config_path))
+            except Exception:  # noqa: BLE001
+                conf = {}
+            affected = [n for n in [*instedit._users(conf, old), old] if n in self.station.instruments]
+            on = [n for n in affected if self.station.instruments[n].connected]
+            if on:
+                q = QtWidgets.QMessageBox.question(self, "改名", f"{'、'.join(on)} 已連線，改名前要先中斷連線（不改變輸出）。"
+                                                             "要中斷並改名嗎？")
+                if q != QtWidgets.QMessageBox.StandardButton.Yes:
+                    return
+
+            def work():
+                for n in on:
+                    self.station.disconnect(n)
+                return instedit.rename_instrument(self.station, self.config_path, old, new)
+        else:
+            online = self._node_online(node)
+            if not online and not (local_name and not d.get("synced_from")):
+                QtWidgets.QMessageBox.information(self, "改名", f"{old} 接在 {node or '別台電腦'}，那台目前不在線。\n"
+                                                              "名稱以接著儀器的那台為準，請等那台開啟 Lab Control 後再改。")
+                return
+
+            def work():
+                res = {}
+                if online:
+                    res = self._call_node(node, "rename_instrument", old=old, new=new) or {}
+                if local_name:
+                    try:
+                        instedit.rename_instrument(self.station, self.config_path, local_name, new)
+                    except Exception as e:  # noqa: BLE001
+                        if not online:
+                            raise
+                        log_msg = f"（這台的同步副本稍後自動更新：{e}）"
+                        return {**res, "note": log_msg}
+                return res
+
+        def ok_(res):
+            res = res or {}
+            for s_ in (self._open_magnets,):
+                for h, n in list(s_):
+                    if n == old:
+                        s_.discard((h, n))
+                        s_.add((h, new))
+            if old in self.errors:
+                self.errors[new] = self.errors.pop(old)
+            w = self.cfg_windows.pop(old, None)
+            if w is not None:
+                w.close()
+            extra = f"；一起改了 {'、'.join(res['touched'])} 的電源" if res.get("touched") else ""
+            self._log(f"✎ {old} → {new}{extra}" + (f"（{node}）" if kind == "node" and node else "") + res.get("note", ""))
+            self._publish()
+            self.fetch_registry(force=True)
+            self.refresh()
+
+        def fail(m):
+            self._log(f"❌ 改名失敗：{m}")
+            QtWidgets.QMessageBox.warning(self, "改名失敗", m)
+        run_bg(work, ok_, fail)
+
+    def toggle_hidden(self) -> None:
+        from ....core import instedit
+
+        d, g = self.selected_item(), self.selected_group()
+        if not d:
+            return
+        hidden = not d.get("hidden")
+        kind, node = self._owner_of(d, g)
+        local_name = self._local_entry(d)
+        online = kind == "node" and self._node_online(node)
+        if kind == "node" and not online and not local_name:
+            QtWidgets.QMessageBox.information(self, "隱藏", f"{d['name']} 在 {node or '別台電腦'}，那台目前不在線。")
+            return
+        name = d["name"]
+
+        def work():
+            if kind == "local":
+                instedit.set_hidden(self.station, self.config_path, local_name or name, hidden)
+                return ""
+            if online:
+                self._call_node(node, "set_hidden", name=name, hidden=hidden)
+            if local_name:
+                instedit.set_hidden(self.station, self.config_path, local_name, hidden)
+            return "" if online else f"（{node} 不在線：先只改這台，那台上線後以它的設定為準）"
+
+        def ok_(note):
+            self._log(("🙈 已隱藏 " if hidden else "👁 取消隱藏 ") + name + (note or "")
+                      + ("（勾「顯示隱藏的儀器」可以再看到）" if hidden else ""))
+            self._publish()
+            self.fetch_registry(force=True)
+            self.refresh()
+        run_bg(work, ok_, lambda m: (self._log(f"❌ {m}"), QtWidgets.QMessageBox.warning(self, "隱藏失敗", m)))
 
     def test_selected(self) -> None:
         n = self.selected()

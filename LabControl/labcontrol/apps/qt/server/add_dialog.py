@@ -241,7 +241,8 @@ class AddInstrumentDialog(QtWidgets.QDialog):
             ok = not pat or re.search(pat, r.idn, re.I)
             lines = [f"✔ *IDN? = {r.idn}"]
             if r.maker or r.model:
-                lines.append(f"廠牌 {r.maker}　型號 {r.model}　序號 {r.idn_serial or '—'}")
+                model = r.product + (f"（*IDN? 型號碼 {r.model}）" if r.product != r.model else "")
+                lines.append(f"廠牌 {r.maker}　型號 {model}　序號 {r.idn_serial or '—'}")
             if r.warning:
                 lines.append(f"<span style='color:{theme.c('warn')}'>⚠ {r.warning}，請確認位址是否對到正確的儀器</span>")
             if not ok:

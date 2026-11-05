@@ -281,9 +281,9 @@ class YokogawaSMU(Instrument):
 
 @register_driver("yokogawa.gs200")
 class GS200(YokogawaSMU):
-    """IM GS210-01EN §13.2"""
+    """Yokogawa GS200 直流電壓 / 電流源（手冊 IM GS210-01EN §13.2；*IDN? 回報的型號碼是 GS210）"""
     IDN_PATTERN = r"YOKOGAWA.*GS2\d\d"
-    #: GS210 實機確認的 USB VID / PID（*IDN? 失敗時掃描仍能認出）
+    #: GS200 實機確認的 USB VID / PID（*IDN? 失敗時掃描仍能認出）
     USB_IDS = [(0x0B21, 0x0039)]
     RANGES = GS200_RANGES
     SCPI = {

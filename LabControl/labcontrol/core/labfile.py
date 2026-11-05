@@ -9,6 +9,7 @@ from __future__ import annotations
 import datetime as _dt
 import io
 import shutil
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -20,6 +21,10 @@ try:  # pragma: no cover - 依安裝環境
     HAS_RUAMEL = True
 except ImportError:  # pragma: no cover
     HAS_RUAMEL = False
+
+
+#: 同一個程序裡的寫入互斥（儀器伺服器、量測節點的指令、跨電腦同步可能同時改 instruments.yaml）
+LOCK = threading.RLock()
 
 
 def _yaml():
@@ -87,34 +92,103 @@ def configured(path: Path) -> List[Tuple[str, Dict[str, Any]]]:
 
 
 def add_instrument(path: Path, name: str, options: Dict[str, Any]) -> None:
-    data = load(path)
-    inst = data["instruments"]
-    if name in inst:
-        raise ConfigError(f"instruments.yaml 已經有 {name}")
-    inst[name] = _to_node(options)
-    save(path, data)
+    with LOCK:
+        data = load(path)
+        inst = data["instruments"]
+        if name in inst:
+            raise ConfigError(f"instruments.yaml 已經有 {name}")
+        inst[name] = _to_node(options)
+        save(path, data)
 
 
 def remove_instrument(path: Path, name: str) -> None:
-    data = load(path)
-    if name in data["instruments"]:
-        del data["instruments"][name]
-        save(path, data)
+    with LOCK:
+        data = load(path)
+        if name in data["instruments"]:
+            del data["instruments"][name]
+            save(path, data)
 
 
 def update_instrument(path: Path, name: str, updates: Dict[str, Any], remove: Tuple[str, ...] = ()) -> None:
     """合併更新一台儀器的欄位（例如 {"enabled": False}、{"address": ...}）。"""
-    data = load(path)
-    inst = data["instruments"]
-    if name not in inst:
-        raise ConfigError(f"instruments.yaml 沒有 {name}")
-    node = inst[name]
-    for k, v in updates.items():
-        node[k] = _to_node(v)
-    for k in remove:
-        if k in node:
-            del node[k]
-    save(path, data)
+    with LOCK:
+        data = load(path)
+        inst = data["instruments"]
+        if name not in inst:
+            raise ConfigError(f"instruments.yaml 沒有 {name}")
+        node = inst[name]
+        for k, v in updates.items():
+            node[k] = _to_node(v)
+        for k in remove:
+            if k in node:
+                del node[k]
+        save(path, data)
+
+
+def _rename_ref(ref: Any, old: str, new: str) -> Any:
+    s = str(ref)
+    if s == old:
+        return new
+    if s.startswith(old + "."):
+        return new + s[len(old):]
+    return ref
+
+
+def rename_instrument(path: Path, old: str, new: str) -> List[str]:
+    """把 old 改名成 new（保留順序、註解）；其他儀器 sources 裡的 old / old.ch1 也一起改。回傳被改到的其他儀器。"""
+    with LOCK:
+        data = load(path)
+        inst = data["instruments"]
+        if old not in inst:
+            raise ConfigError(f"instruments.yaml 沒有 {old}")
+        if new in inst:
+            raise ConfigError(f"instruments.yaml 已經有 {new}")
+        keys = list(inst.keys())
+        pos = keys.index(old)
+        node = inst.pop(old)
+        if HAS_RUAMEL and hasattr(inst, "insert"):
+            inst.insert(pos, new, node)
+        else:
+            items = list(inst.items())
+            items.insert(pos, (new, node))
+            inst.clear()
+            inst.update(items)
+        touched = []
+        for n in list(inst.keys()):
+            o = inst[n]
+            srcs = o.get("sources") if hasattr(o, "get") else None
+            if not srcs:
+                continue
+            renamed = [_rename_ref(x, old, new) for x in srcs]
+            if [str(x) for x in renamed] != [str(x) for x in srcs]:
+                o["sources"] = _to_node(renamed)
+                touched.append(str(n))
+        save(path, data)
+        return touched
+
+
+def apply_changes(path: Path, add: Optional[Dict[str, Dict[str, Any]]] = None,
+                  replace: Optional[Dict[str, Dict[str, Any]]] = None, remove: Optional[List[str]] = None) -> bool:
+    """一次寫入多筆變更（跨電腦同步用；只備份一次）。replace：整筆換掉（保留位置）。回傳是否有寫入。"""
+    add, replace, remove = dict(add or {}), dict(replace or {}), list(remove or [])
+    if not (add or replace or remove):
+        return False
+    with LOCK:
+        data = load(path)
+        inst = data["instruments"]
+        for n in remove:
+            if n in inst:
+                del inst[n]
+        for n, o in replace.items():
+            if n in inst:
+                inst[n] = _to_node(o)
+            else:
+                add[n] = o
+        for n, o in add.items():
+            if n not in inst:
+                inst[n] = _to_node(o)
+        save(path, data)
+        return True
 
 
 def _to_node(v: Any) -> Any:
