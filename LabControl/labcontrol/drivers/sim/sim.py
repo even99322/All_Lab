@@ -153,14 +153,19 @@ class SimVNA(Instrument, TraceAcquirer):
         self.ports = sp.detection(n, {t: [f"Trc{i + 1}"] for i, t in enumerate(have)}, "模擬（sim: ports）")
         return self.ports
 
-    def trace_list(self) -> List[str]:
-        if self.options.get("traces"):
-            return list(self.options["traces"])
-        if self.ports:
-            from ...core import sparams as sp
+    def known_ports(self) -> int:
+        if self.MEASURE_KIND != "vna":
+            return 0
+        from ...core import vna_ports
 
-            return sp.ordered(self.ports["sparams"], self.ports.get("traces") or {})
-        return list(self.TRACES)
+        return vna_ports.known_ports(self)
+
+    def trace_list(self) -> List[str]:
+        if self.MEASURE_KIND != "vna":
+            return list(self.options.get("traces") or self.TRACES)
+        from ...core import vna_ports
+
+        return vna_ports.trace_list(self, self.TRACES)
 
     def _band(self) -> tuple:
         s = self._s

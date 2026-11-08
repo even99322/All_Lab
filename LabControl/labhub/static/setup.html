@@ -241,7 +241,8 @@ function drawScheme(tmpls, cat) {
       const m = cat.measurers.find(x => x.ref === b.instrument);
       h += `<div class="row"><label><span>儀器</span><select data-f="instrument">${(m ? "" : `<option selected>${esc(b.instrument)}（這台沒有）</option>`) +
         cat.measurers.map(x => `<option value="${esc(x.ref)}"${x.ref === b.instrument ? " selected" : ""}>${esc(x.label)}</option>`).join("")}</select></label>
-        <label><span>Trace</span>${(m ? m.traces : b.traces || []).map(t => `<label><input type="checkbox" data-trace="${esc(t)}"${(b.traces || []).includes(t) ? " checked" : ""}>${esc(t)}</label>`).join(" ")}</label></div><div class="row">`;
+        <label><span>Trace</span>${[...(m ? m.traces : []), ...(b.traces || []).filter(t => !(m ? m.traces : []).includes(t))].map(t => `<label><input type="checkbox" data-trace="${esc(t)}"${(b.traces || []).includes(t) ? " checked" : ""}>${esc(t)}</label>`).join(" ")}</label>
+        ${m && m.kind === "vna" ? `<label><span>其他</span><input data-addtrace="1" placeholder="例如 S34" style="width:90px"></label>` : ""}</div><div class="row">`;
       const fields = m ? m.fields : Object.keys(b.settings || {}).map(k => ({ key:k, label:k, unit:"" }));
       for (const f of fields) {
         const v = (b.settings || {})[f.key];
@@ -292,7 +293,7 @@ function bindScheme(tmpls, cat) {
     renderScheme();
   };
   $("sname").oninput = () => { scheme.name = $("sname").value; changed(); };
-  for (const el of $("pane").querySelectorAll(".blk [data-f], .blk [data-s], .blk [data-trace], .blk [data-fmt]")) {
+  for (const el of $("pane").querySelectorAll(".blk [data-f], .blk [data-s], .blk [data-trace], .blk [data-fmt], .blk [data-addtrace]")) {
     el.onchange = () => {
       const b = findBlock(el.closest(".blk").dataset.id); if (!b) return;
       if (el.dataset.f === "_by") {
@@ -309,6 +310,11 @@ function bindScheme(tmpls, cat) {
         const k = el.dataset.s;
         if (el.dataset.k === "bool") b.settings[k] = el.checked; else if (el.value.trim() === "") delete b.settings[k];
         else b.settings[k] = /^-?\d+(\.\d+)?(e-?\d+)?$/i.test(el.value.trim()) ? +el.value.trim() : el.value.trim();
+      } else if (el.dataset.addtrace) {
+        const t = el.value.trim().toUpperCase();
+        if (!/^S(\d\d|\d{4})$/.test(t)) { if (t) alert(`「${t}」不是 S 參數，請輸入像 S34、S13 這樣的名稱`); return; }
+        b.traces = (b.traces || []).filter(x => x !== t); b.traces.push(t);
+        changed(); drawScheme(tmpls, cat); return;
       } else if (el.dataset.trace) {
         const t = el.dataset.trace; b.traces = (b.traces || []).filter(x => x !== t); if (el.checked) b.traces.push(t);
       } else if (el.dataset.fmt) {

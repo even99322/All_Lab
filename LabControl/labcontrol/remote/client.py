@@ -62,6 +62,11 @@ class RemoteNode:
         from ..core.station import Station
 
         cfg = yaml.safe_load(self.instruments_yaml() or "instruments: {}") or {}
+        try:                                          # 1.0.28：節點回報的 VNA port 數（鏡像沒連線也列得出 S11…S44）
+            node_ports = {str(i.get("name")): int(i.get("ports") or 0)
+                          for i in ((self.status() or {}).get("instruments") or []) if i.get("ports")}
+        except Exception:  # noqa: BLE001
+            node_ports = {}
         insts = {}
         from ..core.registry import DRIVERS, ensure_builtins_loaded
         ensure_builtins_loaded()
@@ -69,6 +74,8 @@ class RemoteNode:
             o = dict(o or {})
             if o.get("enabled", True) is False or o.get("driver") not in DRIVERS:
                 continue                      # 節點上的外掛驅動在這台電腦沒有 → 略過
+            if node_ports.get(str(n)) and not o.get("ports"):
+                o["_node_ports"] = node_ports[str(n)]
             insts[n] = o
         cfg["instruments"] = insts
         cfg.pop("plugin_paths", None)

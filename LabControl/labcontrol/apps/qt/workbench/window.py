@@ -198,6 +198,10 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
 
         self.st_bridge = QtEventBridge(station.bus, "station.changed", parent=self)
         self.st_bridge.on("station.changed", lambda _p: self._instruments_changed())
+        # 1.0.28：VNA 連線 / 偵測到 port 數 → 量測方塊的 S 參數清單跟著更新（4 port → S11…S44）
+        self.vna_bridge = QtEventBridge(station.bus, "*", parent=self)
+        self.vna_bridge.on("instrument.connected", lambda p: self._vna_traces_changed(p.get("name")))
+        self.vna_bridge.on("vna.ports", lambda p: self._vna_traces_changed(p.get("name")))
         self._init_remote()
         from ..platform_ui import PlatformController
 
@@ -623,6 +627,20 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
     def set_live_backend(self, backend, key: str, label: str) -> None:
         self.live.set_backend(backend, key, label)
         self.live_window.setWindowTitle(f"即時數據（{label}）— {APP_NAME}")
+
+    def _vna_traces_changed(self, name) -> None:
+        if getattr(self, "remote_target", None) is not None:
+            return
+        m = self.doc.catalog.measurer(name or "")
+        inst = self.station.instruments.get(name or "")
+        if m is None or inst is None or not hasattr(inst, "trace_list"):
+            return
+        try:
+            now = list(inst.trace_list())
+        except Exception:  # noqa: BLE001
+            return
+        if now != list(m.traces):
+            self.doc.set_catalog(build_catalog(self.station))
 
     def _instruments_changed(self) -> None:
         """儀器伺服器新增 / 移除儀器後：重建儀器參數列表與方案檢查。"""

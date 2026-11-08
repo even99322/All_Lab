@@ -156,15 +156,26 @@ class RohdeSchwarzZNA(Instrument, TraceAcquirer):
         except Exception:  # noqa: BLE001
             cat = {}
         self.ports = sp.detection(n, cat, how)
+        if how != "預設" and not (self.station is not None and self.station.simulate):
+            try:
+                from ...core import vna_ports
+
+                vna_ports.remember_ports(self.name, n)
+            except Exception:  # noqa: BLE001
+                pass
         return self.ports
 
+    def known_ports(self) -> int:
+        """沒連線也知道的 port 數（見 core/vna_ports.known_ports）；0 = 不知道。"""
+        from ...core import vna_ports
+
+        return vna_ports.known_ports(self)
+
     def trace_list(self) -> List[str]:
-        """量測清單：instruments.yaml traces → 偵測到的全部 S 參數（S21、現有 trace 優先）→ 預設四個。"""
-        if self.options.get("traces"):
-            return list(self.options["traces"])
-        if self.ports:
-            return sp.ordered(self.ports["sparams"], self.ports.get("traces") or {})
-        return list(self.TRACES)
+        """量測清單：instruments.yaml traces → 偵測到的 → 已知 port 數的全部 S 參數 → 預設四個。"""
+        from ...core import vna_ports
+
+        return vna_ports.trace_list(self, self.TRACES)
 
     # ---- 平均（組合指令）--------------------------------------------------------
     def _get_averages(self) -> Optional[int]:

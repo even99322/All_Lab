@@ -93,6 +93,12 @@ def instrument_report(station: Station, host: Optional[str] = None) -> List[Dict
                              "virtual": bool(opts.get("sources")), "simulate": bool(station.simulate),
                              "enabled": opts.get("enabled", True) is not False,
                              "options": json_safe_options(opts, getattr(inst, "config_driver", inst.driver_name))}
+        if getattr(inst, "MEASURE_KIND", "") == "vna" and hasattr(inst, "trace_list"):
+            try:                                        # 1.0.28：VNA 的 port 數 / 可量的 S 參數（別台編方案用）
+                d["ports"] = int(inst.known_ports()) if hasattr(inst, "known_ports") else 0
+                d["traces"] = list(inst.trace_list())
+            except Exception:  # noqa: BLE001
+                pass
         src = inst if isinstance(inst, Source) else Station._sole_source(inst)
         if src is not None:
             try:

@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.28 — 2026-11-08
+
+4 port VNA：量測方塊沒連線也列出全部 16 個 S 參數（記住偵測到的 port 數 / instruments.yaml `ports` / 節點回報），並可手動加入 S34 等；Hub 網頁量測設置同步支援。詳見 [docs/releases/v1.0.28.md](docs/releases/v1.0.28.md)。
+
+---
+
 ## 1.0.27 — 2026-11-05
 
 儀器伺服器：儀器 / 電磁鐵組改名、隱藏暫時不用的儀器；兩台量測電腦經 Hub 同步儀器清單（USB 歸接著的那台，網路儀器兩台都載入）；GS200 正確顯示（*IDN? 型號碼 GS210）。詳見 [docs/releases/v1.0.27.md](docs/releases/v1.0.27.md)。

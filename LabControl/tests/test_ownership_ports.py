@@ -176,7 +176,8 @@ def test_zna_port_count_falls_back_to_idn():
     assert vna.check_errors() == []                          # 不支援的指令錯誤已清掉
     v2 = RohdeSchwarzZNA("V2", transport=FakeZNA(), ports=3, detect_ports=False)
     v2.connect()
-    assert v2.ports is None and v2.trace_list() == ["S21", "S11", "S12", "S22"]
+    # 1.0.28：沒偵測也用 instruments.yaml 的 ports 列出全部 S 參數（量測方塊可以選 S13、S32…）
+    assert v2.ports is None and v2.trace_list()[:2] == ["S21", "S11"] and len(v2.trace_list()) == 9
     assert v2.detect_ports()["ports"] == 3
 
 

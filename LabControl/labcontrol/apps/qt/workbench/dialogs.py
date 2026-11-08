@@ -473,8 +473,32 @@ class MeasureDialog(QtWidgets.QDialog):
         self.inst.setCurrentIndex(max(0, self.inst.findData(b.instrument)))
         form.addRow("儀器", self.inst)
         self.traces = QtWidgets.QListWidget()
-        self.traces.setMaximumHeight(90)
+        self.traces.setObjectName("measureTraces")
+        # 1.0.28：4 port VNA 有 16 個 S 參數 → 橫向排、自動換行，一眼看完
+        self.traces.setFlow(QtWidgets.QListView.Flow.LeftToRight)
+        self.traces.setWrapping(True)
+        self.traces.setResizeMode(QtWidgets.QListView.ResizeMode.Adjust)
+        self.traces.setUniformItemSizes(True)
+        self.traces.setSpacing(2)
+        self.traces.setMaximumHeight(150)
         form.addRow("量測通道（Log channels）", self.traces)
+        add_row = QtWidgets.QHBoxLayout()
+        self.extra_trace = QtWidgets.QLineEdit()
+        self.extra_trace.setObjectName("extraTrace")
+        self.extra_trace.setPlaceholderText("清單沒有的 S 參數，例如 S34、S13")
+        self.extra_trace.returnPressed.connect(self.add_extra_trace)
+        self.b_extra = QtWidgets.QPushButton("＋ 加入")
+        self.b_extra.clicked.connect(self.add_extra_trace)
+        add_row.addWidget(self.extra_trace, 1)
+        add_row.addWidget(self.b_extra)
+        self.extra_row = QtWidgets.QWidget()
+        self.extra_row.setLayout(add_row)
+        add_row.setContentsMargins(0, 0, 0, 0)
+        form.addRow("", self.extra_row)
+        self.trace_note = QtWidgets.QLabel("")
+        self.trace_note.setProperty("role", "muted")
+        self.trace_note.setWordWrap(True)
+        form.addRow("", self.trace_note)
         lay.addLayout(form)
         cur_row = QtWidgets.QHBoxLayout()
         self.b_current = QtWidgets.QPushButton("⤓ 套用儀器目前值")
@@ -507,6 +531,47 @@ class MeasureDialog(QtWidgets.QDialog):
         self._build()
 
     # ---- 欄位 -------------------------------------------------------------------------
+    def _add_trace_item(self, tr: str, checked: bool) -> None:
+        it = QtWidgets.QListWidgetItem(tr)
+        it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+        it.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
+        self.traces.addItem(it)
+
+    @staticmethod
+    def _vna_ports(m) -> int:
+        """量測清單是完整的 n×n S 參數（n ≥ 3）→ n；否則 0（不知道：只有預設的 S21/S11/S12/S22 時無法判斷）。"""
+        from ....core import sparams as sp
+
+        names = {x.upper() for x in (m.traces if m else [])}
+        n = sp.ports_from_params(names)
+        return n if n > 2 and set(sp.sparam_names(n)) <= names else 0
+
+    def add_extra_trace(self) -> None:
+        """1.0.28：輸入清單沒有的 S 參數（S34、S13…）加入並勾選。"""
+        from ....core import sparams as sp
+
+        txt = self.extra_trace.text().strip().upper()
+        if not txt:
+            return
+        pp = sp.ports_of(txt)
+        m = self.doc.catalog.measurer(self.b.instrument)
+        n = self._vna_ports(m)
+        if not pp or min(pp) < 1:
+            self.trace_note.setText(f"「{txt}」不是 S 參數：請輸入像 S34、S13 這樣的名稱")
+            return
+        if n and max(pp) > n:
+            self.trace_note.setText(f"{txt} 超出這台 VNA 的 {n} 個 port")
+            return
+        for i in range(self.traces.count()):
+            it = self.traces.item(i)
+            if it.text().upper() == txt:
+                it.setCheckState(Qt.CheckState.Checked)
+                break
+        else:
+            self._add_trace_item(txt, True)
+        self.extra_trace.clear()
+        self.trace_note.setText(f"已加入 {txt}")
+
     def _has_freq(self) -> bool:
         m = self.doc.catalog.measurer(self.b.instrument)
         keys = {f.key for f in (m.fields if m else [])}
@@ -526,11 +591,16 @@ class MeasureDialog(QtWidgets.QDialog):
         b = self.b
         m = self.doc.catalog.measurer(b.instrument)
         self.traces.clear()
-        for tr in (m.traces if m else []):
-            it = QtWidgets.QListWidgetItem(tr)
-            it.setFlags(it.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            it.setCheckState(Qt.CheckState.Checked if tr in b.traces else Qt.CheckState.Unchecked)
-            self.traces.addItem(it)
+        listed = list(m.traces if m else [])
+        listed += [t for t in b.traces if t not in listed]     # 方案裡有、清單沒列的（例如 S34）也顯示
+        for tr in listed:
+            self._add_trace_item(tr, tr in b.traces)
+        is_vna = bool(m and m.kind == "vna")
+        self.extra_row.setVisible(is_vna)
+        n = self._vna_ports(m)
+        self.trace_note.setVisible(is_vna)
+        self.trace_note.setText(f"{n} port VNA：可量 S11…S{n}{n}（Sij：i = 接收 port，j = 激發 port）" if n else
+                                "還不知道 VNA 的 port 數（連線一次就會記住）；其他 S 參數可以在上面輸入加入")
         while self.sform.rowCount():
             self.sform.removeRow(0)
         self._fields = {}

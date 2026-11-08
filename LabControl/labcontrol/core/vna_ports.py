@@ -117,6 +117,55 @@ def merge(name: str, info: Dict[str, Any]) -> Dict[str, Any]:
     return info
 
 
+def remember_ports(name: str, n_ports: int) -> None:
+    """記下偵測到的 port 數（沒連線時量測方塊也列得出 S11…S44）。port 數變了 → 舊的掃描結果作廢。"""
+    n = int(n_ports or 0)
+    if n <= 0:
+        return
+    with _LOCK:
+        d = load()
+        rec = dict(d.get(name) or {})
+        if int(rec.get("ports") or 0) == n:
+            return
+        d[name] = {"ports": n, "visible": None}
+        _save(d)
+
+
+def known_ports(inst: Any) -> int:
+    """沒連線也知道的 port 數：偵測結果 → instruments.yaml ports → 遠端節點回報的（鏡像的 _node_ports）
+    → 上次偵測（LAB/vna_ports.json）→ 0（不知道）。"""
+    info = getattr(inst, "ports", None)
+    if isinstance(info, dict) and info.get("ports"):
+        return int(info["ports"])
+    opts = getattr(inst, "options", {}) or {}
+    for k in ("ports", "_node_ports"):
+        try:
+            n = int(opts.get(k) or 0)
+        except (TypeError, ValueError):
+            n = 0
+        if n > 0:
+            return n
+    try:
+        return int(stored(inst.name).get("ports") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def trace_list(inst: Any, default: Iterable[str]) -> List[str]:
+    """量測清單：instruments.yaml traces → 偵測到的全部 S 參數（S21、現有 trace 優先）
+    → 已知 port 數的全部 S 參數（沒連線也一樣：4 port → S11…S44）→ default。"""
+    opts = getattr(inst, "options", {}) or {}
+    if opts.get("traces"):
+        return list(opts["traces"])
+    info = getattr(inst, "ports", None)
+    if isinstance(info, dict) and info.get("sparams"):
+        return sp.ordered(info["sparams"], info.get("traces") or {})
+    n = known_ports(inst)
+    if n:
+        return sp.ordered(sp.sparam_names(n))
+    return list(default)
+
+
 def set_visible(name: str, params: Optional[List[str]]) -> Dict[str, Any]:
     """伺服器手動選要顯示的 S 參數；None = 回到掃描結果。"""
     with _LOCK:
