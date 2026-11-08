@@ -285,12 +285,7 @@ class HubState:
             if "instruments" in info:
                 d["n_instruments"] = len(info.get("instruments") or [])
                 self._absorb(str(info.get("host") or ip), info.get("instruments") or [], info.get("scan"))
-            d.pop("net", None)
             self._touch()
-        if info.get("net"):                           # 1.0.29：網路用量（網卡總計數）
-            from . import netusage
-
-            netusage.report(self, str(info.get("host") or ip), info.get("net"), ip, str(info.get("user") or ""))
         return {"ok": True, "time": time.time(), "latest": self.latest_version(), "owners": self.owner_map()}
 
     def forget_device(self, did: str) -> None:
@@ -320,8 +315,7 @@ class HubState:
         with self.cond:
             n = self.node(name, create=True)
             self._absorb(str(st.get("host") or ip), st.get("instruments") or [], st.get("scan"))
-            net = st.get("net")
-            st = {k: v for k, v in st.items() if k not in ("scan", "net")}
+            st = {k: v for k, v in st.items() if k != "scan"}
             n.status = dict(st, ip=ip)
             n.last_seen = time.time()
             n.offline = st.get("state") == "offline"
@@ -331,12 +325,7 @@ class HubState:
                      node=n.name, state=st.get("state"), run=st.get("run"), simulate=st.get("simulate"),
                      ip=ip, last_seen=time.time(), n_instruments=len(st.get("instruments") or []))
             self._touch()
-            out = {"ok": True, "time": time.time(), "owners": self.owner_map(), "shared": self.shared_keys()}
-        if net:                                       # 1.0.29：網路用量（網卡總計數）
-            from . import netusage
-
-            netusage.report(self, str(st.get("host") or ip), net, ip, str(st.get("user") or ""))
-        return out
+            return {"ok": True, "time": time.time(), "owners": self.owner_map(), "shared": self.shared_keys()}
 
     def node_offline(self, name: str) -> None:
         with self.cond:

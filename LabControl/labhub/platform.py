@@ -68,9 +68,14 @@ DEFAULT_MODULES: Dict[str, Dict[str, Any]] = {
              "description": "HFSS 自動化工具：DXF 版圖 → 3D 模型、S 參數與場型模擬、YIG 磁性球（Windows ＋ Ansys AEDT 2026 R1）",
              "note": "Windows：下載安裝程式（…_windows-setup.exe）執行，裝好開始功能表與桌面都有捷徑，不用管理員密碼；之後程式會自己更新。"
                      "需要 Ansys Electronics Desktop 2026 R1（或 2025 R2）。"},
+    # 1.0.30：流量監看（QELNetMeter_v<版本>_windows.exe / _macos-<晶片>.dmg）：每台裝置開機在背景記錄連到實驗室網段時的流量
+    "netmeter": {"name": "流量監看", "kind": "app", "app": "QEL 流量監看", "order": 7,
+                 "description": "裝在每台電腦：連到實驗室網段（192.168.50.x）時記錄這台的網路用量，在 Hub「網路用量」頁看",
+                 "note": "Windows：下載 .exe 雙擊一次就裝好並在背景執行（開機自動啟動、不用管理員密碼）；"
+                         "macOS：打開 .dmg，把 App 拖到「應用程式」後打開一次。之後程式會自己更新。"},
 }
 #: 下載頁 /get 列出、不用登入就能下載的獨立程式
-APPS = ("labcontrol", "lablogviewer", "hfss")     # 1.0.18：模擬工具也有下載頁與程式內更新（/get/info、/get/watch）
+APPS = ("labcontrol", "lablogviewer", "hfss", "netmeter")     # 1.0.18：模擬工具；1.0.30：流量監看
 
 
 

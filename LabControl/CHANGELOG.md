@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.30 — 2026-11-09
+
+流量統計從 Lab Control 拿掉，改由獨立的「QEL 流量監看」程式（每台電腦背景執行，只算連到實驗室網段時的流量）回報到 Hub「網路用量」頁；下載頁新增流量監看。詳見 [docs/releases/v1.0.30.md](docs/releases/v1.0.30.md)。
+
+---
+
 ## 1.0.29 — 2026-11-09
 
 Hub「網路用量」：每天的上傳 / 下載——整個網段（Netgear 路由器 Traffic Meter）、NAS（SNMP）、各台電腦（Lab Control 回報網卡計數）。詳見 [docs/releases/v1.0.29.md](docs/releases/v1.0.29.md)。

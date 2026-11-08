@@ -1,4 +1,4 @@
-"""1.0.29：網路用量——每天用了多少流量（只用標準函式庫）。
+"""1.0.29：網路用量——每天用了多少流量（只用標準函式庫）。1.0.30：各台裝置改由獨立的「流量監看」程式回報。
 
 三個來源，都存成「每天上傳 / 下載幾個 byte」（日期以 Hub 設定的時區切，預設台北）：
 
@@ -9,13 +9,17 @@
    路由器回的是 MB（以 1 MB = 1024² byte 換算）。
 2. NAS 自己：SNMP v2c 讀網路介面的 64 位元計數（IF-MIB ifHCInOctets / ifHCOutOctets），每分鐘累加差值。
    DSM「控制台 → 終端機與 SNMP → SNMP」打開 SNMPv1/v2c 並設定社群名稱。
-3. 各台電腦：Lab Control 的定期回報帶網卡總計數（psutil），Hub 累加差值（重開機計數歸零時從 0 接著算）。
+3. 各台裝置：獨立的「流量監看」程式（QELNetMeter，開機自動在背景執行）只在裝置連到實驗室網段（預設
+   192.168.50.0/24）時，累計那張網卡的流量，自己存每天的總量，每分鐘把最近幾天的總量送到 Hub
+   （POST /api/netusage/report，不用登入）；Hub 以程式送來的數字為準（同一天直接覆蓋，重送不會重複算）。
 
     GET    /api/netusage?days=31          → 每天的用量（路由器 / NAS / 各台電腦）與各來源狀態（登入的人）
     PUT    /api/netusage/config           {router: {...}, nas: {...}, tz}（站長；密碼留空 = 不改）
     POST   /api/netusage/test             {what: "router" | "nas"} → 立刻試一次（站長）
-    PUT    /api/netusage/label            {host, label}（登入的人）
-    DELETE /api/netusage/pc/<host>        （站長）
+    POST   /api/netusage/report           ← 流量監看程式回報 {id, host, user, os, version, ip, subnet, ifaces,
+                                             rate: {up, down}, days: {日期: {up, down}}}
+    PUT    /api/netusage/label            {host: 裝置 id, label}（登入的人）
+    DELETE /api/netusage/pc/<裝置 id>      （站長）
     GET    /network                       → 網頁「網路用量」
 
 路由器密碼只存在 Hub 的資料夾（data/netusage_secret.json），API 不會回傳。
@@ -43,7 +47,11 @@ KEEP_DAYS = 400
 ROUTER_EVERY = 600.0
 NAS_EVERY = 60.0
 PC_OFFLINE_S = 180.0
-GAP_S = 7200.0                       # 電腦超過 2 小時沒回報 → 那段時間的流量不算（不知道是哪天）
+GAP_S = 7200.0                       # NAS 超過 2 小時沒讀到 → 那段時間的流量不算（不知道是哪天）
+MAX_DAY = 100 * 1024 ** 4            # 一台裝置一天超過 100 TB → 當成錯誤資料
+MAX_DEVICES = 500
+_ID = re.compile(r"^[A-Za-z0-9_.-]{6,64}$")
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MAX_DELTA = 50 * 1024 ** 4           # 一次差值超過 50 TB → 當成計數錯亂，不算
 MB = 1024 * 1024
 _HOST = re.compile(r"[^A-Za-z0-9_.@-]+")
@@ -423,7 +431,8 @@ class NetUsage:
         self.router.setdefault("days", {})
         self.nas: Dict[str, Any] = dict(d.get("nas") or {})
         self.nas.setdefault("days", {})
-        self.pcs: Dict[str, Dict[str, Any]] = {k: v for k, v in (d.get("pcs") or {}).items() if isinstance(v, dict)}
+        # 1.0.30：流量監看程式回報的裝置（key = 程式產生的裝置 id）；1.0.29 由 Lab Control 回報的舊資料（pcs）不再使用
+        self.pcs: Dict[str, Dict[str, Any]] = {k: v for k, v in (d.get("devices") or {}).items() if isinstance(v, dict)}
         self.status: Dict[str, Dict[str, Any]] = {"router": {}, "nas": {}}
         self._dirty = False
         self._last_save = 0.0
@@ -456,7 +465,7 @@ class NetUsage:
             if not force and self.now() - self._last_save < 30:
                 return
             try:
-                self._write(self.file, {"cfg": self.cfg, "router": self.router, "nas": self.nas, "pcs": self.pcs})
+                self._write(self.file, {"cfg": self.cfg, "router": self.router, "nas": self.nas, "devices": self.pcs})
                 self._dirty = False
                 self._last_save = self.now()
             except OSError as e:
@@ -587,42 +596,48 @@ class NetUsage:
         self.save()
         return st
 
-    # ---- 各台電腦（Lab Control 回報）----
-    def report_pc(self, host: str, net: Any, ip: str = "", user: str = "") -> None:
-        if not isinstance(net, dict):
-            return
-        try:
-            rx, tx = int(net.get("rx")), int(net.get("tx"))
-        except (TypeError, ValueError):
-            return
-        if rx < 0 or tx < 0:
-            return
-        key = _HOST.sub("_", str(host or ip or "?"))[:80]
+    # ---- 各台裝置（流量監看程式回報）----
+    def report_device(self, b: Dict[str, Any], ip: str = "") -> Dict[str, Any]:
+        did = str(b.get("id") or "")
+        if not _ID.match(did):
+            raise ValueError("裝置 id 格式錯誤")
+        days_in = b.get("days") if isinstance(b.get("days"), dict) else {}
+        today = _dt.date.fromisoformat(self.today())
+        lo, hi = (today - _dt.timedelta(days=KEEP_DAYS)).isoformat(), (today + _dt.timedelta(days=1)).isoformat()
+        clean: Dict[str, Dict[str, int]] = {}
+        for k, v in list(days_in.items())[:62]:
+            if not isinstance(k, str) or not _DATE.match(k) or not (lo <= k <= hi) or not isinstance(v, dict):
+                continue
+            try:
+                up, down = int(v.get("up") or 0), int(v.get("down") or 0)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= up <= MAX_DAY and 0 <= down <= MAX_DAY:
+                clean[k] = {"up": up, "down": down}
+        rate = b.get("rate") if isinstance(b.get("rate"), dict) else {}
         now = self.now()
         with self.lock:
-            if key not in self.pcs and len(self.pcs) >= 300:
-                return
-            pc = self.pcs.setdefault(key, {"days": {}})
-            last = pc.get("last")
-            if last and now - float(last.get("t") or 0) > GAP_S:
-                last = None                             # 很久沒回報：不知道那段時間是哪天用的 → 重新取基準
-            if last:
-                lrx, ltx = int(last["rx"]), int(last["tx"])
-                drx, dtx = rx - lrx, tx - ltx
-                if drx < 0 or dtx < 0:
-                    if rx < lrx * 0.5 or tx < ltx * 0.5:
-                        drx, dtx = rx, tx               # 計數掉很多 = 重開機 / 網卡重設：從 0 接著算
-                    else:
-                        # 同一台的量測節點與主程式都會回報，偶爾舊的那筆晚到 → 略過這筆
-                        pc.update(seen=now)
-                        return
-                if drx <= MAX_DELTA and dtx <= MAX_DELTA:
-                    _add(pc["days"], self.today(), dtx, drx)
-            pc["last"] = {"rx": rx, "tx": tx, "t": now}
-            pc.update(seen=now, ip=_s(ip, 60), user=_s(user, 60), host=_s(host, 80))
-            _trim(pc["days"], self.today())
+            if did not in self.pcs and len(self.pcs) >= MAX_DEVICES:
+                raise ValueError("裝置太多")
+            dev = self.pcs.setdefault(did, {"days": {}})
+            dev["days"].update(clean)                  # 程式自己累計：同一天以最新的數字為準
+            ifs = b.get("ifaces") if isinstance(b.get("ifaces"), list) else []
+            try:
+                r = {"up": max(0.0, float(rate.get("up") or 0)), "down": max(0.0, float(rate.get("down") or 0))}
+            except (TypeError, ValueError):
+                r = {"up": 0.0, "down": 0.0}
+            dev.update(seen=now, src_ip=_s(ip, 60), on_net=bool(b.get("on_net", True)))
+            if rate:
+                dev["rate"] = r
+            for k, n in (("ip", 60), ("host", 80), ("user", 60), ("os", 60), ("version", 20), ("subnet", 40)):
+                if b.get(k):
+                    dev[k] = _s(b[k], n)
+            if ifs:
+                dev["ifaces"] = [_s(x, 40) for x in ifs][:8]
+            _trim(dev["days"], today.isoformat())
             self._dirty = True
         self.save()
+        return {"ok": True, "time": now, "today": today.isoformat()}
 
     def set_label(self, host: str, label: str) -> None:
         with self.lock:
@@ -658,9 +673,11 @@ class NetUsage:
         with self.lock:
             pcs = []
             for key, pc in self.pcs.items():
+                online = bool(pc.get("seen") and now - float(pc["seen"]) < PC_OFFLINE_S)
                 pcs.append({"key": key, "host": pc.get("host") or key, "label": pc.get("label", ""),
                             "ip": pc.get("ip", ""), "user": pc.get("user", ""), "seen": pc.get("seen"),
-                            "online": bool(pc.get("seen") and now - float(pc["seen"]) < PC_OFFLINE_S),
+                            "os": pc.get("os", ""), "version": pc.get("version", ""), "ifaces": pc.get("ifaces") or [],
+                            "online": online, "rate": pc.get("rate") if online else None,
                             "days": pick(pc.get("days") or {}), "month": month_sum(pc.get("days") or {})})
             pcs.sort(key=lambda p: -(p["month"]["up"] + p["month"]["down"]))
             return {"now": now, "today": dates[-1], "dates": dates,
@@ -715,14 +732,19 @@ def start(hub) -> NetUsage:
     return st
 
 
-def report(hub, host: str, net: Any, ip: str = "", user: str = "") -> None:
-    """device_heartbeat / node_status 呼叫：有 net 計數就累加。"""
-    if not isinstance(net, dict):
-        return
+@route("POST", r"/api/netusage/report", auth=False)
+def _report(h: Handler) -> None:
+    """流量監看程式回報（不用登入；只收固定欄位、有長度上限）。"""
     try:
-        store(hub).report_pc(host, net, ip, user)
-    except Exception:  # noqa: BLE001
-        log.exception("記錄網路用量失敗")
+        b = json.loads(h._body_bytes(64 * 1024).decode("utf-8") or "{}")
+    except ValueError:
+        raise HubHTTPError(400, "JSON 格式錯誤") from None
+    if not isinstance(b, dict):
+        raise HubHTTPError(400, "格式錯誤")
+    try:
+        h._json(store(h.hub).report_device(b, h.ip))
+    except ValueError as e:
+        raise HubHTTPError(400, str(e)) from None
 
 
 @route("GET", r"/api/netusage", auth="any")

@@ -175,67 +175,35 @@ def test_poll_nas_accumulates_deltas(tmp_path):
     assert st.nas["days"]["2026-11-09"]["down"] == 3000 + 5000 + 3000
 
 
-# ---- 各台電腦 -----------------------------------------------------------------
-def test_report_pc_deltas_reset_stale_and_gap(tmp_path):
+# ---- 各台裝置（流量監看程式）----------------------------------------------------
+def test_report_device_replaces_days(tmp_path):
     clk = Clock(_t("2026-11-09", 9))
     st = nu.NetUsage(tmp_path, now=clk)
-    st.report_pc("LAB-1", {"rx": 10_000, "tx": 2_000})
-    clk.t += 30
-    st.report_pc("LAB-1", {"rx": 15_000, "tx": 2_500})
-    assert st.pcs["LAB-1"]["days"]["2026-11-09"] == {"up": 500, "down": 5000}
-    clk.t += 1
-    st.report_pc("LAB-1", {"rx": 14_900, "tx": 2_500})          # 舊的一筆晚到 → 略過
-    assert st.pcs["LAB-1"]["days"]["2026-11-09"]["down"] == 5000
-    clk.t += 30
-    st.report_pc("LAB-1", {"rx": 100, "tx": 50})                # 重開機
-    assert st.pcs["LAB-1"]["days"]["2026-11-09"] == {"up": 550, "down": 5100}
-    clk.t = _t("2026-11-10", 15)                                # 隔天、超過 2 小時沒回報 → 重新取基準
-    st.report_pc("LAB-1", {"rx": 9_000_000, "tx": 50})
-    assert "2026-11-10" not in st.pcs["LAB-1"]["days"]
-    clk.t += 30
-    st.report_pc("LAB-1", {"rx": 9_000_400, "tx": 80})
-    assert st.pcs["LAB-1"]["days"]["2026-11-10"] == {"up": 30, "down": 400}
-    st.report_pc("bad", {"rx": "x"})
-    assert "bad" not in st.pcs
+    rep = {"id": "dev-0001-abcd", "host": "LAB-1", "user": "u", "os": "Windows 11", "version": "1.0.0",
+           "ip": "192.168.50.31", "subnet": "192.168.50.0/24", "ifaces": ["Ethernet"], "rate": {"up": 10, "down": 2000},
+           "days": {"2026-11-08": {"up": 100, "down": 1000}, "2026-11-09": {"up": 5, "down": 50}}}
+    assert st.report_device(rep, "192.168.50.31")["ok"]
+    rep["days"] = {"2026-11-09": {"up": 7, "down": 80}}                 # 重送 / 更新同一天：覆蓋，不重複算
+    st.report_device(rep, "192.168.50.31")
+    d = st.pcs["dev-0001-abcd"]["days"]
+    assert d == {"2026-11-08": {"up": 100, "down": 1000}, "2026-11-09": {"up": 7, "down": 80}}
+    # 壞資料：不合理的日期 / 數字略過
+    st.report_device({"id": "dev-0001-abcd", "days": {"1999-01-01": {"up": 1, "down": 1}, "2026-11-09": {"up": -5},
+                                                     "x": 3, "2026-11-30": {"up": 1, "down": 1}}})
+    assert set(st.pcs["dev-0001-abcd"]["days"]) == {"2026-11-08", "2026-11-09"}
+    with pytest.raises(ValueError):
+        st.report_device({"id": "x"})
     v = st.view(3)
-    assert v["pcs"][0]["host"] == "LAB-1" and v["pcs"][0]["online"] and v["pcs"][0]["month"]["down"] == 5500
-    st.set_label("LAB-1", "量測 1")
-    assert nu.NetUsage(tmp_path).pcs["LAB-1"]["label"] == "量測 1"
-
-
-def test_keep_days_trimmed(tmp_path):
-    clk = Clock(_t("2026-11-09"))
-    st = nu.NetUsage(tmp_path, now=clk)
-    st.pcs["X"] = {"days": {"2024-01-01": {"up": 1, "down": 1}}, "last": {"rx": 0, "tx": 0, "t": clk.t}}
-    clk.t += 10
-    st.report_pc("X", {"rx": 5, "tx": 5})
-    assert "2024-01-01" not in st.pcs["X"]["days"]
-
-
-def test_client_counters_filters_virtual():
-    from labcontrol.remote import netcount
-
-    for n in ("Ethernet", "Wi-Fi", "乙太網路", "eth0", "en0", "enp3s0"):
-        assert netcount.is_physical(n), n
-    for n in ("Loopback Pseudo-Interface 1", "lo", "vEthernet (WSL)", "Tailscale", "VMware Network Adapter VMnet8",
-              "docker0", "utun3", "awdl0", "ZeroTier One", "wg0", "Bluetooth Network Connection"):
-        assert not netcount.is_physical(n), n
-    c = netcount.counters()
-    assert c is None or (c["rx"] >= 0 and c["tx"] >= 0)
-    mac = """Name       Mtu   Network       Address            Ipkts Ierrs     Ibytes    Opkts Oerrs     Obytes  Coll
-lo0        16384 <Link#1>                        1000     0     200000     1000     0     200000     0
-lo0        16384 127           127.0.0.1         1000     -     200000     1000     -     200000     -
-en0        1500  <Link#6>    a4:83:e7:00:00:01  900000     0 1200000000   500000     0   80000000     0
-en0        1500  192.168.50    192.168.50.31    900000     - 1100000000   500000     -   70000000     -
-utun3      1380  <Link#20>                        500     0      90000      500     0      90000     0
-awdl0      1484  <Link#11>   9a:00:00:00:00:02       1     0        100        1     0        100     0
-XHC7*      0     <Link#4>                       100     0    5000000        0     0          0     0"""
-    r = netcount.parse_netstat_ibn(mac)
-    assert r == {"rx": 1200000000, "tx": 80000000, "nics": ["en0"]}
+    p = v["pcs"][0]
+    assert p["host"] == "LAB-1" and p["online"] and p["rate"]["down"] == 2000 and p["month"]["down"] == 1080
+    clk.t += 600
+    assert st.view(3)["pcs"][0]["online"] is False and st.view(3)["pcs"][0]["rate"] is None
+    st.set_label("dev-0001-abcd", "量測 1")
+    assert nu.NetUsage(tmp_path).pcs["dev-0001-abcd"]["label"] == "量測 1"
 
 
 # ---- HTTP -------------------------------------------------------------------
-def test_http_routes_and_heartbeat(tmp_path):
+def test_http_routes(tmp_path):
     from labhub.server import Config, make_server
     from tests import fake_paperlib
     from tests.test_122 import _call
@@ -253,17 +221,22 @@ def test_http_routes_and_heartbeat(tmp_path):
         assert _call(url + "/api/netusage")[0] == 401
         code, page = _call(url + "/network", cookie=ac)
         assert code == 200 and "網路用量" in page and 'href="/network"' in page
+        rep = {"id": "dev-lab1-0001", "host": "LAB-1", "user": "u", "days": {}}
+        v0 = _call(url + "/api/netusage?days=7", cookie=ac)[1]
+        rep["days"] = {v0["today"]: {"up": 200, "down": 3000}}
+        assert _call(url + "/api/netusage/report", "POST", rep)[0] == 200          # 不用登入
+        assert _call(url + "/api/netusage/report", "POST", {"id": "bad"})[0] == 400
+        assert _call(url + "/api/netusage/report", "POST", {"id": "dev-lab2-0002", "host": "LAB-2"})[0] == 200
+        # Lab Control 的心跳不再帶流量
         hb = {"id": "u@LAB-1", "host": "LAB-1", "user": "u", "net": {"rx": 1000, "tx": 100}}
         assert _call(url + "/api/devices/heartbeat", "POST", hb, headers=dev)[0] == 200
-        hb["net"] = {"rx": 4000, "tx": 300}
-        _call(url + "/api/devices/heartbeat", "POST", hb, headers=dev)
-        st = {"host": "LAB-2", "user": "u", "state": "idle", "instruments": [], "net": {"rx": 50, "tx": 5}}
-        assert _call(url + "/api/nodes/LAB-2/status", "POST", st, headers=dev)[0] == 200
         v = _call(url + "/api/netusage?days=7", cookie=ac)[1]
         pcs = {p["host"]: p for p in v["pcs"]}
-        assert pcs["LAB-1"]["days"][v["today"]] == {"up": 200, "down": 3000} and "LAB-2" in pcs
+        assert pcs["LAB-1"]["days"][v["today"]] == {"up": 200, "down": 3000} and "LAB-2" in pcs and len(pcs) == 2
         assert "config" not in v
-        assert "net" not in str(state.devices.get("u@LAB-1", {}).keys())
+        # 下載頁列出流量監看
+        info = _call(url + "/get/info")[1]
+        assert any(a["id"] == "netmeter" for a in info["apps"])
         # 設定只有站長
         assert _call(url + "/api/netusage/config", "PUT", {"router": {"host": "x"}}, ac)[0] == 403
         code, r = _call(url + "/api/netusage/config", "PUT",
@@ -271,9 +244,9 @@ def test_http_routes_and_heartbeat(tmp_path):
         assert code == 200 and r["config"]["router"]["has_password"] and "pw" not in str(r)
         v = _call(url + "/api/netusage", cookie=oc)[1]
         assert v["config"]["router"]["host"] == "192.0.2.1"
-        assert _call(url + "/api/netusage/label", "PUT", {"host": "LAB-1", "label": "量測 1"}, ac)[0] == 200
-        assert _call(url + "/api/netusage/pc/LAB-2", "DELETE", None, ac)[0] == 403
-        assert _call(url + "/api/netusage/pc/LAB-2", "DELETE", None, oc)[0] == 200
+        assert _call(url + "/api/netusage/label", "PUT", {"host": "dev-lab1-0001", "label": "量測 1"}, ac)[0] == 200
+        assert _call(url + "/api/netusage/pc/dev-lab2-0002", "DELETE", None, ac)[0] == 403
+        assert _call(url + "/api/netusage/pc/dev-lab2-0002", "DELETE", None, oc)[0] == 200
     finally:
         srv.shutdown()
         psrv.shutdown()

@@ -74,12 +74,13 @@
   <div class="card"><svg class="chart" id="ch-nas"></svg>
     <div class="legend"><span><i style="background:var(--down)"></i>收到</span><span><i style="background:var(--up)"></i>送出</span><span id="nnote"></span></div></div>
 
-  <h2>各台電腦 <span class="small muted">（Lab Control 開著時回報網卡總流量；含區網內傳檔）</span></h2>
+  <h2>各台裝置 <span class="small muted">（流量監看程式：只算連到實驗室網段時那張網卡的流量；含區網內傳檔）</span>
+    <a class="btn" href="/get" style="text-decoration:none;font-weight:400">⬇ 下載流量監看程式</a></h2>
   <div id="pcs"></div>
 
   <div id="cfgbox"></div>
   <p class="help">日期以台北時間切。路由器的數字是路由器 Traffic Meter 自己算的（以 1 MB = 1024² byte 換算）；
-    NAS 與各台電腦是網卡計數的差值。電腦超過 2 小時沒回報，那段時間的流量不算。</p>
+    NAS 是網卡計數的差值；各台裝置的數字是裝置上的流量監看程式自己累計的（離開實驗室網段時不算）。</p>
 </main>
 <script>
 const $ = s => document.querySelector(s);
@@ -177,10 +178,11 @@ function render() {
   const owner = ME && ME.user && ME.user.owner;
   if (!editing) {
     const w7 = d.dates[Math.max(0, d.dates.length - 7)];
-    $("#pcs").innerHTML = !d.pcs.length ? `<div class="empty">還沒有電腦回報。Lab Control 1.0.29 以上連上 Hub 後就會出現。</div>` :
-      `<div class="wrap"><table><thead><tr><th>電腦</th><th class="hide-sm">IP / 使用者</th><th class="n">今天</th><th class="n">昨天</th><th class="n hide-sm">近 7 天</th><th class="n">本月</th><th class="hide-sm">近 14 天</th><th class="hide-sm">最後回報</th>${owner ? "<th></th>" : ""}</tr></thead><tbody>` +
+    $("#pcs").innerHTML = !d.pcs.length ? `<div class="empty">還沒有裝置回報。在每台電腦裝「流量監看」程式（上面的下載按鈕；Windows 雙擊一次就在背景執行），連到實驗室網段後就會出現。</div>` :
+      `<div class="wrap"><table><thead><tr><th>裝置</th><th class="hide-sm">IP / 使用者</th><th class="n hide-sm">目前速率</th><th class="n">今天</th><th class="n">昨天</th><th class="n hide-sm">近 7 天</th><th class="n">本月</th><th class="hide-sm">近 14 天</th><th class="hide-sm">最後回報</th>${owner ? "<th></th>" : ""}</tr></thead><tbody>` +
       d.pcs.map(p => `<tr><td class="who"><span class="dot${p.online ? " on" : ""}"></span><input data-host="${esc(p.key)}" value="${esc(p.label)}" placeholder="${esc(p.host)}" maxlength="40" title="標註（Enter 存檔）">${p.label ? `<div class="small muted" style="padding-left:21px">${esc(p.host)}</div>` : ""}</td>
-        <td class="small muted hide-sm">${esc(p.ip)}<br>${esc(p.user)}</td>
+        <td class="small muted hide-sm">${esc(p.ip)}<br>${esc(p.user)}${p.os ? "　" + esc(p.os) : ""}</td>
+        <td class="n small hide-sm">${p.rate ? `↓ ${fmt(p.rate.down)}/s<br>↑ ${fmt(p.rate.up)}/s` : `<span class="muted">—</span>`}</td>
         <td class="n" title="${ud(p.days[today])}">${fmt(tot(p.days[today]))}</td><td class="n" title="${ud(p.days[yday])}">${fmt(tot(p.days[yday]))}</td>
         <td class="n hide-sm">${fmt(tot(sumDays(p.days, w7)))}</td><td class="n" title="${ud(p.month)}"><b>${fmt(tot(p.month))}</b></td>
         <td class="hide-sm">${spark(d.dates, p.days)}</td><td class="small muted hide-sm">${ago(p.seen)}</td>
@@ -195,7 +197,7 @@ function render() {
       };
     }
     for (const b of document.querySelectorAll("#pcs [data-del]")) b.onclick = async () => {
-      if (!confirm(`刪掉 ${b.dataset.del} 的用量紀錄？`)) return;
+      if (!confirm(`刪掉這台裝置的用量紀錄？（流量監看程式還開著的話會再出現）`)) return;
       await api("/api/netusage/pc/" + encodeURIComponent(b.dataset.del), {method: "DELETE"}); load();
     };
   }

@@ -226,17 +226,7 @@ class NodeService:
                           "set": bool(setting("remote.node.allow_remote_set", True)),
                           "update": bool(setting("remote.node.allow_update", True))},
                 "instruments": instrument_report(self.station), "scan": dict(last_scan),
-                "upload_pending": pending, "error": self.last_error, "data": self.data_info(),
-                "net": self._net()}
-
-    @staticmethod
-    def _net():
-        """1.0.29：網卡總計數（Hub「網路用量」累加成每天用量）；settings remote.report_net: false 關掉。"""
-        if not setting("remote.report_net", True):
-            return None
-        from .netcount import counters
-
-        return counters()
+                "upload_pending": pending, "error": self.last_error, "data": self.data_info()}
 
     def _post_status(self) -> None:
         r = self.hub.put_status(self.name, self.status())
