@@ -13,7 +13,7 @@ from typing import Any, Dict, Optional
 _SKIP = re.compile(
     r"loopback|^lo\d*$|pseudo|vethernet|hyper-v|vmware|vmnet|virtualbox|vboxnet|docker|^br-|^veth|^virbr|wsl|"
     r"tailscale|wireguard|^wg\d|zerotier|^zt|wintun|tun\d|^tap|^utun|^awdl|^llw|^bridge|^gif|^stf|^anpi|^ap\d|"
-    r"bluetooth|isatap|teredo|6to4|npcap|kernel debug|^ham|^ifb|^dummy|^sit\d|^ip6tnl", re.I)
+    r"bluetooth|isatap|teredo|6to4|npcap|kernel debug|^ham|^ifb|^dummy|^sit\d|^ip6tnl|^xhc|\*$", re.I)
 
 
 def is_physical(name: str) -> bool:
