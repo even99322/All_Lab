@@ -15,6 +15,7 @@ from PyQt6.QtCore import QObject, Qt, pyqtSignal
 
 from ....core.station import Station
 from ....core.units import parse_quantity, split_unit
+from ....scheme.catalog import REPEAT
 from ....scheme.compile import target_param_ref
 from ....settings import setting
 from .doc import WorkbenchDoc
@@ -215,6 +216,12 @@ class ChannelPanel(QtWidgets.QWidget):
                          "settable": p.settable, "kind": sp.kind if sp else "float",
                          "choices": sp.choices if sp else None})
             g.setExpanded(True)
+        # 1.0.31：流程控制——重複 N 次（不設定儀器的迴圈）
+        g = group("流程", "不屬於任何儀器的流程方塊")
+        row(g, "🔁 重複 N 次", "迴圈", {"ref": None, "common": True,
+                                     "spec": {"kind": "set", "target": REPEAT, "mode": "sweep"}},
+            kind_color("param").name())
+        g.setExpanded(True)
         # 配進電磁鐵組的電源：平時（只顯示常用）只看到電磁鐵組；取消「只顯示常用」仍可單獨設定
         members = {str(r).split(".")[0] for i in st.instruments.values() for r in (i.options.get("sources") or [])}
         for i in range(self.tree.topLevelItemCount()):

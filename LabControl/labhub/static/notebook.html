@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>實驗記錄</title>
+<style>
+  :root { --bg:#f3f4f6; --card:#fff; --text:#1c1f24; --muted:#6b7280; --line:#e2e5e9; --soft:#eef0f3;
+          --accent:#1971c2; --accent-soft:#e7f1fb; --ok:#2b8a3e; --warn:#e67700; --err:#e03131; --code:#f6f8fa; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1116; --card:#151a21; --text:#e9ecef; --muted:#8b939d; --line:#2a313b; --soft:#1c222b;
+            --accent:#4dabf7; --accent-soft:#16283a; --ok:#40c057; --warn:#ffa94d; --err:#ff6b6b; --code:#1b2129; }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); }
+  body { font:14px/1.5 -apple-system,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:12px 14px 60px; }
+  h1 { font-size:20px; margin:4px 0 10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .sp { flex:1; }
+  h1 .btn { font-size:14px; font-weight:400; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .btn { border:1px solid var(--line); background:var(--soft); color:var(--text); border-radius:8px; padding:5px 11px; font:inherit; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+  .btn:hover { border-color:var(--accent); }
+  .btn.pri { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.del { color:var(--err); background:transparent; }
+  .btn.sm { padding:2px 8px; font-size:12px; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  input[type=text], input[type=search], input[type=date], select, textarea { font:inherit; padding:5px 9px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); min-width:0; }
+  input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent); }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  .bar input[type=search] { flex:1 1 220px; }
+  .tags { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 10px; }
+  .tag { display:inline-block; padding:1px 9px; border-radius:999px; background:var(--accent-soft); color:var(--accent); font-size:12px; cursor:pointer; border:1px solid transparent; }
+  .tag.on { border-color:var(--accent); font-weight:700; }
+  .tag .n { color:var(--muted); margin-left:3px; }
+  .list { display:flex; flex-direction:column; gap:8px; }
+  .item { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; display:flex; gap:10px; align-items:flex-start; cursor:pointer; }
+  .item:hover { border-color:var(--accent); }
+  .item input[type=checkbox] { margin-top:4px; }
+  .item .t { font-weight:700; font-size:15px; }
+  .item .m { color:var(--muted); font-size:12px; display:flex; gap:10px; flex-wrap:wrap; margin-top:2px; }
+  .item .s { color:var(--muted); font-size:13px; margin-top:4px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .pill { display:inline-block; padding:0 7px; border-radius:999px; font-size:11px; font-weight:700; background:var(--soft); color:var(--muted); }
+  .pill.auto { background:#e6fcf5; color:#087f5b; } .pill.bad { background:#fff5f5; color:var(--err); }
+  @media (prefers-color-scheme: dark) { .pill.auto { background:#0b3328; color:#63e6be; } .pill.bad { background:#3a1a1a; } }
+  .empty { background:var(--card); border:1px dashed var(--line); border-radius:12px; padding:24px; text-align:center; color:var(--muted); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 18px; }
+  .meta { color:var(--muted); font-size:13px; display:flex; flex-wrap:wrap; gap:4px 14px; margin:2px 0 10px; }
+  .meta a { color:var(--accent); }
+  .warnbox { background:#fff4e6; color:#a24f00; border:1px solid #ffd8a8; border-radius:10px; padding:8px 12px; margin:8px 0; }
+  @media (prefers-color-scheme: dark) { .warnbox { background:#33240f; color:#ffc078; border-color:#5c3c12; } }
+  .errbox { background:#fff5f5; color:var(--err); border:1px solid #ffc9c9; border-radius:10px; padding:8px 12px; margin:8px 0; }
+  @media (prefers-color-scheme: dark) { .errbox { background:#3a1a1a; border-color:#5c2626; } }
+  /* 內文 */
+  .md { overflow-wrap:anywhere; }
+  .md h1, .md h2, .md h3, .md h4 { margin:16px 0 6px; line-height:1.3; } .md h1 { font-size:22px; } .md h2 { font-size:18px; } .md h3 { font-size:16px; } .md h4 { font-size:14px; }
+  .md p { margin:6px 0; } .md ul, .md ol { margin:6px 0; padding-left:24px; }
+  .md img { max-width:100%; height:auto; border-radius:6px; border:1px solid var(--line); display:block; margin:6px 0; }
+  .md code { background:var(--code); padding:1px 5px; border-radius:4px; font:12.5px/1.4 ui-monospace,Consolas,Menlo,monospace; }
+  .md pre { background:var(--code); padding:10px 12px; border-radius:8px; overflow-x:auto; } .md pre code { background:none; padding:0; }
+  .md blockquote { margin:6px 0; padding:4px 12px; border-left:3px solid var(--accent); color:var(--muted); background:var(--soft); border-radius:0 8px 8px 0; }
+  .md table { border-collapse:collapse; margin:8px 0; display:block; overflow-x:auto; max-width:100%; }
+  .md th, .md td { border:1px solid var(--line); padding:4px 10px; text-align:left; } .md th { background:var(--soft); }
+  .md hr { border:0; border-top:1px solid var(--line); margin:14px 0; }
+  .md a { color:var(--accent); }
+  .md li.task { list-style:none; margin-left:-20px; }
+  .sec { margin-top:16px; } .sec h3 { font-size:14px; margin:0 0 6px; color:var(--muted); }
+  .files a, .links a { color:var(--accent); }
+  .files li, .links li { margin:2px 0; }
+  /* 留言 */
+  .cm { border-top:1px solid var(--line); padding:8px 0; } .cm:first-child { border-top:0; }
+  .cm .h { font-size:12px; color:var(--muted); display:flex; gap:8px; align-items:center; }
+  .cm .b { white-space:pre-wrap; margin-top:2px; }
+  .cmform { display:flex; gap:8px; margin-top:8px; } .cmform textarea { flex:1; min-height:38px; resize:vertical; }
+  /* 編輯 */
+  .form { display:grid; grid-template-columns:90px 1fr; gap:8px 10px; align-items:center; }
+  .form > label { color:var(--muted); font-size:13px; }
+  .form input[type=text], .form select { width:100%; }
+  .tools { display:flex; gap:4px; flex-wrap:wrap; margin:10px 0 6px; align-items:center; }
+  .tools .btn { padding:3px 9px; }
+  .edit2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .edit2.one { grid-template-columns:1fr; } .edit2.one .pv { display:none; }
+  #body { width:100%; min-height:460px; resize:vertical; font:13px/1.55 ui-monospace,Consolas,Menlo,monospace; }
+  .pv { border:1px solid var(--line); border-radius:8px; padding:8px 14px; min-height:460px; max-height:75vh; overflow:auto; background:var(--card); }
+  .drop { outline:2px dashed var(--accent); outline-offset:-6px; }
+  .lk { display:grid; grid-template-columns:110px 1fr 1fr auto; gap:6px; margin:4px 0; }
+  .hist li { margin:3px 0; } .hist a { color:var(--accent); cursor:pointer; }
+  .toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); background:#212529; color:#fff; padding:8px 16px; border-radius:10px; font-size:13px; z-index:99; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .toast.on { opacity:1; }
+  .printhead { display:none; }
+  @media (max-width: 760px) { .edit2 { grid-template-columns:1fr; } .pv { display:none; } .edit2.pvonly .pv { display:block; } .edit2.pvonly textarea { display:none; }
+    .form { grid-template-columns:1fr; } .lk { grid-template-columns:1fr 1fr; } }
+  @media print {
+    :root { --bg:#fff; --card:#fff; --text:#000; --muted:#555; --line:#bbb; --soft:#f1f3f5; --code:#f4f4f4; }
+    .qel-nav, .noprint, .bar, .tags, .cmform, .btn, .toast { display:none !important; }
+    main { max-width:none; padding:0; }
+    .card { border:0; padding:0; }
+    .entry { page-break-after:always; } .entry:last-child { page-break-after:auto; }
+    .md img { page-break-inside:avoid; max-height:90vh; object-fit:contain; }
+    .md a { color:#000; text-decoration:none; }
+    .printhead { display:block; font-size:11px; color:#555; border-bottom:1px solid #bbb; margin-bottom:8px; padding-bottom:4px; }
+  }
+</style>
+</head>
+<body>
+<!--QEL-NAV-->
+<main id="app"><div class="empty">讀取中…</div></main>
+<div class="toast" id="toast"></div>
+<input type="file" id="filepick" multiple hidden>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const app = $("app");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+let ME = {}, PROJECTS = null, editTimer = null, dirty = false;
+
+async function api(path, opt = {}) {
+  const o = { credentials:"same-origin", cache:"no-store", ...opt };
+  if (o.json !== undefined) { o.body = JSON.stringify(o.json); o.headers = { "Content-Type":"application/json" }; delete o.json; }
+  const r = await fetch(path, o);
+  if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent(location.pathname + location.hash); throw new Error("login"); }
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 409 && d.conflict) { const e = new Error(d.error); e.conflict = d.entry; throw e; }
+  if (!r.ok || d.ok === false) throw new Error(d.error || r.statusText);
+  return d;
+}
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("on"), 2200); }
+const fmt = t => { if (!t) return "—"; const d = new Date(t * 1000), p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+const ago = t => { const s = Date.now() / 1000 - t; if (s < 60) return "剛剛"; if (s < 3600) return Math.floor(s / 60) + " 分鐘前";
+  if (s < 86400) return Math.floor(s / 3600) + " 小時前"; return fmt(t).slice(0, 10); };
+const STATUS = { finished:"完成", stopped:"中途停止", aborted:"中止", error:"錯誤", failed:"失敗" };
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
+
+// ---------------------------------------------------------------- Markdown（先跳脫，再轉；只允許 http(s)、站內網址）
+function safeUrl(u) { u = String(u || "").trim(); return /^(https?:\/\/|\/|#)/i.test(u) && !/^\/\//.test(u) ? u : ""; }
+function inline(s) {
+  const codes = [];
+  s = s.replace(/`([^`]+)`/g, (m, c) => { codes.push(c); return "\u0000" + (codes.length - 1) + "\u0000"; });
+  s = esc(s);
+  s = s.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;[^&]*&quot;)?\)/g, (m, alt, u) => {
+    const url = safeUrl(u.replace(/&amp;/g, "&")); return url ? `<img src="${esc(url)}" alt="${alt}" loading="lazy">` : m; });
+  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, t, u) => {
+    const url = safeUrl(u.replace(/&amp;/g, "&")); if (!url) return m;
+    const ext = /^https?:/i.test(url) ? ' target="_blank" rel="noopener"' : ""; return `<a href="${esc(url)}"${ext}>${t}</a>`; });
+  s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, (m, a, u) => `${a}<a href="${u}" target="_blank" rel="noopener">${u}</a>`);
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<i>$2</i>")
+       .replace(/~~([^~]+)~~/g, "<s>$1</s>").replace(/==([^=]+)==/g, "<mark>$1</mark>");
+  return s.replace(/\u0000(\d+)\u0000/g, (m, i) => `<code>${esc(codes[+i])}</code>`);
+}
+function md(src) {
+  const L = String(src || "").replace(/\r\n?/g, "\n").split("\n"), out = [];
+  let i = 0;
+  const isTableSep = l => /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(l);
+  const cells = l => l.trim().replace(/^\||\|$/g, "").split("|").map(c => inline(c.trim()));
+  while (i < L.length) {
+    const l = L[i];
+    if (/^```/.test(l)) { const buf = []; i++; while (i < L.length && !/^```/.test(L[i])) buf.push(L[i++]); i++;
+      out.push(`<pre><code>${esc(buf.join("\n"))}</code></pre>`); continue; }
+    let m;
+    if ((m = /^(#{1,4})\s+(.*)$/.exec(l))) { out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); i++; continue; }
+    if (/^\s*(---+|\*\*\*+)\s*$/.test(l)) { out.push("<hr>"); i++; continue; }
+    if (/^\s*>/.test(l)) { const buf = []; while (i < L.length && /^\s*>/.test(L[i])) buf.push(L[i++].replace(/^\s*>\s?/, ""));
+      out.push(`<blockquote>${md(buf.join("\n"))}</blockquote>`); continue; }
+    if (/\|/.test(l) && i + 1 < L.length && isTableSep(L[i + 1])) {
+      const head = cells(l); i += 2; const rows = [];
+      while (i < L.length && /\|/.test(L[i]) && L[i].trim()) rows.push(cells(L[i++]));
+      out.push(`<table><thead><tr>${head.map(c => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`);
+      continue; }
+    if (/^\s*([-*+]|\d+[.)])\s+/.test(l)) {
+      const ordered = /^\s*\d/.test(l), items = [];
+      while (i < L.length && /^\s*([-*+]|\d+[.)])\s+/.test(L[i])) {
+        let t = L[i++].replace(/^\s*([-*+]|\d+[.)])\s+/, "");
+        while (i < L.length && /^\s{2,}\S/.test(L[i]) && !/^\s*([-*+]|\d+[.)])\s+/.test(L[i])) t += " " + L[i++].trim();
+        const tm = /^\[([ xX])\]\s+(.*)$/.exec(t);
+        items.push(tm ? `<li class="task">${tm[1] === " " ? "☐" : "☑"} ${inline(tm[2])}</li>` : `<li>${inline(t)}</li>`);
+      }
+      out.push(ordered ? `<ol>${items.join("")}</ol>` : `<ul>${items.join("")}</ul>`); continue; }
+    if (!l.trim()) { i++; continue; }
+    const buf = [];
+    while (i < L.length && L[i].trim() && !/^(```|#{1,4}\s|\s*>|\s*([-*+]|\d+[.)])\s+)/.test(L[i]) && !(/\|/.test(L[i]) && i + 1 < L.length && isTableSep(L[i + 1]))) buf.push(L[i++]);
+    out.push(`<p>${buf.map(inline).join("<br>")}</p>`);
+  }
+  return out.join("\n");
+}
+
+// ---------------------------------------------------------------- 路由：#/  #/e/<id>  #/e/<id>/edit  #/new  #/e/<id>/history  #/print/<id,id>
+function route() {
+  stopEditing();
+  const h = location.hash || "#/";
+  let m;
+  if ((m = /^#\/e\/([\w-]+)\/edit$/.exec(h))) return showEdit(m[1]);
+  if ((m = /^#\/e\/([\w-]+)\/history$/.exec(h))) return showHistory(m[1]);
+  if ((m = /^#\/e\/([\w-]+)$/.exec(h))) return showEntry(m[1]);
+  if (h === "#/new") return showEdit(null);
+  if ((m = /^#\/print\/([\w,-]+)$/.exec(h))) return showPrint(m[1].split(","));
+  return showList();
+}
+window.addEventListener("hashchange", () => {
+  if (dirty && !confirm("編輯的內容還沒存，確定要離開？（草稿會留在這個瀏覽器）")) { history.back(); return; }
+  dirty = false; route();
+});
+window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+// ---------------------------------------------------------------- 清單
+const Q = { q:"", tag:"", project:"", kind:"", author:"", from:"", to:"" };
+let selected = new Set();
+async function showList() {
+  document.title = "實驗記錄";
+  app.innerHTML = `
+  <h1>實驗記錄 <span class="sp"></span>
+    <button class="btn" id="bprint" title="勾選幾筆後列印，或在列印視窗選「另存為 PDF」">🖨 列印 / PDF（<span id="nsel">0</span>）</button>
+    <a class="btn pri" href="#/new">＋ 新增記錄</a></h1>
+  <div class="bar">
+    <input type="search" id="q" placeholder="搜尋標題、內文、留言、標籤…" value="${esc(Q.q)}">
+    <select id="kind"><option value="">全部</option><option value="manual">手寫</option><option value="auto">量測自動</option></select>
+    <select id="proj"><option value="">所有專案</option></select>
+    <input type="text" id="author" placeholder="作者" size="8" value="${esc(Q.author)}">
+    <input type="date" id="from" value="${esc(Q.from)}" title="從"> <input type="date" id="to" value="${esc(Q.to)}" title="到">
+  </div>
+  <div class="tags" id="tags"></div>
+  <div class="list" id="list"><div class="empty">讀取中…</div></div>
+  <div class="noprint" style="margin-top:10px;text-align:center"><button class="btn" id="more" hidden>載入更多</button></div>`;
+  $("kind").value = Q.kind;
+  let t;
+  $("q").oninput = () => { clearTimeout(t); t = setTimeout(() => { Q.q = $("q").value; load(); }, 250); };
+  $("author").oninput = () => { clearTimeout(t); t = setTimeout(() => { Q.author = $("author").value.trim(); load(); }, 300); };
+  for (const k of ["kind", "from", "to"]) $(k).onchange = () => { Q[k] = $(k).value; load(); };
+  $("proj").onchange = () => { Q.project = $("proj").value; load(); };
+  $("bprint").onclick = () => { if (!selected.size) return toast("先勾選要列印的記錄"); location.hash = "#/print/" + [...selected].join(","); };
+  projects().then(ps => { const s = $("proj"); if (!s) return;
+    for (const p of ps) { const o = document.createElement("option"); o.value = p.id; o.textContent = (p.path || [p.name]).join(" › "); s.appendChild(o); }
+    s.value = Q.project; }).catch(() => {});
+  let offset = 0;
+  async function load(more) {
+    offset = more ? offset + 100 : 0;
+    const qs = new URLSearchParams({ ...Q, offset, limit:100 });
+    try {
+      const d = await api("/api/notebook?" + qs);
+      ME = d.me || {};
+      const el = $("list"); if (!el) return;
+      if (!more) el.innerHTML = "";
+      if (!d.items.length && !more) el.innerHTML = `<div class="empty">${Object.values(Q).some(Boolean) ? "沒有符合的記錄" : "還沒有實驗記錄。按右上角「＋ 新增記錄」，或用 Lab Control 量測完會自動新增一筆。"}</div>`;
+      for (const e of d.items) el.appendChild(itemEl(e));
+      $("more").hidden = offset + d.items.length >= d.total;
+      $("more").onclick = () => load(true);
+      const tg = $("tags"); tg.innerHTML = "";
+      for (const [name, n] of d.tags) { const s = document.createElement("span"); s.className = "tag" + (Q.tag === name ? " on" : "");
+        s.innerHTML = `#${esc(name)}<span class="n">${n}</span>`; s.onclick = () => { Q.tag = Q.tag === name ? "" : name; load(); }; tg.appendChild(s); }
+    } catch (e) { if (e.message !== "login") $("list").innerHTML = `<div class="errbox">${esc(e.message)}</div>`; }
+  }
+  load();
+}
+function itemEl(e) {
+  const d = document.createElement("div"); d.className = "item";
+  const st = e.status && e.status !== "finished" ? ` <span class="pill bad">${esc(STATUS[e.status] || e.status)}</span>` : "";
+  d.innerHTML = `<input type="checkbox" ${selected.has(e.id) ? "checked" : ""} title="選取（列印 / PDF）">
+    <div style="flex:1;min-width:0"><div class="t">${esc(e.title)} ${e.kind === "auto" ? '<span class="pill auto">量測</span>' : ""}${st}</div>
+    <div class="m"><span>${esc(e.author_name || e.author || "")}</span><span>${fmt(e.created)}</span>
+      ${e.project && e.project.name ? `<span>📁 ${esc(e.project.name)}</span>` : ""}
+      ${(e.tags || []).map(t => `<span>#${esc(t)}</span>`).join("")}
+      ${e.n_comments ? `<span>💬 ${e.n_comments}</span>` : ""}${e.n_files ? `<span>📎 ${e.n_files}</span>` : ""}
+      ${e.rev > 1 ? `<span>改過 ${e.rev - 1} 次 · ${ago(e.updated)}</span>` : ""}</div>
+    <div class="s">${esc(e.snippet)}</div></div>`;
+  const cb = d.querySelector("input");
+  cb.onclick = ev => { ev.stopPropagation(); cb.checked ? selected.add(e.id) : selected.delete(e.id); $("nsel").textContent = selected.size; };
+  d.onclick = () => { location.hash = "#/e/" + e.id; };
+  setTimeout(() => { const n = $("nsel"); if (n) n.textContent = selected.size; });
+  return d;
+}
+async function projects() {
+  if (PROJECTS) return PROJECTS;
+  const d = await api("/api/platform/projects");
+  const byId = {}; for (const p of d.projects || []) byId[String(p.id)] = p;
+  PROJECTS = (d.projects || []).map(p => {
+    const ids = []; let cur = p, guard = 0;
+    while (cur && guard++ < 10) { ids.unshift(String(cur.id)); cur = byId[String(cur.parent_id ?? cur.parent ?? "")]; }
+    return { id:String(p.id), name:p.name, path:p.path || [p.name], path_ids:ids, url:p.url || "" };
+  }).sort((a, b) => a.path.join("/").localeCompare(b.path.join("/"), "zh-Hant"));
+  return PROJECTS;
+}
+
+// ---------------------------------------------------------------- 一筆
+function linkHref(l) {
+  if (l.kind === "data") return "/data#/" + (/^[dfs]\//.test(l.ref) ? l.ref : "s/" + encodeURIComponent(l.ref));
+  if (l.kind === "entry") return "#/e/" + encodeURIComponent(l.ref);
+  return safeUrl(l.ref);
+}
+const LINKKIND = { data:"📊 數據", paper:"📄 論文", url:"🔗 網址", entry:"📓 記錄" };
+function entryHtml(e, printing) {
+  const a = e.auto || {};
+  const proj = e.project && e.project.id ? `<span>📁 ${e.project.url ? `<a href="${esc(e.project.url)}" target="_blank" rel="noopener">${esc((e.project.path || [e.project.name]).join(" › "))}</a>` : esc((e.project.path || [e.project.name]).join(" › "))}</span>` : "";
+  const files = (e.files || []).filter(f => !new RegExp("\\(/api/notebook/" + e.id + "/files/" + encodeURIComponent(f.name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\)").test(e.body || ""));
+  const datafiles = (a.files || []);
+  return `<div class="printhead">實驗記錄 ${esc(e.id)} · 列印於 ${fmt(Date.now() / 1000)}</div>
+  <h1 style="margin-bottom:2px">${esc(e.title)} ${e.kind === "auto" ? '<span class="pill auto">量測</span>' : ""}</h1>
+  <div class="meta"><span>✍ ${esc(e.author_name || e.author || "")}</span><span>建立 ${fmt(e.created)}</span>
+    ${e.rev > 1 ? `<span>最後修改 ${fmt(e.updated)}（${esc(e.updated_by || "")}，第 ${e.rev} 版）</span>` : ""}
+    ${proj}${(e.tags || []).map(t => `<span class="tag" data-tag="${esc(t)}">#${esc(t)}</span>`).join("")}
+    ${(e.editors || []).length ? `<span>共同編輯：${esc(e.editors.join("、"))}</span>` : ""}</div>
+  <div class="md">${md(e.body)}</div>
+  ${datafiles.length ? `<div class="sec"><h3>量測檔（在「數據查看」找）</h3><ul class="files">${datafiles.map(f => `<li><a href="/data#/s/${encodeURIComponent(f.replace(/\.[^.]+$/, ""))}">${esc(f)}</a></li>`).join("")}</ul></div>` : ""}
+  ${(e.links || []).length ? `<div class="sec"><h3>連結</h3><ul class="links">${e.links.map(l => { const h = linkHref(l);
+      return `<li>${LINKKIND[l.kind] || ""} ${h ? `<a href="${esc(h)}"${/^https?:/.test(h) ? ' target="_blank" rel="noopener"' : ""}>${esc(l.label || l.ref)}</a>` : esc(l.label || l.ref)}${l.label && !printing ? ` <span class="muted small">${esc(l.ref)}</span>` : ""}</li>`; }).join("")}</ul></div>` : ""}
+  ${files.length ? `<div class="sec"><h3>附檔</h3><ul class="files">${files.map(f => `<li><a href="/api/notebook/${e.id}/files/${encodeURIComponent(f.name)}" target="_blank">${esc(f.name)}</a> <span class="muted small">${(f.size / 1024).toFixed(0)} KB</span></li>`).join("")}</ul></div>` : ""}
+  ${printing && (e.comments || []).length ? `<div class="sec"><h3>留言</h3>${e.comments.map(c => `<div class="cm"><div class="h"><b>${esc(c.name)}</b>${fmt(c.time)}</div><div class="b">${esc(c.text)}</div></div>`).join("")}</div>` : ""}`;
+}
+async function showEntry(id) {
+  let e;
+  try { e = (await api("/api/notebook/" + id)).entry; }
+  catch (err) { app.innerHTML = `<div class="errbox">${esc(err.message)}</div><a class="btn" href="#/">← 回清單</a>`; return; }
+  document.title = e.title + " · 實驗記錄";
+  app.innerHTML = `<div class="bar noprint"><a class="btn" href="#/">← 清單</a><span class="sp"></span>
+      ${e.can_edit ? `<a class="btn pri" href="#/e/${id}/edit">✏ 編輯</a>` : ""}
+      ${e.n_history ? `<a class="btn" href="#/e/${id}/history">🕘 歷史（${e.n_history}）</a>` : ""}
+      <button class="btn" id="bp">🖨 列印 / PDF</button>
+      <button class="btn" id="bcopy" title="複製這筆記錄的網址">🔗</button>
+      ${e.can_delete ? `<button class="btn del" id="bdel">刪除</button>` : ""}</div>
+    ${(e.editing || []).length ? `<div class="warnbox noprint">✏ ${esc(e.editing.join("、"))} 正在編輯這筆記錄</div>` : ""}
+    <div class="card entry">${entryHtml(e)}</div>
+    <div class="sec noprint"><h3>留言（<span id="ncm">${(e.comments || []).length}</span>）</h3><div class="card" id="cms"></div></div>`;
+  const cms = $("cms");
+  const renderC = () => {
+    $("ncm").textContent = (e.comments || []).length;
+    cms.innerHTML = (e.comments || []).map(c => `<div class="cm"><div class="h"><b>${esc(c.name)}</b>${fmt(c.time)}
+      ${(c.user === ME.username || ME.owner) ? `<button class="btn sm del" data-c="${c.id}">刪除</button>` : ""}</div><div class="b">${esc(c.text)}</div></div>`).join("")
+      + `<div class="cmform"><textarea id="ctext" placeholder="留言（Ctrl + Enter 送出）"></textarea><button class="btn pri" id="csend">送出</button></div>`;
+    cms.querySelectorAll("[data-c]").forEach(b => b.onclick = async () => {
+      if (!confirm("刪除這則留言？")) return;
+      try { await api(`/api/notebook/${id}/comments/${b.dataset.c}`, { method:"DELETE" }); e.comments = e.comments.filter(c => c.id !== b.dataset.c); renderC(); }
+      catch (err) { toast(err.message); } });
+    const send = async () => { const t = $("ctext").value.trim(); if (!t) return;
+      try { const d = await api(`/api/notebook/${id}/comments`, { method:"POST", json:{ text:t } }); (e.comments = e.comments || []).push(d.comment); renderC(); }
+      catch (err) { toast(err.message); } };
+    $("csend").onclick = send;
+    $("ctext").onkeydown = ev => { if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) send(); };
+  };
+  if (!ME.username) { try { ME = (await api("/api/notebook?limit=1")).me || {}; } catch (err) {} }
+  renderC();
+  app.querySelectorAll(".meta .tag").forEach(t => t.onclick = () => { Q.tag = t.dataset.tag; location.hash = "#/"; });
+  $("bp").onclick = () => window.print();
+  $("bcopy").onclick = () => { navigator.clipboard?.writeText(location.href).then(() => toast("已複製網址"), () => toast(location.href)); };
+  if ($("bdel")) $("bdel").onclick = async () => {
+    if (!confirm(`刪除「${e.title}」？（會移到 Hub 的資源回收，站長可以救回來）`)) return;
+    try { await api("/api/notebook/" + id, { method:"DELETE" }); toast("已刪除"); location.hash = "#/"; } catch (err) { toast(err.message); } };
+}
+
+// ---------------------------------------------------------------- 編輯 / 新增
+function stopEditing() {
+  if (editTimer) { clearInterval(editTimer.t); api(`/api/notebook/${editTimer.id}/editing`, { method:"PUT", json:{ on:false } }).catch(() => {}); editTimer = null; }
+}
+async function showEdit(id) {
+  let e = { title:"", body:"", tags:[], project:{}, links:[], editors:[], rev:0, can_edit:true, author:"" };
+  if (id) {
+    try { e = (await api("/api/notebook/" + id)).entry; } catch (err) { app.innerHTML = `<div class="errbox">${esc(err.message)}</div>`; return; }
+    if (!e.can_edit) { app.innerHTML = `<div class="errbox">只有作者、共同編輯者或站長可以修改這筆記錄</div><a class="btn" href="#/e/${id}">← 回去</a>`; return; }
+  }
+  if (!ME.username) { try { ME = (await api("/api/notebook?limit=1")).me || {}; } catch (err) {} }
+  const draftKey = "qel-nb-draft-" + (id || "new");
+  const draft = (() => { try { return JSON.parse(lsGet(draftKey) || "null"); } catch (err) { return null; } })();
+  document.title = (id ? "編輯：" + e.title : "新增記錄") + " · 實驗記錄";
+  const canEditors = !id || ME.owner || ME.username === e.author;
+  app.innerHTML = `<h1>${id ? "編輯記錄" : "新增記錄"}<span class="sp"></span>
+      <a class="btn" href="${id ? "#/e/" + id : "#/"}">取消</a><button class="btn pri" id="save">💾 儲存（Ctrl+S）</button></h1>
+    <div id="msg"></div>
+    ${(e.editing || []).length ? `<div class="warnbox">✏ ${esc(e.editing.join("、"))} 也正在編輯；誰先存誰的算，後存的人會看到提醒。</div>` : ""}
+    ${draft && draft.base === (e.rev || 0) && draft.body !== e.body ? `<div class="warnbox">這個瀏覽器有一份沒存的草稿（${fmt(draft.t)}）。<button class="btn sm" id="usedraft">用草稿</button> <button class="btn sm" id="dropdraft">丟掉</button></div>` : ""}
+    <div class="card">
+      <div class="form">
+        <label>標題</label><input type="text" id="title" value="${esc(e.title)}" placeholder="例如：YIG #3 FMR 線寬 vs 功率">
+        <label>標籤</label><input type="text" id="tags" value="${esc((e.tags || []).join(", "))}" placeholder="用逗號分開，例如：YIG, FMR, 樣品3">
+        <label>專案</label><select id="proj"><option value="">（不屬於專案）</option></select>
+        ${canEditors ? `<label>共同編輯</label><input type="text" id="editors" value="${esc((e.editors || []).join(", "))}" placeholder="論文庫帳號，用逗號分開（作者跟站長本來就可以改）">` : ""}
+      </div>
+      <div class="tools">
+        <button class="btn" data-w="**|**" title="粗體">B</button><button class="btn" data-w="*|*" title="斜體"><i>I</i></button>
+        <button class="btn" data-l="## " title="標題">H</button><button class="btn" data-l="- " title="清單">•</button>
+        <button class="btn" data-l="- [ ] " title="待辦">☐</button><button class="btn" data-l="> " title="引用">❝</button>
+        <button class="btn" data-w="\`|\`" title="程式碼">&lt;/&gt;</button>
+        <button class="btn" id="ttable" title="表格">▦ 表格</button>
+        <button class="btn" id="tfile" title="插入圖片或附檔（也可以直接貼上截圖或拖曳檔案進來）">🖼 圖片 / 附檔</button>
+        <button class="btn" id="tnow" title="插入現在時間">🕒</button>
+        <span class="sp"></span><button class="btn" id="tpv">預覽</button>
+      </div>
+      <div class="edit2" id="ed"><textarea id="body" placeholder="用 Markdown 寫：## 標題、**粗體**、- 清單、| 表格 |。截圖直接 Ctrl+V 貼上。">${esc(e.body)}</textarea><div class="pv md" id="pv"></div></div>
+      <div class="sec"><h3>連結（數據檔、論文、網址、其他記錄）</h3><div id="links"></div>
+        <button class="btn sm" id="addlink">＋ 加連結</button>
+        <span class="muted small">數據：填檔名（在「數據查看」搜尋）或 f/資料夾/檔名；記錄：填記錄編號</span></div>
+    </div>`;
+  const body = $("body"), pv = $("pv");
+  let links = (e.links || []).map(l => ({ ...l }));
+  const renderLinks = () => {
+    $("links").innerHTML = links.map((l, i) => `<div class="lk"><select data-i="${i}" data-k="kind">${Object.entries(LINKKIND).map(([k, v]) => `<option value="${k}"${l.kind === k ? " selected" : ""}>${v}</option>`).join("")}</select>
+      <input type="text" data-i="${i}" data-k="ref" value="${esc(l.ref)}" placeholder="${l.kind === "data" ? "檔名" : l.kind === "entry" ? "記錄編號" : "https://…"}">
+      <input type="text" data-i="${i}" data-k="label" value="${esc(l.label || "")}" placeholder="顯示文字（可不填）">
+      <button class="btn sm del" data-del="${i}">✕</button></div>`).join("");
+    $("links").querySelectorAll("[data-k]").forEach(x => x.oninput = x.onchange = () => { links[+x.dataset.i][x.dataset.k] = x.value; changed(); if (x.dataset.k === "kind") renderLinks(); });
+    $("links").querySelectorAll("[data-del]").forEach(x => x.onclick = () => { links.splice(+x.dataset.del, 1); renderLinks(); changed(); });
+  };
+  renderLinks();
+  $("addlink").onclick = () => { links.push({ kind:"data", ref:"", label:"" }); renderLinks(); };
+  projects().then(ps => { const s = $("proj"); if (!s) return;
+    for (const p of ps) { const o = document.createElement("option"); o.value = p.id; o.textContent = p.path.join(" › "); s.appendChild(o); }
+    if (e.project && e.project.id && !ps.some(p => p.id === e.project.id)) { const o = document.createElement("option"); o.value = e.project.id; o.textContent = e.project.name; s.appendChild(o); }
+    s.value = (e.project && e.project.id) || ""; }).catch(() => { const s = $("proj");
+    if (s && e.project && e.project.id) { const o = document.createElement("option"); o.value = e.project.id; o.textContent = e.project.name; s.appendChild(o); s.value = e.project.id; } });
+  let pvT;
+  const preview = () => { clearTimeout(pvT); pvT = setTimeout(() => { pv.innerHTML = md(body.value); }, 120); };
+  const changed = () => { dirty = true; preview();
+    lsSet(draftKey, JSON.stringify({ base:e.rev || 0, t:Date.now() / 1000, title:$("title").value, body:body.value, tags:$("tags").value })); };
+  preview();
+  for (const k of ["title", "tags", "editors"]) if ($(k)) $(k).oninput = changed;
+  $("proj").onchange = changed;
+  body.oninput = changed;
+  if ($("usedraft")) $("usedraft").onclick = () => { $("title").value = draft.title; body.value = draft.body; $("tags").value = draft.tags; changed(); $("usedraft").parentElement.remove(); };
+  if ($("dropdraft")) $("dropdraft").onclick = () => { lsSet(draftKey, null); $("dropdraft").parentElement.remove(); };
+  // 工具列
+  const insert = (before, after = "", line = false) => {
+    const s = body.selectionStart, t = body.selectionEnd, v = body.value;
+    if (line) { const ls = v.lastIndexOf("\n", s - 1) + 1; body.setRangeText(before, ls, ls, "end"); }
+    else { body.setRangeText(before + v.slice(s, t) + after, s, t, "select"); if (s === t) body.selectionStart = body.selectionEnd = s + before.length; }
+    body.focus(); changed();
+  };
+  app.querySelectorAll("[data-w]").forEach(b => b.onclick = () => { const [a, c] = b.dataset.w.split("|"); insert(a, c); });
+  app.querySelectorAll("[data-l]").forEach(b => b.onclick = () => insert(b.dataset.l, "", true));
+  $("ttable").onclick = () => insert("\n| 項目 | 數值 | 單位 |\n|---|---|---|\n|  |  |  |\n");
+  $("tnow").onclick = () => insert(fmt(Date.now() / 1000) + " ");
+  $("tpv").onclick = () => { const ed = $("ed");
+    if (innerWidth <= 760) ed.classList.toggle("pvonly"); else ed.classList.toggle("one");
+    preview(); };
+  // 圖片 / 附檔
+  let eid = id;
+  async function ensureSaved() {
+    if (eid) return eid;
+    const d = await api("/api/notebook", { method:"POST", json:collect() });       // 新記錄先存一份才有地方放附檔
+    eid = d.entry.id; e = d.entry; history.replaceState(null, "", "#/e/" + eid + "/edit");
+    lsSet(draftKey, null); startEditing(eid); return eid;
+  }
+  async function upload(files) {
+    for (const f of files) {
+      const name = f.name && f.name !== "image.png" ? f.name : `截圖_${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "")}.${(f.type.split("/")[1] || "png").replace("jpeg", "jpg")}`;
+      const ph = `![上傳中：${name}…]()`;
+      insert(ph + "\n");
+      try {
+        const i = await ensureSaved();
+        const r = await fetch(`/api/notebook/${i}/files?name=${encodeURIComponent(name)}`, { method:"POST", body:f, credentials:"same-origin" });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok || !d.ok) throw new Error(d.error || r.statusText);
+        const isImg = /^image\//.test(f.type) || /\.(png|jpe?g|gif|webp|bmp)$/i.test(name);
+        body.value = body.value.replace(ph, isImg ? `![${d.file.name}](${d.file.url})` : `[📎 ${d.file.name}](${d.file.url})`);
+      } catch (err) { body.value = body.value.replace(ph + "\n", ""); toast("上傳失敗：" + err.message); }
+      changed();
+    }
+  }
+  $("tfile").onclick = () => { const fp = $("filepick"); fp.value = ""; fp.onchange = () => upload([...fp.files]); fp.click(); };
+  body.addEventListener("paste", ev => { const fs = [...(ev.clipboardData?.files || [])]; if (fs.length) { ev.preventDefault(); upload(fs); } });
+  body.addEventListener("dragover", ev => { ev.preventDefault(); body.classList.add("drop"); });
+  body.addEventListener("dragleave", () => body.classList.remove("drop"));
+  body.addEventListener("drop", ev => { ev.preventDefault(); body.classList.remove("drop"); const fs = [...(ev.dataTransfer?.files || [])]; if (fs.length) upload(fs); });
+  // 儲存
+  function collect() {
+    const pid = $("proj").value, p = (PROJECTS || []).find(x => x.id === pid) || (pid && e.project && e.project.id === pid ? e.project : null);
+    const out = { title:$("title").value, body:body.value, tags:$("tags").value, links:links.filter(l => l.ref.trim()),
+                  project:p ? { id:p.id, name:p.name, path:p.path, path_ids:p.path_ids, url:p.url } : {} };
+    if ($("editors")) out.editors = $("editors").value;
+    return out;
+  }
+  async function save(force) {
+    const b = collect(); $("save").disabled = true;
+    try {
+      let d;
+      if (!eid) d = await api("/api/notebook", { method:"POST", json:b });
+      else d = await api("/api/notebook/" + eid, { method:"PUT", json:{ ...b, rev:force ? force : e.rev } });
+      dirty = false; lsSet(draftKey, null); lsSet("qel-nb-draft-" + d.entry.id, null);
+      toast("已儲存"); location.hash = "#/e/" + d.entry.id;
+    } catch (err) {
+      $("save").disabled = false;
+      if (err.conflict) {
+        const c = err.conflict;
+        $("msg").innerHTML = `<div class="warnbox"><b>${esc(c.updated_by || "別人")}</b> 在 ${fmt(c.updated)} 先存了新的版本（第 ${c.rev} 版）。<br>
+          <button class="btn sm" id="cf-mine">用我的覆蓋（對方那版留在歷史裡）</button>
+          <button class="btn sm" id="cf-view">開新分頁看對方的版本</button></div>`;
+        $("cf-mine").onclick = () => save(c.rev);
+        $("cf-view").onclick = () => window.open("#/e/" + eid, "_blank");
+      } else $("msg").innerHTML = `<div class="errbox">${esc(err.message)}</div>`;
+    }
+  }
+  $("save").onclick = () => save();
+  body.onkeydown = ev => { if ((ev.ctrlKey || ev.metaKey) && ev.key === "s") { ev.preventDefault(); save(); } };
+  document.onkeydown = ev => { if ((ev.ctrlKey || ev.metaKey) && ev.key === "s" && $("save")) { ev.preventDefault(); save(); } };
+  if (eid) startEditing(eid);
+  (id ? body : $("title")).focus();
+}
+function startEditing(id) {
+  stopEditing();
+  const ping = () => api(`/api/notebook/${id}/editing`, { method:"PUT", json:{ on:true } }).catch(() => {});
+  ping(); editTimer = { id, t:setInterval(ping, 15000) };
+}
+
+// ---------------------------------------------------------------- 歷史
+async function showHistory(id) {
+  let e, h;
+  try { [e, h] = await Promise.all([api("/api/notebook/" + id).then(d => d.entry), api(`/api/notebook/${id}/history`).then(d => d.history)]); }
+  catch (err) { app.innerHTML = `<div class="errbox">${esc(err.message)}</div>`; return; }
+  app.innerHTML = `<div class="bar"><a class="btn" href="#/e/${id}">← ${esc(e.title)}</a></div>
+    <h1>修改歷史</h1>
+    <div class="edit2"><div class="card"><ul class="hist" id="hl">
+      <li><a data-cur="1"><b>第 ${e.rev} 版（目前）</b></a> <span class="muted small">${fmt(e.updated)} · ${esc(e.updated_by || "")}</span></li>
+      ${h.map(v => `<li><a data-rev="${v.rev}">第 ${v.rev} 版</a> <span class="muted small">${fmt(v.time)} · ${esc(v.user || "")} · ${v.size} 字</span></li>`).join("")}</ul></div>
+    <div class="card"><div id="hv" class="md"></div><div id="hb" style="margin-top:10px"></div></div></div>`;
+  const show = async (rev) => {
+    if (!rev) { $("hv").innerHTML = `<h2>${esc(e.title)}</h2>` + md(e.body); $("hb").innerHTML = ""; return; }
+    try {
+      const v = (await api(`/api/notebook/${id}/history/${rev}`)).version;
+      $("hv").innerHTML = `<h2>${esc(v.title)}</h2>` + md(v.body);
+      $("hb").innerHTML = e.can_edit ? `<button class="btn" id="restore">↩ 還原成這一版</button>` : "";
+      if ($("restore")) $("restore").onclick = async () => {
+        if (!confirm(`把內容還原成第 ${rev} 版？（目前的內容會留在歷史裡）`)) return;
+        try { await api("/api/notebook/" + id, { method:"PUT", json:{ title:v.title, body:v.body, tags:v.tags, project:v.project, links:v.links, rev:e.rev } });
+          toast("已還原"); location.hash = "#/e/" + id; } catch (err) { toast(err.message); } };
+    } catch (err) { toast(err.message); }
+  };
+  $("hl").querySelectorAll("a").forEach(a => a.onclick = () => show(a.dataset.rev ? +a.dataset.rev : 0));
+  show(0);
+}
+
+// ---------------------------------------------------------------- 列印 / 另存 PDF
+async function showPrint(ids) {
+  app.innerHTML = `<div class="bar"><a class="btn" href="#/">← 清單</a><span class="muted">${ids.length} 筆 · 在列印視窗的「目的地」選「另存為 PDF」</span><span class="sp"></span>
+    <label class="noprint small"><input type="checkbox" id="pc" checked> 含留言</label>
+    <button class="btn pri" id="pp">🖨 列印 / PDF</button></div><div id="pages"><div class="empty">讀取中…</div></div>`;
+  const entries = [];
+  for (const id of ids) { try { entries.push((await api("/api/notebook/" + id)).entry); } catch (err) {} }
+  entries.sort((a, b) => a.created - b.created);
+  const render = () => { $("pages").innerHTML = entries.map(e => `<div class="card entry" style="margin-bottom:14px">${entryHtml(e, $("pc").checked)}</div>`).join("") || `<div class="empty">沒有可以列印的記錄</div>`; };
+  render();
+  $("pc").onchange = render;
+  $("pp").onclick = () => window.print();
+  document.title = entries.length === 1 ? entries[0].title : `實驗記錄（${entries.length} 筆）`;
+  const imgs = [...app.querySelectorAll("img")];
+  await Promise.all(imgs.map(i => i.complete ? 0 : new Promise(r => { i.onload = i.onerror = r; })));
+  setTimeout(() => window.print(), 300);
+}
+
+route();
+</script>
+</body>
+</html>

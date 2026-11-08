@@ -224,7 +224,10 @@ function drawScheme(tmpls, cat) {
       <div class="small muted">從量測電腦的範本開始（LAB/templates），在這裡改數值；流程（迴圈、順序）要在 Lab Control 裡改。</div></div>`;
   for (const { b, depth } of blocks()) {
     h += `<div class="blk ${b.kind}" style="margin-left:${depth * 24}px" data-id="${esc(b.id)}"><div class="hd"><span class="k" style="background:${{ set:"#1971c2", measure:"#e8590c", save:"#2b8a3e", debg:"#2b8a3e" }[b.kind] || "#868e96"}">${KIND[b.kind] || b.kind}</span>${esc(b.title || "")}${b.kind === "set" && b.mode === "sweep" ? ' <span class="small muted">⟲ 掃描</span>' : ""}</div>`;
-    if (b.kind === "set") {
+    if (b.kind === "set" && b.target === "__repeat__") {      // 1.0.31：重複 N 次
+      h += `<div class="row"><label><span>重複</span><input type="number" min="1" step="1" data-f="points" value="${num(b.points || b.stop)}"> 次</label>
+            <label><span>每次之間等</span><input type="number" step="any" data-f="settle" value="${num(b.settle || 0)}" style="width:80px"> s</label></div>`;
+    } else if (b.kind === "set") {
       h += `<div class="row"><label><span>目標</span><select data-f="target">${targetOptions(cat, b.target, ["magnet", "source", "param"])}</select></label>`;
       if (b.mode === "sweep") {
         const usePts = b.points != null && b.step == null;

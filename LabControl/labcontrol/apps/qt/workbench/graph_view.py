@@ -399,6 +399,12 @@ def measure_details(st: Dict[str, Any], kind: str) -> List[str]:
     return lines[:3]
 
 
+def t_is_repeat(b: Block) -> bool:
+    from ....scheme.catalog import REPEAT
+
+    return b.target == REPEAT
+
+
 def describe(doc: WorkbenchDoc, nid: str, b: Optional[Block]) -> Tuple[str, str, str, str]:
     """(標題, 說明, 標籤, 顏色 key)"""
     cat = doc.catalog
@@ -406,6 +412,11 @@ def describe(doc: WorkbenchDoc, nid: str, b: Optional[Block]) -> Tuple[str, str,
         return "開始", "量測從這裡開始", "", "start"
     if b is None:
         return "?", "", "", "wait"
+    if b.kind == "set" and t_is_repeat(b):
+        from ....scheme.compile import repeat_count
+
+        sub = f"{repeat_count(b)} 次" + (f" · 每次之間等 {_fmt(b.settle)} s" if b.settle else "")
+        return "重複", sub + "\n括號裡的方塊再做 N 次", "迴圈 ⟲", "param"
     if b.kind == "set":
         t = cat.target(b.target)
         name = t.short if t else (b.target or "（未選目標）")
@@ -880,6 +891,9 @@ class FlowView(QtWidgets.QGraphicsView):
             sub = m.addMenu(f"{title_prefix}：量測")
             for mm in cat.measurers:
                 sub.addAction(f"{mm.head} · {mm.label}", lambda mm=mm: add({"kind": "measure", "instrument": mm.ref}))
+        from ....scheme.catalog import REPEAT
+
+        m.addAction(f"{title_prefix}：🔁 重複 N 次", lambda: add({"kind": "set", "target": REPEAT, "mode": "sweep"}))
         m.addAction(f"{title_prefix}：Data（分檔點）", lambda: add({"kind": "save"}))
         m.addAction(f"{title_prefix}：等待", lambda: add({"kind": "wait"}))
         m.addAction(f"{title_prefix}：去背（主數據 ÷ 背景 → _debg）", lambda: add({"kind": "debg"}))

@@ -515,7 +515,12 @@ class Runner:
         settle = 0.0
         for axis in self.plan.axes:
             v = sp[axis.name]
-            if self._last_applied.get(axis.name) == v or not axis.target:
+            if self._last_applied.get(axis.name) == v:
+                continue
+            if not axis.target:                  # 1.0.31：「重複 N 次」——不設定儀器；第 2 次起照樣等 settle
+                if axis.name in self._last_applied:
+                    settle = max(settle, axis.settle)
+                self._last_applied[axis.name] = v
                 continue
             src = self._source_of(axis.target)
             if approach and src is not None:

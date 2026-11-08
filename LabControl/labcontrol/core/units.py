@@ -10,11 +10,18 @@ _PREFIX = {"": 1.0, "p": 1e-12, "n": 1e-9, "u": 1e-6, "µ": 1e-6, "m": 1e-3, "k"
 _BASE = ("A", "V", "Hz", "s", "dBm", "dB", "Ohm", "T", "K", "W", "deg", "rad")
 
 
+#: 1.0.31：磁場的非 SI 單位（真空中 1 Oe ↔ 0.1 mT）
+_SPECIAL = {"Oe": ("T", 1e-4), "kOe": ("T", 1e-1), "Gs": ("T", 1e-4)}
+
+
 def split_unit(unit: str) -> Tuple[str, float]:
-    """'mA' → ('A', 1e-3)；'mA/s' → ('A/s', 1e-3)；未知單位 → (unit, 1.0)。"""
+    """'mA' → ('A', 1e-3)；'mA/s' → ('A/s', 1e-3)；'Oe' → ('T', 1e-4)；未知單位 → (unit, 1.0)。"""
     if not unit:
         return "", 1.0
     head, sep, tail = unit.partition("/")
+    if head in _SPECIAL:
+        base, k = _SPECIAL[head]
+        return base + (sep + tail if sep else ""), k
     for base in sorted(_BASE, key=len, reverse=True):
         if head.endswith(base):
             pre = head[: -len(base)]

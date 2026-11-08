@@ -63,6 +63,24 @@ def test_gs200_on_connect_only_writes_differences():
     assert not any(w.startswith(":SOUR:RANG") for w in t.writes)   # range 相同，不重寫
 
 
+def test_gs200_defaults_to_current_mode_on_connect(monkeypatch):
+    """1.0.31：沒有指定 on_connect.function → 連線時切成電流模式；輸出開著不切（只提醒）；keep = 不改。"""
+    state = {"lev": "0", "func": "VOLT", "rang": "0.2", "outp": "0"}
+    inst, t = _gs200(state)
+    assert ":SOUR:FUNC CURR" in t.writes and inst.channels["ch1"].unit == "A"
+    inst, t = _gs200({"lev": "0", "func": "VOLT", "rang": "0.2", "outp": "1"})
+    assert ":SOUR:FUNC CURR" not in t.writes and inst.channels["ch1"].func == "VOLT"     # 輸出開著：不動
+    inst, t = _gs200({"lev": "0", "func": "VOLT", "rang": "0.2", "outp": "0"}, on_connect={"function": "keep"})
+    assert ":SOUR:FUNC CURR" not in t.writes
+    from labcontrol.settings import settings
+    settings().set("server.yokogawa_function", "VOLT")
+    try:
+        inst, t = _gs200({"lev": "0", "func": "CURR", "rang": "0.2", "outp": "0"})
+        assert ":SOUR:FUNC VOLT" in t.writes
+    finally:
+        settings().set("server.yokogawa_function", "CURR")
+
+
 def test_scpi_override_from_yaml():
     inst, t = _gs200(scpi={"level_w": ":SOUR:LEV:FIX {value}"})
     inst.channels["ch1"].set_level(0.0016)
@@ -105,7 +123,7 @@ def test_gs820_channel_syntax():
                        ":CHAN2:SOUR:VOLT:RANG?": "7", ":CHAN1:SOUR:CURR:LEV?": "0", ":CHAN2:SOUR:VOLT:LEV?": "1",
                        ":CHAN1:SOUR:MODE?": "FIX", ":CHAN2:SOUR:MODE?": "FIX", ":CHAN1:SOUR:SHAP?": "DC",
                        ":CHAN2:SOUR:SHAP?": "DC", ":CHAN2:MEAS?": "0.99", ":CHAN1:OUTP?": "0", ":CHAN2:OUTP?": "ZERO"})
-    g2 = GS820("G2", transport=t)
+    g2 = GS820("G2", transport=t, on_connect={"function": "keep"})   # 1.0.31 起預設切電流模式；這裡測電壓通道
     g2.connect()
     g2.channels["ch2"].set_level(2.0)
     g2.channels["ch1"].set_output(True)

@@ -18,12 +18,16 @@ from ..core.units import split_unit
 from ..settings import setting
 
 
+#: 「重複 N 次」方塊的目標（set 方塊 + sweep 模式；points = 次數）
+REPEAT = "__repeat__"
+
+
 @dataclass
 class Target:
     ref: str
     label: str
     short: str
-    group: str                      # magnet | source | param
+    group: str                      # magnet | source | param | repeat
     unit: str                       # 預設顯示單位
     kind_label: str                 # 流程圖方塊標題
     limits: Optional[Tuple[float, float]] = None   # SI
@@ -124,6 +128,8 @@ def build_catalog(station: Station) -> Catalog:
             cat.measurers.append(Measurer(name, label, getattr(inst, "MEASURE_KIND", "") or "", inst.trace_list(),
                                           fields, defaults, inst.options.get("labber_name", name), short,
                                           inst.options.get("block_title", "")))
-    order = {"magnet": 0, "source": 1, "param": 2}
+    # 1.0.31：「重複 N 次」——不設定任何儀器的迴圈（資料多一個「重複」軸：第 1…N 次）
+    cat.targets.append(Target(REPEAT, "重複 N 次", "重複", "repeat", "", "重複"))
+    order = {"magnet": 0, "source": 1, "param": 2, "repeat": 3}
     cat.targets.sort(key=lambda t: order[t.group])
     return cat

@@ -261,8 +261,16 @@ class YokogawaSMU(Instrument):
                 if self.station is not None:
                     self.station.bus.log("⚠️ " + w, "warning")
             # 只有與目前狀態不同才寫入；會影響輸出的動作在 GSChannel 內有保護
-            if cfg.get("function") and _norm_func(cfg["function"]) != ch.func:
-                ch.parameters["function"].set(cfg["function"])
+            func = self.connect_function(cfg)
+            if func and func != ch.func:
+                try:
+                    ch.parameters["function"].set(func)
+                    msg = f"{ch.full_name} 原本是{'電壓' if func == 'CURR' else '電流'}模式，已切換成{'電流' if func == 'CURR' else '電壓'}模式"
+                except InstrumentError as e:            # 輸出開著：不切換（切換會影響輸出），只提醒
+                    msg = f"{ch.full_name} 沒有切換成{'電流' if func == 'CURR' else '電壓'}模式：{e}"
+                log.warning(msg)
+                if self.station is not None:
+                    self.station.bus.log("⚠️ " + msg, "warning")
             if cfg.get("auto_range") is not None and ch._get_auto_range() not in (None, bool(cfg["auto_range"])):
                 ch._set_auto_range(bool(cfg["auto_range"]))
             if cfg.get("range") is not None and (ch.range is None or abs(ch.range - float(cfg["range"])) > 1e-12):
@@ -272,6 +280,22 @@ class YokogawaSMU(Instrument):
             if cfg.get("output") is not None and bool(cfg["output"]) != ch.get_output():
                 ch.set_output(bool(cfg["output"]))
             ch.parameters["level"].unit = ch.unit
+
+    def connect_function(self, cfg: Dict[str, Any]) -> Optional[str]:
+        """連線時要用的源功能：instruments.yaml on_connect.function → settings server.yokogawa_function（預設 CURR）。
+        "keep" / 空白 = 不改。"""
+        want = cfg.get("function")
+        if want is None:
+            try:
+                from ...settings import setting
+
+                want = setting("server.yokogawa_function", "CURR")
+            except Exception:  # noqa: BLE001
+                want = "CURR"
+        want = str(want or "").strip()
+        if not want or want.lower() in ("keep", "none", "不改"):
+            return None
+        return _norm_func(want)
 
     def snapshot(self) -> Dict[str, Any]:
         snap = super().snapshot()

@@ -92,7 +92,7 @@ def run() -> int:
             raise RuntimeError("模擬量測超過 3 分鐘沒有結束")
         if runner.dataset is None or not len(runner.dataset):
             raise RuntimeError("模擬量測沒有資料")
-        exp.export(runner.dataset, out)
+        exp.export(runner.dataset, out, notebook=False)
         files = list((tmp / "data").rglob("*.nc"))
         if not files:
             raise RuntimeError("量測完沒有 .nc 檔")

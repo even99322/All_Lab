@@ -52,8 +52,12 @@ def ispin(lo: int = 0, hi: int = 10_000_000) -> QtWidgets.QSpinBox:
 
 
 def edit_block(parent: QtWidgets.QWidget, doc: WorkbenchDoc, b: Block) -> Optional[Block]:
-    if b.kind == "set":
-        dlg: QtWidgets.QDialog = StepDialog(parent, doc, b)
+    from ....scheme.catalog import REPEAT
+
+    if b.kind == "set" and b.target == REPEAT:
+        dlg: QtWidgets.QDialog = RepeatDialog(parent, b)
+    elif b.kind == "set":
+        dlg = StepDialog(parent, doc, b)
     elif b.kind == "measure":
         dlg = MeasureDialog(parent, doc, b)
     elif b.kind == "wait":
@@ -788,6 +792,44 @@ class _Field:
 
     def __init__(self, key: str, label: str, unit: str) -> None:
         self.key, self.label, self.unit, self.kind, self.choices = key, label, unit, "float", None
+
+
+class RepeatDialog(QtWidgets.QDialog):
+    """1.0.31：重複 N 次——括號裡的方塊照樣再做 N 次（不設定任何儀器）；資料多一個「重複」軸（第 1…N 次）。"""
+
+    def __init__(self, parent, b: Block) -> None:
+        super().__init__(parent)
+        from ....scheme.compile import repeat_count
+
+        self.b = copy.deepcopy(b)
+        self.setWindowTitle("重複 N 次")
+        lay = QtWidgets.QFormLayout(self)
+        self.count = ispin(1, 1_000_000)
+        self.count.setObjectName("repeatCount")
+        self.count.setValue(max(1, repeat_count(b)))
+        self.count.setSuffix(" 次")
+        lay.addRow("重複次數", self.count)
+        self.settle = dspin(0, 1e6, 3, "s")
+        self.settle.setValue(float(b.settle or 0.0))
+        lay.addRow("每次之間等待", self.settle)
+        self.name = QtWidgets.QLineEdit(b.axis_name)
+        self.name.setPlaceholderText("Repeat")
+        lay.addRow("資料軸名稱", self.name)
+        lay.addRow(QtWidgets.QLabel("括號包住的方塊（量測、內層迴圈…）會照樣再做 N 次，不設定任何儀器；\n"
+                                    "存檔多一個「Repeat」軸（第 1…N 次），可以看重現性或做平均。"))
+        bb = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Ok
+                                        | QtWidgets.QDialogButtonBox.StandardButton.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        lay.addRow(bb)
+
+    def result_block(self) -> Block:
+        n = int(self.count.value())
+        self.b.mode = "sweep"
+        self.b.points, self.b.start, self.b.stop, self.b.step, self.b.unit = n, 1.0, float(n), None, ""
+        self.b.settle = float(self.settle.value())
+        self.b.axis_name = self.name.text().strip()
+        return self.b
 
 
 class WaitDialog(QtWidgets.QDialog):

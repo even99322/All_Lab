@@ -1271,6 +1271,7 @@ from . import setup_routes  # noqa: E402,F401  （1.0.7 網頁：/data、/live�
 from . import hfss_usage  # noqa: E402,F401  （1.0.19 HFSS 授權占用：/licenses、/api/hfss/usage；1.0.20 授權伺服器 lmstat）
 from . import notify  # noqa: E402,F401  （1.0.25 推播通知：/notify、/api/notify/…、/api/hfss/event）
 from . import netusage  # noqa: E402,F401  （1.0.29 網路用量：/network、/api/netusage）
+from . import notebook  # noqa: E402,F401  （1.0.31 電子實驗記錄：/notebook、/api/notebook）
 
 
 # ---------------------------------------------------------------------------

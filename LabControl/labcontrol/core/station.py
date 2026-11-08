@@ -151,6 +151,12 @@ class Station:
             for node in [inst, *inst.channels.values()]:
                 if isinstance(node, Source):
                     node.time_scale = scale
+        try:                                          # 1.0.31：電磁鐵組有磁場校正 → 多一個 field 參數
+            from . import fieldcal
+
+            fieldcal.attach(inst)
+        except Exception:  # noqa: BLE001
+            log.exception("[%s] 磁場校正載入失敗", name)
         self.instruments[name] = inst
         self.bus.publish("station.changed", action="add", name=name)
         return inst

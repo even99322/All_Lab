@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from PyQt6.QtCore import QObject, pyqtSignal
 
 from ....scheme import Block, Catalog, CompileResult, Scheme, compile_scheme
+from ....scheme.catalog import REPEAT
 from ....scheme.graph import BODY, NEXT, START, SchemeGraph
 from ....settings import setting
 
@@ -163,6 +164,9 @@ class WorkbenchDoc(QObject):
         | {"kind": "save"} | {"kind": "wait"}。初始值來自 settings.yaml editor.new_blocks 與 driver 預設。"""
         nb = setting("editor.new_blocks", {}) or {}
         kind = spec["kind"]
+        if kind == "set" and spec.get("target") == REPEAT:      # 1.0.31：重複 N 次
+            n = int((nb.get("repeat") or {}).get("count", 3))
+            return Block("set", target=REPEAT, mode="sweep", start=1.0, stop=float(n), points=n, unit="")
         if kind == "set":
             t = self.catalog.target(spec["target"])
             unit = t.unit if t else ""

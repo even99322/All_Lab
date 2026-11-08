@@ -47,6 +47,13 @@ run_defaults:
   manual_loop: true            # 1.0.10：手動步進時每一點自動循環量測，直到按「記錄並下一點」
   stall_warn_s: 120            # 量測超過這麼久沒有任何進度 → 存程式狀態到 LAB/logs/stall_*.txt（0 = 關閉）
 
+fieldcal:                      # 1.0.31：電磁鐵磁場校正（YIG 共振反推）
+  unit: mT                     # 「磁場」參數的顯示單位（mT 或 Oe）
+  gamma_GHz_per_T: 28.0        # γ/2π 預設值（YIG g ≈ 2.00）
+
+notebook:                      # 1.0.31：Hub 網頁「實驗記錄」
+  auto: true                   # 量測存檔後自動新增一筆（方案、掃描、儀器設定、檔名、狀態），之後在網頁補寫備註
+
 # ---- 量測方案編輯器 -------------------------------------------------------------
 editor:
   new_blocks:                  # 從方塊庫新增方塊時的初始值
@@ -85,6 +92,7 @@ monitor:
 # ---- 儀器伺服器 -------------------------------------------------------------------
 server:
   visa_backend: ""             # 空白 = 自動：NI-VISA（nivisa64.dll）→ 系統預設 VISA → pyvisa-py；也可填 dll 路徑或 "@py"
+  yokogawa_function: CURR      # 1.0.31：Yokogawa（GS200 / GS610 / GS820）連線時預設切成電流模式；VOLT = 電壓、keep = 不改（instruments.yaml on_connect.function 優先）
   scan_include_serial: false   # 掃描 VISA 資源時是否對序列埠（ASRL）送 *IDN?
   scan_timeout_ms: 1500
   traffic_log_lines: 2000      # 儀器控制視窗保留的收發紀錄行數

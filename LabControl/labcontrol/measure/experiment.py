@@ -171,8 +171,9 @@ class Experiment:
     def needs_review(dataset: Optional[Dataset]) -> bool:
         return bool(dataset and dataset.retained)
 
-    def export(self, dataset: Dataset, output: OutputPlan) -> List[Path]:
-        """依 output.export 設定匯出（同名檔在此時才決定遞增編號，與舊版相同）。"""
+    def export(self, dataset: Dataset, output: OutputPlan, notebook: bool = True) -> List[Path]:
+        """依 output.export 設定匯出（同名檔在此時才決定遞增編號，與舊版相同）。
+        notebook：存完後在 Hub 的實驗記錄自動新增一筆（1.0.31；背景量測不另外記）。"""
         if not len(dataset):
             self.station.bus.log("⚠️ 無有效量測數據，取消存檔", "warning")
             return []
@@ -182,6 +183,13 @@ class Experiment:
         for plan in [output, *output.extras]:
             paths.extend(self._export_plan(dataset, plan))
         paths.extend(self.run_post_stages(dataset, output))
+        if notebook:
+            try:
+                from ..integrations.notebook import post_run
+
+                post_run(self, dataset, paths)
+            except Exception:  # noqa: BLE001
+                pass
         return paths
 
     # ---- 1.0.2：背景量測、去背 ------------------------------------------------------
@@ -210,7 +218,7 @@ class Experiment:
             if len(ds) < ds.planned_points:
                 self.station.bus.log("ℹ 背景量測被停止：不去背", "info")
                 return paths
-            paths.extend(exp.export(ds, out))
+            paths.extend(exp.export(ds, out, notebook=False))
             background = background or ds
         if debg and background is not None:
             try:

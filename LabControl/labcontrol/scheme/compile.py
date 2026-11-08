@@ -97,6 +97,14 @@ def default_axis_name(t: Target) -> str:
     return t.short
 
 
+def repeat_count(b: Block) -> int:
+    """「重複 N 次」的次數：points（新的）或 stop（相容）。"""
+    try:
+        return int(b.points or b.stop or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _seconds(v: Any) -> float:
     if v in (None, ""):
         return 0.0
@@ -391,6 +399,21 @@ def _compile_stage(scheme: Scheme, cat: Catalog) -> CompileResult:
         if t is None:
             err(f"找不到掃描目標 '{b.target}'", b)
             continue
+        if t.group == "repeat":                  # 1.0.31：重複 N 次（不設定儀器，只多一個「重複」軸）
+            n = repeat_count(b)
+            if n < 1:
+                err("請填重複次數（至少 1 次）", b)
+                continue
+            if n > int(setting("rules.max_points_per_axis", 100000)):
+                err(f"重複次數過多（{n}）", b)
+                continue
+            name = b.axis_name or "Repeat"           # 存檔的變數名用英文（.nc 變數名只能英數）
+            if name in names_seen:
+                err(f"資料軸名稱重複：{name}", b)
+            names_seen[name] = b.id
+            settle = float(b.settle or 0) + sum(float(c.seconds or 0) for c in b.children if c.kind == "wait")
+            res.loops.append(LoopInfo(b, t, name, np.arange(1, n + 1, dtype=float), "", 1.0, settle))
+            continue
         want = split_unit(t.unit)[0]
         if want and split_unit(b.unit)[0] != want:
             err(f"單位應為 {want} 系列（目前 '{b.unit}'）", b)
@@ -440,6 +463,9 @@ def _compile_stage(scheme: Scheme, cat: Catalog) -> CompileResult:
         t = cat.target(b.target)
         if t is None:
             err(f"找不到設定目標 '{b.target}'", b)
+            continue
+        if t.group == "repeat":
+            err("「重複 N 次」要當迴圈用：把要重複的方塊接在它後面、包進括號", b)
             continue
         if b.value is None:
             err("請填設定值", b)
@@ -567,6 +593,10 @@ def _compile_stage(scheme: Scheme, cat: Catalog) -> CompileResult:
             readouts.append({"ref": m.instrument, "trace": tr, "export_name": f"{mm.labber_name} - {tr}"})
     sweep = []
     for lp in res.loops:
+        if lp.target.group == "repeat":
+            sweep.append({"target": "", "name": lp.axis_name, "values": [int(v) for v in lp.values],
+                          "settle": lp.settle})
+            continue
         d = _axis_dict(lp.block, lp.target)
         d.update(name=lp.axis_name, settle=lp.settle)
         sweep.append(d)

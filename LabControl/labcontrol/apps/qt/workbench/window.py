@@ -202,6 +202,8 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         self.vna_bridge = QtEventBridge(station.bus, "*", parent=self)
         self.vna_bridge.on("instrument.connected", lambda p: self._vna_traces_changed(p.get("name")))
         self.vna_bridge.on("vna.ports", lambda p: self._vna_traces_changed(p.get("name")))
+        self.vna_bridge.on("data.exported", lambda p: str(p.get("path", "")).endswith(".nc") and
+                           setattr(self, "_last_saved_nc", str(p.get("path"))))
         self._init_remote()
         from ..platform_ui import PlatformController
 
@@ -328,6 +330,7 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         m.addAction("編輯 instruments.yaml", lambda: open_folder(lab_path("instruments.yaml")))
         m.addSeparator()
         m.addAction("重新載入設定", self.reload_lab)
+        m.addAction("磁場校正（YIG 共振）…", self.open_field_calibration)
         m.addMenu(theme.make_menu(m))
         m.addSeparator()
         m.addAction("Lab Control Monitor（所有節點與儀器）…", self._open_monitor)
@@ -627,6 +630,15 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
     def set_live_backend(self, backend, key: str, label: str) -> None:
         self.live.set_backend(backend, key, label)
         self.live_window.setWindowTitle(f"即時數據（{label}）— {APP_NAME}")
+
+    def open_field_calibration(self, magnet: str = "", path: str = "") -> None:
+        """1.0.31：電磁鐵的磁場校正（YIG 共振反推）；預設帶最近一次的量測檔。"""
+        from ..fieldcal_dialog import FieldCalDialog
+
+        if not path:
+            path = str(getattr(self, "_last_saved_nc", "") or "")
+        dlg = FieldCalDialog(self.station, self, magnet=magnet, path=path or None)
+        dlg.exec()
 
     def _vna_traces_changed(self, name) -> None:
         if getattr(self, "remote_target", None) is not None:

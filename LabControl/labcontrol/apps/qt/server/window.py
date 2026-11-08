@@ -484,6 +484,10 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
             else:
                 return
         else:
+            if d and d.get("local") and d["name"] in self.station.instruments and \
+                    self.station.instruments[d["name"]].options.get("group") == "magnet":
+                m.addAction("磁場校正（YIG 共振）…", lambda n=d["name"]: self.field_calibration(n))
+                m.addSeparator()
             for a in (self.a_cfg, self.a_conn, self.a_disc, None, self.a_test, None, self.a_rename, self.a_hide,
                       self.a_enable, self.a_remove):
                 if a is None:
@@ -1007,6 +1011,12 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
             self.fetch_registry(force=True)
             self.refresh()
         run_bg(work, ok_, lambda m: (self._log(f"❌ {m}"), QtWidgets.QMessageBox.warning(self, "隱藏失敗", m)))
+
+    def field_calibration(self, name: str) -> None:
+        from ..fieldcal_dialog import FieldCalDialog
+
+        FieldCalDialog(self.station, self, magnet=name, config_path=self.config_path).exec()
+        self.refresh()
 
     def test_selected(self) -> None:
         n = self.selected()
