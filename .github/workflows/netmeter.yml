@@ -30,6 +30,7 @@ jobs:
     defaults:
       run:
         shell: pwsh
+        working-directory: NetMeter
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
