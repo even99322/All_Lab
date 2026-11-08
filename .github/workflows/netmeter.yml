@@ -45,28 +45,26 @@ jobs:
         run: |
           $v = (Select-String -Path netmeter/__init__.py -Pattern '__version__ = "([0-9.]+)"').Matches[0].Groups[1].Value
           "version=$v" >> $env:GITHUB_OUTPUT
-      - name: Build
+      - name: Build (folder) and installer
         run: |
+          $v = "${{ steps.v.outputs.version }}"
           pyinstaller --noconfirm --log-level WARN packaging/netmeter.spec
-          $v = "${{ steps.v.outputs.version }}"
-          Move-Item dist/QELNetMeter.exe "dist/QELNetMeter_v${v}_windows.exe"
+          if (-not (Test-Path "dist/QELNetMeter/QELNetMeter.exe")) { throw "沒有產生 dist/QELNetMeter/QELNetMeter.exe" }
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+            choco install innosetup -y --no-progress
+            $env:Path += ";${env:ProgramFiles(x86)}\Inno Setup 6" }
+          iscc "/DAppVersion=$v" packaging/installer.iss
+          if (-not (Test-Path "dist/QELNetMeter_v${v}_windows-setup.exe")) { throw "沒有產生安裝程式" }
           Get-ChildItem dist -File | Format-Table Name, Length
-      - name: Self-test (packaged exe)
+          (Get-Item "dist/QELNetMeter/QELNetMeter.exe").VersionInfo | Format-List CompanyName, FileDescription, ProductVersion
+      - name: Silent install, self-test, agent reports, uninstall (end to end)
+        timeout-minutes: 8
         run: |
           $v = "${{ steps.v.outputs.version }}"
-          $out = "$env:RUNNER_TEMP\netmeter_selftest.txt"
-          $env:QELNETMETER_HOME = "$env:RUNNER_TEMP\nm_home"
-          $p = Start-Process -FilePath "dist/QELNetMeter_v${v}_windows.exe" -ArgumentList '--self-test', '--out', "`"$out`"" -PassThru
-          if (-not $p.WaitForExit(120000)) { throw "self-test 120 秒沒結束" }
-          Get-Content $out -Encoding utf8
-          if ($p.ExitCode -ne 0) { throw "self-test 失敗（$($p.ExitCode)）" }
-      - name: Install, agent reports, update, uninstall (end to end)
-        timeout-minutes: 5
-        run: |
-          $v = "${{ steps.v.outputs.version }}"
+          $dir = "$env:RUNNER_TEMP\nm_app"
           $env:QELNETMETER_HOME = "$env:RUNNER_TEMP\nm_e2e"
           New-Item -ItemType Directory -Force $env:QELNETMETER_HOME | Out-Null
-          # 假的 Hub：記下回報；runner 的網段當成「實驗室網段」
+          # 假的 Hub：記下回報；runner 的位址當成「實驗室網段」
           $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } | Select-Object -First 1).IPAddress
           '{"subnets": ["' + $ip + '/32"], "hubs": ["http://127.0.0.1:18765"], "sample_s": 1, "report_s": 1}' | Set-Content "$env:QELNETMETER_HOME\config.json" -Encoding utf8
           $hubpy = "$env:RUNNER_TEMP\fake_hub.py"
@@ -88,31 +86,43 @@ jobs:
           $reports = "$env:RUNNER_TEMP\hub_reports.txt"
           $hub = Start-Process python -ArgumentList "`"$hubpy`"", "`"$reports`"" -PassThru
           Start-Sleep -Seconds 2
-          # 雙擊 = 安裝＋背景程式＋視窗；CI 用 --install（同一條路、不開視窗）。不能用 -Wait（會連背景程式一起等）
-          $p = Start-Process -FilePath "dist/QELNetMeter_v${v}_windows.exe" -ArgumentList '--install' -PassThru
-          if (-not $p.WaitForExit(60000)) { throw "--install 60 秒沒結束" }
-          $installed = "$env:QELNETMETER_HOME\QELNetMeter.exe"
-          if (-not (Test-Path $installed)) { throw "沒有複製到 $installed" }
+          # 安靜安裝（跟自動更新一樣）；不能用 -Wait（會連背景程式一起等）
+          $p = Start-Process -FilePath "dist/QELNetMeter_v${v}_windows-setup.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$dir`"" -PassThru
+          if (-not $p.WaitForExit(120000)) { throw "安裝 120 秒沒結束" }
+          if ($p.ExitCode -ne 0) { throw "安裝失敗（$($p.ExitCode)）" }
+          foreach ($f in "QELNetMeter.exe", "unins000.exe") { if (-not (Test-Path "$dir\$f")) { throw "安裝後沒有 $f" } }
           $run = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').QELNetMeter
-          if ($run -notmatch '--agent') { throw "沒有登記開機自動啟動：$run" }
+          if ($run -notmatch '--agent' -or $run -notlike "*$dir*") { throw "沒有登記登入自動啟動：$run" }
           $ok = $false
-          for ($i = 0; $i -lt 40; $i++) {
+          for ($i = 0; $i -lt 60; $i++) {
             Start-Sleep -Milliseconds 500
             if ((Test-Path $reports) -and (Get-Content $reports | Select-String '"id": "nm-')) { $ok = $true; break } }
           if (-not $ok) { Get-Content "$env:QELNETMETER_HOME\netmeter.log" -ErrorAction SilentlyContinue; throw "背景程式沒有回報到 Hub" }
           Get-Content $reports | Select-Object -Last 1
-          $p = Start-Process -FilePath $installed -ArgumentList '--uninstall' -PassThru
-          if (-not $p.WaitForExit(30000)) { throw "--uninstall 30 秒沒結束" }
-          Start-Sleep -Seconds 2
+          # 安裝好的程式自我檢查
+          $out = "$env:RUNNER_TEMP\netmeter_selftest.txt"
+          $st = Start-Process -FilePath "$dir\QELNetMeter.exe" -ArgumentList '--self-test', '--out', "`"$out`"" -PassThru
+          if (-not $st.WaitForExit(120000)) { throw "self-test 120 秒沒結束" }
+          Get-Content $out -Encoding utf8
+          if ($st.ExitCode -ne 0) { throw "self-test 失敗（$($st.ExitCode)）" }
+          # 再裝一次（模擬自動更新：舊的背景程式要先結束、裝完再啟動）
+          $p = Start-Process -FilePath "dist/QELNetMeter_v${v}_windows-setup.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=`"$dir`"" -PassThru
+          if (-not $p.WaitForExit(120000) -or $p.ExitCode -ne 0) { throw "重新安裝失敗" }
+          Start-Sleep -Seconds 4
+          if (-not (Get-CimInstance Win32_Process -Filter "Name = 'QELNetMeter.exe'" | Where-Object { $_.CommandLine -match '--agent' })) { throw "重新安裝後背景程式沒有啟動" }
+          # 解除安裝
+          $p = Start-Process -FilePath "$dir\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -PassThru
+          if (-not $p.WaitForExit(120000)) { throw "解除安裝 120 秒沒結束" }
+          Start-Sleep -Seconds 4
           $run = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).QELNetMeter
           if ($run) { throw "解除安裝後還有自動啟動" }
           if (Get-CimInstance Win32_Process -Filter "Name = 'QELNetMeter.exe'") { throw "解除安裝後背景程式還在" }
           Stop-Process -Id $hub.Id -Force
-          Write-Output "::notice title=end to end::installed, reported to hub, uninstalled"
+          Write-Output "::notice title=end to end::installed silently, reported to hub, reinstalled, uninstalled"
       - uses: actions/upload-artifact@v5
         with:
           name: NetMeter-windows
-          path: NetMeter/dist/QELNetMeter_v*_windows.exe
+          path: NetMeter/dist/QELNetMeter_v*_windows-setup.exe
           retention-days: 14
 
   mac:

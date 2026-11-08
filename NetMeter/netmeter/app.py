@@ -1,9 +1,12 @@
 """程式入口。
 
-    QELNetMeter.exe                 雙擊：安裝（複製到使用者資料夾、登入自動啟動）＋ 啟動背景程式 ＋ 顯示狀態視窗
+1.0.1 起 Windows 用安裝程式（QELNetMeter_v<版本>_windows-setup.exe，裝在 %LOCALAPPDATA%\Programs\QELNetMeter，
+登入自動啟動由安裝程式登記；1.0.0 的單一 exe 會被 Windows Defender 誤判成病毒）。
+
+    QELNetMeter.exe                 開啟狀態視窗（背景程式沒在跑就先啟動）
     QELNetMeter.exe --agent         背景程式（登入時自動執行的就是這個）
-    QELNetMeter.exe --update <pid>  自動更新：等舊的背景程式結束 → 換掉安裝的 exe → 啟動新版
-    QELNetMeter.exe --install       安裝並啟動背景程式（不開視窗；大量部署用）
+    QELNetMeter.exe --quit          叫背景程式結束（安裝 / 解除安裝程式用）
+    QELNetMeter.exe --install       啟動背景程式並確定登入自動啟動（不開視窗）
     QELNetMeter.exe --uninstall     停止背景程式、取消自動啟動
     QELNetMeter.exe --status        印出背景程式的狀態（JSON）
     QELNetMeter.exe --self-test     打包檢查
@@ -30,7 +33,7 @@ def _wait_agent(timeout: float = 8.0):
 
 
 def ensure_running() -> str:
-    """裝好並確定背景程式在跑；回傳給使用者看的一句話。"""
+    """確定背景程式在跑（舊版在跑就換成這一版）；回傳給使用者看的一句話。"""
     st = agent.control("status")
     if st is not None and hub.vkey(st.get("version", "0")) >= hub.vkey(__version__):
         if not install.autostart_enabled():
@@ -39,17 +42,20 @@ def ensure_running() -> str:
     if st is not None:                                         # 舊版在跑 → 叫它結束，換新版
         agent.control("quit")
         agent.wait_gone(int(st.get("pid") or 0), 10)
-    exe = install.copy_self()
+    exe = install.copy_self()                                  # 安裝版：就是自己，不複製
     how = install.enable_autostart(exe)
     install.start_agent(exe)
     _wait_agent()
-    return f"已安裝並開始在背景記錄（{how}）。" if st is None else f"已更新到 {__version__}。"
+    return f"已開始在背景記錄（{how}）。" if st is None else f"已更新到 {__version__}。"
 
 
 def uninstall() -> str:
     st = agent.control("quit")
     install.disable_autostart()
-    return "已停止背景記錄、取消自動啟動。" + ("" if st is not None else "（背景程式原本就沒有在執行）")
+    msg = "已停止背景記錄、取消自動啟動。" + ("" if st is not None else "（背景程式原本就沒有在執行）")
+    if sys.platform == "win32" and install.frozen():
+        msg += "\n要把程式整個移除：Windows「設定 → 應用程式」解除安裝「QEL 流量監看」。"
+    return msg
 
 
 def _print(text: str) -> None:
@@ -122,7 +128,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(prog="QELNetMeter", description=APP_NAME)
     ap.add_argument("--agent", action="store_true")
     ap.add_argument("--update", metavar="PID", type=int)
-    ap.add_argument("--install", action="store_true", help="安裝並啟動背景程式（不開視窗）")
+    ap.add_argument("--install", action="store_true", help="啟動背景程式並確定登入自動啟動（不開視窗）")
+    ap.add_argument("--quit", action="store_true", help="叫背景程式結束")
     ap.add_argument("--uninstall", action="store_true")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--self-test", action="store_true")
@@ -144,6 +151,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         exe = install.copy_self()
         install.enable_autostart(exe)
         install.start_agent(exe)
+        return 0
+    if a.quit:
+        st = agent.control("status")
+        agent.control("quit")
+        if st:
+            agent.wait_gone(int(st.get("pid") or 0), 10)
         return 0
     if a.install:
         _print(ensure_running() or "已經在背景執行")

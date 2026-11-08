@@ -26,8 +26,14 @@ def frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
 
+def _onefile() -> bool:
+    meipass = getattr(sys, "_MEIPASS", "")
+    return bool(meipass) and Path(meipass).resolve() != Path(sys.executable).resolve().parent / "_internal" \
+        and Path(meipass).resolve() != Path(sys.executable).resolve().parent
+
+
 def installed_exe() -> Path:
-    if sys.platform == "win32":
+    if sys.platform == "win32" and frozen() and _onefile():
         return data_dir() / f"{APP_ID}.exe"
     return Path(sys.executable)
 
@@ -39,8 +45,8 @@ def agent_command(exe: Optional[Path] = None) -> List[str]:
 
 
 def copy_self() -> Path:
-    """Windows 打包版：把自己複製到安裝位置（已經在那裡就不動）。回傳要執行的 exe。"""
-    if sys.platform != "win32" or not frozen():
+    """1.0.1 起 Windows 由安裝程式裝好（資料夾版）：直接用自己。只有舊的單一 exe 版（_MEIPASS 在暫存資料夾）才複製。"""
+    if sys.platform != "win32" or not frozen() or not _onefile():
         return Path(sys.executable)
     src, dst = Path(sys.executable).resolve(), installed_exe()
     if dst.exists() and src == dst.resolve():

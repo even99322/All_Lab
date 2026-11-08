@@ -158,22 +158,27 @@ class Agent:
         return None
 
     def _apply_windows(self, info: Dict[str, Any]) -> None:
-        """下載新版 exe → 執行它的 --update（它會等這個程式結束、換掉安裝的 exe、再啟動）→ 這個程式結束。"""
+        """下載新版安裝程式 → 安靜安裝（安裝程式會先結束這個背景程式，裝好再啟動新版）。"""
         import hashlib
         import subprocess
 
-        tmp = os.path.join(tempfile.gettempdir(), f"QELNetMeter_v{info['version']}.exe")
+        name = info.get("name") or f"QELNetMeter_v{info['version']}_windows-setup.exe"
+        if not name.lower().endswith("setup.exe"):
+            log.info("Hub 上的新版不是安裝程式（%s），略過自動更新", name)
+            return
+        tmp = os.path.join(tempfile.gettempdir(), name)
         req = urllib.request.Request(info["url"], headers={"User-Agent": f"QELNetMeter/{__version__}"})
-        with hub._NO_PROXY.open(req, timeout=120) as r, open(tmp, "wb") as f:
+        with hub._NO_PROXY.open(req, timeout=300) as r, open(tmp, "wb") as f:
             f.write(r.read())
         if info.get("sha256"):
             with open(tmp, "rb") as f:
                 if hashlib.sha256(f.read()).hexdigest() != info["sha256"]:
                     raise RuntimeError("新版檔案的 sha256 不對")
         log.info("更新到 %s", info["version"])
-        subprocess.Popen([tmp, "--update", str(os.getpid())], creationflags=0x00000008 | 0x00000200,
+        with self.lock:
+            self.meter.save()
+        subprocess.Popen([tmp, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], creationflags=0x00000008 | 0x00000200,
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
-        self.stop.set()
 
 
 # ---------------------------------------------------------------------------
