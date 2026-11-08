@@ -159,6 +159,9 @@ jobs:
     needs: [windows, mac]
     if: github.event_name == 'workflow_dispatch' && inputs.release
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
