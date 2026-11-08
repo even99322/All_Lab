@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>網路用量</title>
+<style>
+  :root { --bg:#f3f4f6; --card:#fff; --text:#1c1f24; --muted:#6b7280; --line:#e2e5e9; --soft:#eef0f3;
+          --accent:#1971c2; --accent-soft:#e7f1fb; --ok:#2b8a3e; --warn:#e67700; --err:#e03131;
+          --down:#1971c2; --up:#f08c00; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1116; --card:#151a21; --text:#e9ecef; --muted:#8b939d; --line:#2a313b; --soft:#1c222b;
+            --accent:#4dabf7; --accent-soft:#16283a; --ok:#40c057; --warn:#ffa94d; --err:#ff6b6b;
+            --down:#4dabf7; --up:#ffa94d; }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); }
+  body { font:14px/1.45 -apple-system,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:12px 14px 40px; }
+  h1 { font-size:20px; margin:4px 0 10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  h1 select { font:inherit; font-size:13px; padding:3px 6px; border-radius:7px; border:1px solid var(--line); background:var(--card); color:var(--text); }
+  h2 { font-size:15px; margin:20px 0 8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .sum { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:10px; margin-bottom:6px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px; }
+  .stat .v { font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; }
+  .stat .k { color:var(--muted); font-size:12px; }
+  .stat .ud { font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 12px; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:999px; font-size:12px; font-weight:700; }
+  .pill.ok { background:var(--ok); color:#fff; } .pill.bad { background:var(--err); color:#fff; } .pill.off { background:var(--soft); color:var(--muted); }
+  .chart { width:100%; height:190px; display:block; }
+  .legend { display:flex; gap:14px; font-size:12px; color:var(--muted); margin-top:4px; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:4px; vertical-align:-1px; }
+  table { width:100%; border-collapse:separate; border-spacing:0; background:var(--card); border:1px solid var(--line); border-radius:12px; overflow:hidden; }
+  th, td { padding:8px 10px; text-align:left; border-bottom:1px solid var(--line); vertical-align:middle; }
+  tr:last-child td { border-bottom:0; }
+  th { font-size:12px; color:var(--muted); font-weight:600; background:var(--soft); white-space:nowrap; }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .wrap { overflow-x:auto; }
+  .dot { display:inline-block; width:9px; height:9px; border-radius:50%; background:#868e96; margin-right:6px; }
+  .dot.on { background:var(--ok); }
+  .who input { font:inherit; font-weight:600; color:var(--text); background:transparent; border:1px solid transparent; border-radius:7px; padding:2px 6px; width:150px; }
+  .who input:hover { border-color:var(--line); } .who input:focus { border-color:var(--accent); outline:none; background:var(--soft); }
+  .spark { width:120px; height:26px; display:block; }
+  .btn { border:1px solid var(--line); background:var(--soft); color:var(--text); border-radius:8px; padding:4px 10px; font:inherit; cursor:pointer; }
+  .btn.pri { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .btn.del { color:var(--err); background:transparent; }
+  .cfg { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:10px; }
+  .cfg fieldset { border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin:0; background:var(--card); }
+  .cfg legend { font-weight:700; padding:0 4px; }
+  .cfg label { display:grid; grid-template-columns:96px 1fr; gap:8px; align-items:center; margin:6px 0; font-size:13px; }
+  .cfg input[type=text], .cfg input[type=password], .cfg input[type=number] { font:inherit; padding:4px 8px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--text); width:100%; }
+  .cfg .row { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  .res { font-size:12px; margin-top:6px; white-space:pre-wrap; }
+  .res.ok { color:var(--ok); } .res.bad { color:var(--err); }
+  .help { font-size:12px; color:var(--muted); margin-top:6px; }
+  .empty { background:var(--card); border:1px dashed var(--line); border-radius:12px; padding:20px; text-align:center; color:var(--muted); }
+  details summary { cursor:pointer; color:var(--muted); font-size:13px; margin-top:16px; }
+  @media (max-width: 640px) { .hide-sm { display:none; } .spark { width:80px; } }
+</style>
+</head>
+<body>
+<!--QEL-NAV-->
+<main>
+  <h1>網路用量 <select id="range"><option value="14">最近 14 天</option><option value="31" selected>最近 31 天</option><option value="92">最近 3 個月</option><option value="366">最近一年</option></select></h1>
+  <div class="sum" id="sum"></div>
+
+  <h2>整個網段（路由器 Traffic Meter） <span id="rst"></span></h2>
+  <div class="card"><svg class="chart" id="ch-router"></svg>
+    <div class="legend"><span><i style="background:var(--down)"></i>下載</span><span><i style="background:var(--up)"></i>上傳</span><span id="rnote"></span></div></div>
+
+  <h2>NAS <span id="nhost" class="small muted"></span> <span id="nst"></span></h2>
+  <div class="card"><svg class="chart" id="ch-nas"></svg>
+    <div class="legend"><span><i style="background:var(--down)"></i>收到</span><span><i style="background:var(--up)"></i>送出</span><span id="nnote"></span></div></div>
+
+  <h2>各台電腦 <span class="small muted">（Lab Control 開著時回報網卡總流量；含區網內傳檔）</span></h2>
+  <div id="pcs"></div>
+
+  <div id="cfgbox"></div>
+  <p class="help">日期以台北時間切。路由器的數字是路由器 Traffic Meter 自己算的（以 1 MB = 1024² byte 換算）；
+    NAS 與各台電腦是網卡計數的差值。電腦超過 2 小時沒回報，那段時間的流量不算。</p>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let ME = null, D = null, editing = false, timer = null;
+async function api(path, opt = {}) {
+  const r = await fetch(path, {method: opt.method || "GET", credentials: "same-origin",
+    headers: opt.json ? {"Content-Type": "application/json"} : {}, body: opt.json ? JSON.stringify(opt.json) : undefined});
+  if (r.status === 401) { location.href = "/login?next=/network"; throw new Error("未登入"); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.ok === false) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+}
+function fmt(b) {
+  b = Number(b) || 0;
+  const u = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return (i === 0 ? b.toFixed(0) : b >= 100 ? b.toFixed(0) : b >= 10 ? b.toFixed(1) : b.toFixed(2)) + " " + u[i];
+}
+const tot = d => d ? (Number(d.up) || 0) + (Number(d.down) || 0) : 0;
+function ago(t) {
+  if (!t) return "—";
+  const s = Math.max(0, D.now - t);
+  if (s < 90) return Math.round(s) + " 秒前";
+  if (s < 5400) return Math.round(s / 60) + " 分前";
+  if (s < 172800) return Math.round(s / 3600) + " 小時前";
+  return Math.round(s / 86400) + " 天前";
+}
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+
+function chart(svg, dates, days) {
+  const W = svg.clientWidth || 800, H = svg.clientHeight || 190, padL = 52, padB = 22, padT = 8;
+  const n = dates.length, max = Math.max(1, ...dates.map(d => tot(days[d])));
+  const step = (W - padL - 6) / n, bw = Math.max(1, step * 0.72);
+  const y = v => padT + (H - padT - padB) * (1 - v / max);
+  const cd = css("--down"), cu = css("--up"), cl = css("--line"), cm = css("--muted");
+  let g = "";
+  for (let k = 0; k <= 4; k++) {
+    const v = max * k / 4, yy = y(v);
+    g += `<line x1="${padL}" x2="${W}" y1="${yy}" y2="${yy}" stroke="${cl}" stroke-width="1"/>` +
+         `<text x="${padL - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="${cm}">${fmt(v)}</text>`;
+  }
+  const every = Math.ceil(n / 10);
+  dates.forEach((d, i) => {
+    const r = days[d] || {}, x = padL + i * step + (step - bw) / 2;
+    const dn = Number(r.down) || 0, up = Number(r.up) || 0;
+    const t = `${d}　下載 ${fmt(dn)}　上傳 ${fmt(up)}　合計 ${fmt(dn + up)}`;
+    if (dn + up > 0) {
+      g += `<g><title>${t}</title><rect x="${x}" y="${y(dn)}" width="${bw}" height="${y(0) - y(dn)}" fill="${cd}" rx="1"/>` +
+           `<rect x="${x}" y="${y(dn + up)}" width="${bw}" height="${y(dn) - y(dn + up)}" fill="${cu}" rx="1"/></g>`;
+    } else {
+      g += `<g><title>${d}　沒有資料</title><rect x="${x}" y="${y(0) - 1}" width="${bw}" height="1" fill="${cl}"/></g>`;
+    }
+    if (i % every === 0 || i === n - 1)
+      g += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${cm}">${d.slice(5)}</text>`;
+  });
+  svg.innerHTML = g;
+}
+function spark(dates, days) {
+  const last = dates.slice(-14), max = Math.max(1, ...last.map(d => tot(days[d])));
+  const w = 120, h = 26, bw = w / last.length;
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${last.map((d, i) => {
+    const v = tot(days[d]), hh = v ? Math.max(1.5, (h - 2) * v / max) : 1;
+    return `<rect x="${i * bw + 1}" y="${h - hh}" width="${bw - 2}" height="${hh}" fill="${v ? css("--accent") : css("--line")}"><title>${d} ${fmt(v)}</title></rect>`;
+  }).join("")}</svg>`;
+}
+function status(st, enabled) {
+  if (!enabled) return `<span class="pill off">未啟用</span>`;
+  if (!st || !st.time) return `<span class="pill off">等待第一次讀取</span>`;
+  return st.ok ? `<span class="pill ok">正常</span> <span class="small muted">${ago(st.time)}讀取${st.info && st.info.ModelName ? "　" + esc(st.info.ModelName) : ""}${st.interfaces ? "　介面 " + esc(st.interfaces.join("、")) : ""}</span>`
+               : `<span class="pill bad">讀取失敗</span> <span class="small" style="color:var(--err)">${esc(st.error)}</span>`;
+}
+function sumDays(days, from) { let s = {up: 0, down: 0}; for (const [k, v] of Object.entries(days)) if (!from || k >= from) { s.up += +v.up || 0; s.down += +v.down || 0; } return s; }
+
+function render() {
+  const d = D, today = d.today, yday = d.dates[d.dates.length - 2];
+  const r = d.router, n = d.nas;
+  const card = (k, v, ud) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div>${ud ? `<div class="ud">${ud}</div>` : ""}</div>`;
+  const ud = x => x ? `↓ ${fmt(x.down)}　↑ ${fmt(x.up)}` : "";
+  $("#sum").innerHTML =
+    card("全網 今天", fmt(tot(r.days[today])), ud(r.days[today])) +
+    card("全網 昨天", fmt(tot(r.days[yday])), ud(r.days[yday])) +
+    card("全網 本月", r.month ? fmt(tot(r.month)) : "—", ud(r.month)) +
+    card("NAS 今天", fmt(tot(n.days[today])), ud(n.days[today])) +
+    card("NAS 本月", fmt(tot(n.month)), ud(n.month));
+  $("#rst").innerHTML = status(r.status, r.enabled);
+  $("#nst").innerHTML = status(n.status, n.enabled);
+  $("#nhost").textContent = n.host ? "（" + n.host + "）" : "";
+  const rs = sumDays(r.days), ns = sumDays(n.days);
+  $("#rnote").textContent = `區間合計 ${fmt(tot(rs))}` + (r.last_month ? `　上個月 ${fmt(tot(r.last_month))}` : "");
+  $("#nnote").textContent = `區間合計 ${fmt(tot(ns))}`;
+  chart($("#ch-router"), d.dates, r.days);
+  chart($("#ch-nas"), d.dates, n.days);
+  const owner = ME && ME.user && ME.user.owner;
+  if (!editing) {
+    const w7 = d.dates[Math.max(0, d.dates.length - 7)];
+    $("#pcs").innerHTML = !d.pcs.length ? `<div class="empty">還沒有電腦回報。Lab Control 1.0.29 以上連上 Hub 後就會出現。</div>` :
+      `<div class="wrap"><table><thead><tr><th>電腦</th><th class="hide-sm">IP / 使用者</th><th class="n">今天</th><th class="n">昨天</th><th class="n hide-sm">近 7 天</th><th class="n">本月</th><th class="hide-sm">近 14 天</th><th class="hide-sm">最後回報</th>${owner ? "<th></th>" : ""}</tr></thead><tbody>` +
+      d.pcs.map(p => `<tr><td class="who"><span class="dot${p.online ? " on" : ""}"></span><input data-host="${esc(p.key)}" value="${esc(p.label)}" placeholder="${esc(p.host)}" maxlength="40" title="標註（Enter 存檔）">${p.label ? `<div class="small muted" style="padding-left:21px">${esc(p.host)}</div>` : ""}</td>
+        <td class="small muted hide-sm">${esc(p.ip)}<br>${esc(p.user)}</td>
+        <td class="n" title="${ud(p.days[today])}">${fmt(tot(p.days[today]))}</td><td class="n" title="${ud(p.days[yday])}">${fmt(tot(p.days[yday]))}</td>
+        <td class="n hide-sm">${fmt(tot(sumDays(p.days, w7)))}</td><td class="n" title="${ud(p.month)}"><b>${fmt(tot(p.month))}</b></td>
+        <td class="hide-sm">${spark(d.dates, p.days)}</td><td class="small muted hide-sm">${ago(p.seen)}</td>
+        ${owner ? `<td><button class="btn del" data-del="${esc(p.key)}" title="刪掉這台（站長）">刪除</button></td>` : ""}</tr>`).join("") + `</tbody></table></div>`;
+    for (const inp of document.querySelectorAll("#pcs input[data-host]")) {
+      inp.onfocus = () => editing = true;
+      inp.onblur = () => setTimeout(() => editing = false, 300);
+      inp.onkeydown = async e => {
+        if (e.key !== "Enter") return;
+        try { await api("/api/netusage/label", {method: "PUT", json: {host: inp.dataset.host, label: inp.value}}); inp.blur(); load(); }
+        catch (err) { alert(err.message); }
+      };
+    }
+    for (const b of document.querySelectorAll("#pcs [data-del]")) b.onclick = async () => {
+      if (!confirm(`刪掉 ${b.dataset.del} 的用量紀錄？`)) return;
+      await api("/api/netusage/pc/" + encodeURIComponent(b.dataset.del), {method: "DELETE"}); load();
+    };
+  }
+  if (owner && d.config && !$("#cfg")) renderConfig(d.config);
+}
+
+function renderConfig(c) {
+  const R = c.router, N = c.nas;
+  $("#cfgbox").innerHTML = `<details id="cfg"${(!R.enabled && !N.enabled) ? " open" : ""}><summary>設定（站長）</summary>
+  <div class="cfg" style="margin-top:8px">
+   <fieldset><legend>路由器（Netgear Traffic Meter）</legend>
+    <label><span>啟用</span><span><input type="checkbox" id="r-en"${R.enabled ? " checked" : ""}> 每 10 分鐘讀一次</span></label>
+    <label><span>位址</span><input type="text" id="r-host" value="${esc(R.host)}" placeholder="192.168.50.1"></label>
+    <label><span>管理帳號</span><input type="text" id="r-user" value="${esc(R.user || "admin")}" autocomplete="off"></label>
+    <label><span>管理密碼</span><input type="password" id="r-pw" placeholder="${R.has_password ? "已設定（留空 = 不改）" : "路由器管理密碼"}" autocomplete="new-password"></label>
+    <label><span>連接埠</span><input type="number" id="r-port" value="${R.port || ""}" placeholder="自動（5000 / 80 / 443 / 5555）"></label>
+    <div class="row"><button class="btn pri" id="r-save">儲存並測試</button></div>
+    <div class="res" id="r-res"></div>
+    <div class="help">先在路由器管理頁（http://路由器位址）的「進階 → 進階設定 → 流量計量器（Traffic Meter）」打開流量計量。密碼只存在 Hub 的資料夾，不會顯示在網頁上。</div>
+   </fieldset>
+   <fieldset><legend>NAS（SNMP）</legend>
+    <label><span>啟用</span><span><input type="checkbox" id="n-en"${N.enabled ? " checked" : ""}> 每分鐘讀一次</span></label>
+    <label><span>位址</span><input type="text" id="n-host" value="${esc(N.host)}" placeholder="192.168.50.2"></label>
+    <label><span>社群名稱</span><input type="text" id="n-comm" value="${esc(N.community || "public")}" autocomplete="off"></label>
+    <label><span>介面</span><input type="text" id="n-ifs" value="${esc((N.interfaces || []).join(", "))}" placeholder="自動（bond / ovs_eth / eth）"></label>
+    <div class="row"><button class="btn pri" id="n-save">儲存並測試</button></div>
+    <div class="res" id="n-res"></div>
+    <div class="help">DSM「控制台 → 終端機與 SNMP → SNMP」：勾選「啟動 SNMP 服務」與 SNMPv1/v2c，設定社群名稱（跟這裡一樣）。</div>
+   </fieldset>
+  </div></details>`;
+  const show = (el, st) => { el.className = "res " + (st.ok ? "ok" : "bad");
+    el.textContent = st.ok ? "✔ 讀取成功" + (st.info && st.info.ModelName ? `（${st.info.ModelName}${st.info.Firmwareversion ? " " + st.info.Firmwareversion : ""}，連接埠 ${st.port}）` : "")
+      + (st.interfaces ? `：統計 ${st.interfaces.join("、")}（NAS 上有 ${(st.all || []).join("、")}）` : "") : "✖ " + st.error; };
+  $("#r-save").onclick = async () => {
+    const el = $("#r-res"); el.className = "res"; el.textContent = "測試中…";
+    try {
+      const router = {enabled: $("#r-en").checked, host: $("#r-host").value.trim(), user: $("#r-user").value.trim(), port: +$("#r-port").value || 0};
+      if ($("#r-pw").value) router.password = $("#r-pw").value;
+      await api("/api/netusage/config", {method: "PUT", json: {router}});
+      $("#r-pw").value = "";
+      show(el, (await api("/api/netusage/test", {method: "POST", json: {what: "router"}})).status); load();
+    } catch (e) { el.className = "res bad"; el.textContent = "✖ " + e.message; }
+  };
+  $("#n-save").onclick = async () => {
+    const el = $("#n-res"); el.className = "res"; el.textContent = "測試中…";
+    try {
+      await api("/api/netusage/config", {method: "PUT", json: {nas: {enabled: $("#n-en").checked, host: $("#n-host").value.trim(),
+        community: $("#n-comm").value, interfaces: $("#n-ifs").value}}});
+      show(el, (await api("/api/netusage/test", {method: "POST", json: {what: "nas"}})).status); load();
+    } catch (e) { el.className = "res bad"; el.textContent = "✖ " + e.message; }
+  };
+}
+
+async function load() {
+  try { D = await api("/api/netusage?days=" + $("#range").value); render(); }
+  catch (e) { $("#sum").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+$("#range").onchange = load;
+window.addEventListener("resize", () => { if (D) render(); });
+(async () => {
+  try { ME = await api("/api/platform/me"); } catch (e) { ME = null; }
+  await load();
+  timer = setInterval(() => { if (!document.hidden) load(); }, 60000);
+})();
+</script>
+</body>
+</html>

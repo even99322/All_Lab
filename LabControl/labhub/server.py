@@ -285,7 +285,12 @@ class HubState:
             if "instruments" in info:
                 d["n_instruments"] = len(info.get("instruments") or [])
                 self._absorb(str(info.get("host") or ip), info.get("instruments") or [], info.get("scan"))
+            d.pop("net", None)
             self._touch()
+        if info.get("net"):                           # 1.0.29：網路用量（網卡總計數）
+            from . import netusage
+
+            netusage.report(self, str(info.get("host") or ip), info.get("net"), ip, str(info.get("user") or ""))
         return {"ok": True, "time": time.time(), "latest": self.latest_version(), "owners": self.owner_map()}
 
     def forget_device(self, did: str) -> None:
@@ -315,7 +320,8 @@ class HubState:
         with self.cond:
             n = self.node(name, create=True)
             self._absorb(str(st.get("host") or ip), st.get("instruments") or [], st.get("scan"))
-            st = {k: v for k, v in st.items() if k != "scan"}
+            net = st.get("net")
+            st = {k: v for k, v in st.items() if k not in ("scan", "net")}
             n.status = dict(st, ip=ip)
             n.last_seen = time.time()
             n.offline = st.get("state") == "offline"
@@ -325,7 +331,12 @@ class HubState:
                      node=n.name, state=st.get("state"), run=st.get("run"), simulate=st.get("simulate"),
                      ip=ip, last_seen=time.time(), n_instruments=len(st.get("instruments") or []))
             self._touch()
-            return {"ok": True, "time": time.time(), "owners": self.owner_map(), "shared": self.shared_keys()}
+            out = {"ok": True, "time": time.time(), "owners": self.owner_map(), "shared": self.shared_keys()}
+        if net:                                       # 1.0.29：網路用量（網卡總計數）
+            from . import netusage
+
+            netusage.report(self, str(st.get("host") or ip), net, ip, str(st.get("user") or ""))
+        return out
 
     def node_offline(self, name: str) -> None:
         with self.cond:
@@ -1270,6 +1281,7 @@ from . import data_routes  # noqa: E402,F401  （1.0.6 手機 / 平板看數據�
 from . import setup_routes  # noqa: E402,F401  （1.0.7 網頁：/data、/live、/setup 與共用導覽）
 from . import hfss_usage  # noqa: E402,F401  （1.0.19 HFSS 授權占用：/licenses、/api/hfss/usage；1.0.20 授權伺服器 lmstat）
 from . import notify  # noqa: E402,F401  （1.0.25 推播通知：/notify、/api/notify/…、/api/hfss/event）
+from . import netusage  # noqa: E402,F401  （1.0.29 網路用量：/network、/api/netusage）
 
 
 # ---------------------------------------------------------------------------
@@ -1307,6 +1319,10 @@ def serve(cfg: Config, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> None:
         except Exception:  # noqa: BLE001
             log.exception("掃描上傳檔失敗")
     threading.Thread(target=rescan, daemon=True).start()
+    try:
+        netusage.start(state)                         # 1.0.29：網路用量（路由器 Traffic Meter、NAS SNMP）
+    except Exception:  # noqa: BLE001
+        log.exception("網路用量啟動失敗")
     log.info("Lab Control Hub %s 啟動：http://%s:%d/（資料 %s；發佈 %s；token %s）", __version__, host, port,
              cfg.data_dir, cfg.releases_dir or "未設定", "關閉" if cfg.token is None else "已啟用")
     try:
@@ -1324,6 +1340,9 @@ def serve(cfg: Config, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> None:
         stop.set()
         state.tls.stop()
         state.save(force=True)
+        nu = getattr(state, "netusage", None)
+        if nu is not None:
+            nu.stop()
         srv.server_close()
 
 

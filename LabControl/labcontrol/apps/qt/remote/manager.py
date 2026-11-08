@@ -115,6 +115,12 @@ class RemoteManager(QObject):
             info["run"] = {"name": r.name, "index": r.index, "total": len(r.plan), "by": "本機"}
         else:
             info["state"], info["run"] = "idle", None
+        if setting("remote.report_net", True):          # 1.0.29：網卡總計數（Hub「網路用量」）
+            from ....remote.netcount import counters
+
+            net = counters()
+            if net:
+                info["net"] = net
         return info
 
     def _update_live_name(self) -> None:

@@ -129,8 +129,19 @@ def run() -> int:
         st.close()
         return "主視窗、儀器伺服器、即時數據"
 
+    def network() -> str:
+        """1.0.29：網卡流量計數（Hub「網路用量」）——Windows 走 GetIfTable2、macOS 走 netstat。"""
+        from .remote import netcount
+
+        c = netcount.counters()
+        if c is None:
+            raise RuntimeError("讀不到網卡流量計數")
+        if c["rx"] < 0 or c["tx"] < 0:
+            raise RuntimeError(f"計數不合理：{c}")
+        return f"{'、'.join(c['nics']) or '（沒有實體網卡）'}：收 {c['rx']:,} / 送 {c['tx']:,} byte"
+
     for name, fn in (("套件", libraries), ("LAB 設定資料夾", lab_folder), ("驅動", drivers),
-                     ("模擬量測 → .nc", measure), ("視窗", windows)):
+                     ("模擬量測 → .nc", measure), ("網路計數", network), ("視窗", windows)):
         check(name, fn)
 
     from . import APP_NAME, __version__

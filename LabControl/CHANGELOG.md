@@ -5,6 +5,12 @@
 
 ---
 
+## 1.0.29 — 2026-11-09
+
+Hub「網路用量」：每天的上傳 / 下載——整個網段（Netgear 路由器 Traffic Meter）、NAS（SNMP）、各台電腦（Lab Control 回報網卡計數）。詳見 [docs/releases/v1.0.29.md](docs/releases/v1.0.29.md)。
+
+---
+
 ## 1.0.28 — 2026-11-08
 
 4 port VNA：量測方塊沒連線也列出全部 16 個 S 參數（記住偵測到的 port 數 / instruments.yaml `ports` / 節點回報），並可手動加入 S34 等；Hub 網頁量測設置同步支援。詳見 [docs/releases/v1.0.28.md](docs/releases/v1.0.28.md)。

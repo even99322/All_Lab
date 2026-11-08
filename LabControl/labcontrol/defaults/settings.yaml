@@ -106,6 +106,7 @@ remote:
   heartbeat_s: 2               # 回報狀態的間隔（節點與這台電腦）
   instrument_sync: true        # 1.0.27：量測電腦之間同步儀器清單（新增 / 改名 / 隱藏；USB 歸接著的那台，網路儀器兩台都載入）
   instrument_sync_s: 15        # 1.0.27：多久檢查一次別台的儀器清單（秒）
+  report_net: true             # 1.0.29：回報這台的網卡總流量給 Hub「網路用量」（只有計數，不含內容）
   live_interval_s: 0.5         # 節點上傳即時資料（進度、曲線）的間隔
   mobile_live: true            # 1.0.4：量測摘要送到 Hub，手機開 http://<NAS>:8765/m 看即時量測
   mobile_live_interval_s: 1.0  # 送的間隔（秒）
