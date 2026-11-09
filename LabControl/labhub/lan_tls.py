@@ -170,7 +170,7 @@ class _TLSMixin:
         log.debug("TLS 連線錯誤 %s", client_address, exc_info=True)
 
 
-def _pump(a: ssl.SSLSocket, b: socket.socket, idle: float = 900.0) -> None:
+def _pump(a: ssl.SSLSocket, b: socket.socket, idle: float = 900.0, meter: Any = None) -> None:
     """瀏覽器（TLS）⇄ 論文庫（TCP），同一個執行緒（OpenSSL 的連線不能兩個執行緒同時讀寫）。"""
     while True:
         if a.pending():
@@ -189,6 +189,15 @@ def _pump(a: ssl.SSLSocket, b: socket.socket, idle: float = 900.0) -> None:
                 return
             if not data:
                 return
+            if meter is not None:                       # 1.0.33：論文庫 https 的流量（labhub/traffic.py）
+                if s is a:
+                    meter.nin += len(data)
+                else:
+                    if meter.bucket is not None:
+                        meter.bucket.take(len(data))
+                    meter.nout += len(data)
+                    if meter.nout > (1 << 20):
+                        meter.flush(0)
             other.sendall(data)
 
 
@@ -204,10 +213,23 @@ class _PaperlibProxy(socketserver.BaseRequestHandler):
                                  b"Connection: close\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body)
             return
         up.settimeout(None)
+        meter = None
         try:
-            _pump(self.request, up)
+            fn = getattr(getattr(self.server, "tls", None), "traffic_fn", None)
+            if fn is not None:
+                from .traffic import Meter
+
+                meter = Meter(fn(), int(self.server.server_address[1]), str(self.client_address[0]))
+                meter.cat = "paperlib"
+                meter.bucket = meter.tr.bucket("paperlib", meter.cls)
+        except Exception:  # noqa: BLE001
+            meter = None
+        try:
+            _pump(self.request, up, meter=meter)
         finally:
             up.close()
+            if meter is not None:
+                meter.flush()
 
 
 class _HubTLSServer(_TLSMixin, socketserver.ThreadingMixIn, socketserver.TCPServer):

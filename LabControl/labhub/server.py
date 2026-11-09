@@ -204,8 +204,14 @@ class HubState:
         from .lan_tls import LanTLS                      # 1.0.15：內網 https（同一張 Tailscale 憑證）
 
         self.tls = LanTLS(cfg, audit=self.platform.audit)
+        self.tls.traffic_fn = self._traffic                # 1.0.33：論文庫 https 的流量也記
         self.platform.paperlib_for_host = self.tls.paperlib_url_for
         self._load()
+
+    def _traffic(self):
+        from . import traffic
+
+        return traffic.store(self)
 
     # ---- 保存（重開 Hub 後仍記得有哪些電腦 / 節點）------------------------------
     def _state_file(self) -> Path:
@@ -732,6 +738,20 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: D401 - 改用 logging
         log.debug("%s %s", self.address_string(), fmt % args)
 
+    def setup(self) -> None:
+        super().setup()
+        self._meter = None
+        try:                                              # 1.0.33：各埠流量、分類限流（labhub/traffic.py）
+            from . import traffic
+
+            tr = traffic.store(self.hub)
+            m = traffic.Meter(tr, int(self.server.server_address[1]), str(self.client_address[0]))
+            self.rfile = traffic.CountingReader(self.rfile, m)
+            self.wfile = traffic.CountingWriter(self.wfile, m)
+            self._meter = m
+        except Exception:  # noqa: BLE001 - 控制台（另一個程式）或測試替身：不記
+            self._meter = None
+
     # ---- 基本工具 ------------------------------------------------------------
     @property
     def ip(self) -> str:
@@ -767,6 +787,16 @@ class Handler(BaseHTTPRequestHandler):
         data = self.rfile.read(n) if n else b""
         if len(data) != n:                     # 0.0.31：連線中斷 → 只收到一部分：不能存成「壞掉的安裝檔」
             raise HubHTTPError(400, f"上傳不完整（收到 {len(data):,} / {n:,} bytes），請重新上傳")
+        if data and (self.headers.get("Content-Encoding") or "").lower() == "gzip":   # 1.0.33：VPN 送來的壓縮資料
+            import zlib
+
+            d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+            try:
+                data = d.decompress(data, limit)
+            except zlib.error as e:
+                raise HubHTTPError(400, f"壓縮資料錯誤：{e}") from None
+            if d.unconsumed_tail:
+                raise HubHTTPError(413, "資料太大")
         return data
 
     def _json_body(self) -> Any:
@@ -779,6 +809,12 @@ class Handler(BaseHTTPRequestHandler):
             raise HubHTTPError(400, f"JSON 格式錯誤：{e}")
 
     def _send(self, code: int, body: bytes, ctype: str, headers: Optional[Dict[str, str]] = None) -> None:
+        if self._meter is not None and self.command != "HEAD":    # 1.0.33：區網以外 gzip
+            from .traffic import maybe_gzip
+
+            body, extra = maybe_gzip(self, body, ctype)
+            if extra:
+                headers = {**(headers or {}), **extra}
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
@@ -897,7 +933,14 @@ class Handler(BaseHTTPRequestHandler):
         from .platform import REQUEST
 
         REQUEST.host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]")
+        meter = getattr(self, "_meter", None)
+        if meter is not None:
+            meter.begin(path, self.headers.get("X-Forwarded-For") or "")
         try:
+            if meter is not None:
+                msg = meter.tr.blocked(meter.cat, meter.cls, path)
+                if msg:
+                    raise HubHTTPError(429, msg)
             for m, rx, fn, auth in self.routes:
                 if m != method:
                     continue
@@ -926,6 +969,9 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": f"{type(e).__name__}: {e}"}, 500)
             except OSError:
                 pass
+        finally:
+            if meter is not None:
+                meter.flush()
 
     def do_GET(self) -> None:  # noqa: N802
         self._dispatch("GET")
@@ -1162,8 +1208,11 @@ def _batch(h: Handler, name: str) -> None:
 
 @route("GET", N + r"/live")
 def _live(h: Handler, name: str) -> None:
+    from .traffic import pack_live
+
     q = h._query()
-    h._json(h.hub.live_get(name, int(float(q.get("after", 0))), q.get("run") or None, h._qf("wait")))
+    out = h.hub.live_get(name, int(float(q.get("after", 0))), q.get("run") or None, h._qf("wait"))
+    h._json(pack_live(h, out, name))             # 1.0.33：區網以外壓縮曲線（省流模式再縮）
 
 
 # ---- 檔案 ----------------------------------------------------------------------
@@ -1271,6 +1320,7 @@ from . import setup_routes  # noqa: E402,F401  （1.0.7 網頁：/data、/live�
 from . import hfss_usage  # noqa: E402,F401  （1.0.19 HFSS 授權占用：/licenses、/api/hfss/usage；1.0.20 授權伺服器 lmstat）
 from . import notify  # noqa: E402,F401  （1.0.25 推播通知：/notify、/api/notify/…、/api/hfss/event）
 from . import netusage  # noqa: E402,F401  （1.0.29 網路用量：/network、/api/netusage）
+from . import traffic  # noqa: E402,F401  （1.0.33 各埠流量與限流：/api/traffic）
 from . import notebook  # noqa: E402,F401  （1.0.31 電子實驗記錄：/notebook、/api/notebook）
 
 

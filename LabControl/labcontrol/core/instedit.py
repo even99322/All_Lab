@@ -4,13 +4,15 @@
   * instruments.yaml 的名稱（保留順序與註解，原檔先備份）；
   * 其他儀器 sources 裡的參照（電磁鐵組 magnet_A: sources [DC1, DC2] → [DC9, DC2]）；
   * settings.yaml 的「量測電腦對應」（lab_nodes 的 magnet / vna 清單）；
-  * Station：用到的儀器先移出，寫檔後重新載入（量測使用中、或已連線時拒絕）。
-量測方案 / 範本裡寫死的名稱不會自動改（呼叫端提醒使用者）。
+  * Station：用到的儀器先移出，寫檔後重新載入（量測使用中、或已連線時拒絕）；
+  * 1.0.33：量測方案、範本、專案範本、電源群組 / 記憶、即時數據的排法、VNA 接線（core/rename_refs.py），
+    目前開著的方案（工作台）。
 
 隱藏（hidden: true）只影響儀器伺服器的顯示與「全部連線」，儀器照常載入、可以連線。
 """
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -19,6 +21,8 @@ from . import labfile
 from .errors import ConfigError
 
 NAME_RE = re.compile(r"^[^\W\d][\w\-]*$", re.UNICODE)
+
+log = logging.getLogger(__name__)
 
 
 def check_name(new: str, existing) -> str:
@@ -119,11 +123,18 @@ def rename_instrument(station, path: Optional[Path], old: str, new: str) -> Dict
             uo["sources"] = [labfile._rename_ref(x, old, new) for x in (uo.get("sources") or [])]
             opts[u] = uo
     reloaded = _readd(station, opts, getattr(station, "foreign", {}) or {})
+    updated: List[str] = []
+    try:                                                  # 1.0.33：方案、範本、電源群組…用到舊名稱的地方一起改
+        from .rename_refs import propagate
+
+        updated = propagate(old, new)
+    except Exception as e:  # noqa: BLE001
+        log.warning("儀器改名後更新其他引用失敗：%s", e)
     try:
         station.bus.publish("station.changed", action="rename", name=new, old=old)
     except Exception:  # noqa: BLE001
         pass
-    return {"touched": touched, "reloaded": reloaded, "name": new}
+    return {"touched": touched, "reloaded": reloaded, "name": new, "updated": updated}
 
 
 def _readd(station, opts: Dict[str, Dict[str, Any]], foreign: Dict[str, str]) -> List[str]:

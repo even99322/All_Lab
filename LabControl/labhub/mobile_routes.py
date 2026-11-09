@@ -60,6 +60,7 @@ class MobileStore:
                     st[k] = body[k]
             if "trace" in body:
                 st["trace"] = body["trace"]
+                st["trace_v"] = int(st.get("trace_v") or 0) + 1     # 1.0.33：沒變就不重送
             st["updated"] = now
             if run and run.get("id") != old_run and "frame" not in body:
                 st["frame"], st["trace"] = None, None
@@ -157,7 +158,20 @@ def _detail(h: Handler, name: str) -> None:
         since = int(q.get("since", -1))
     except ValueError:
         since = -1
-    h._json(store(h).detail(name, q.get("frame") or None, since))
+    out = store(h).detail(name, q.get("frame") or None, since)
+    # 1.0.33：最後一條 trace 沒變（tv = 上次拿到的版本）就不重送；區網以外的省流模式抽成 300 點
+    tv = int((store(h).stations.get(name) or {}).get("trace_v") or 0)
+    out["tv"] = tv
+    if q.get("tv") and q["tv"] == str(tv) and out.get("trace") is not None:
+        out["trace"] = None
+        out["trace_same"] = True
+    elif out.get("trace") is not None:
+        m = getattr(h, "_meter", None)
+        if m is not None and m.remote and m.tr.economy()[0]:
+            from .traffic import thin_trace
+
+            out["trace"] = thin_trace(out["trace"], 300)
+    h._json(out)
 
 
 @route("GET", r"/(?:m|live)/?")

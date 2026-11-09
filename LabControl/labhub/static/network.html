@@ -52,6 +52,9 @@
   .cfg label { display:grid; grid-template-columns:96px 1fr; gap:8px; align-items:center; margin:6px 0; font-size:13px; }
   .cfg input[type=text], .cfg input[type=password], .cfg input[type=number] { font:inherit; padding:4px 8px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--text); width:100%; }
   .cfg .row { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  .cfg > .row { grid-column:1 / -1; }
+  .cfg td { white-space:nowrap; }
+  .cfg td input[type=number] { width:96px; }
   .res { font-size:12px; margin-top:6px; white-space:pre-wrap; }
   .res.ok { color:var(--ok); } .res.bad { color:var(--err); }
   .help { font-size:12px; color:var(--muted); margin-top:6px; }
@@ -80,6 +83,13 @@
   <div class="card"><svg class="chart" id="ch-ts"></svg>
     <div class="legend"><span><i style="background:var(--down)"></i>NAS 收到</span><span><i style="background:var(--up)"></i>NAS 送出</span><span>只畫<b>經外網</b>的部分（外網直連＋DERP 中繼）</span><span id="tnote"></span></div></div>
   <div id="tspeers" style="margin-top:10px"></div>
+
+  <h2>Hub 流量（各埠 × 資料類型） <span id="hst"></span></h2>
+  <div id="ecobox"></div>
+  <div class="card"><svg class="chart" id="ch-hub"></svg>
+    <div class="legend"><span><i style="background:var(--down)"></i>Hub 收到（區網以外）</span><span><i style="background:var(--up)"></i>Hub 送出（區網以外）</span><span id="hnote"></span></div></div>
+  <div id="hubtab" style="margin-top:10px"></div>
+  <div id="hubcfg"></div>
 
   <h2>各台裝置 <span class="small muted">（流量監看程式：只算連到實驗室網段時那張網卡的流量；含區網內傳檔）</span>
     <a class="btn" href="/get" style="text-decoration:none;font-weight:400">⬇ 下載流量監看程式</a></h2>
@@ -285,12 +295,89 @@ function renderConfig(c) {
   };
 }
 
+// ---- 1.0.33：Hub 流量（各埠 × 資料類型）、限流、省流模式 ----
+let T = null, tEditing = false;
+const CLS = {lan: "區網", vpn: "VPN", local: "NAS 本機轉入", wan: "外網"};
+const rateFmt = b => b >= 1048576 ? (b / 1048576).toFixed(1) + " MB/s" : b >= 1024 ? (b / 1024).toFixed(0) + " KB/s" : b > 0 ? b.toFixed(0) + " B/s" : "—";
+function renderHub() {
+  const t = T; if (!t) return;
+  const e = t.economy || {}, cfg = t.cfg || {};
+  $("#hst").innerHTML = e.on ? `<span class="pill bad">省流模式</span>` : `<span class="pill ok">一般</span>`;
+  const basis = {hub: "Hub 對外", router: "路由器整個網段", max: "Hub 對外與路由器取大的"}[e.basis] || e.basis;
+  $("#ecobox").innerHTML = `<div class="card small" style="margin-bottom:8px">${e.on
+    ? (e.forced ? "⚠️ 站長手動開了省流模式。" : `⚠️ 今天的用量 ${fmt(e.used)} 已超過門檻 ${fmt(e.threshold)}（依據：${esc(basis)}），`)
+      + "經 VPN 的即時曲線只留約 0.1% 精度（檔案裡的數據不受影響）、手機最後一條 trace 抽成 300 點、壓縮用最高等級。"
+    : `今天用量 ${fmt(e.used)}${e.threshold ? ` / 門檻 ${fmt(e.threshold)}` : ""}（依據：${esc(basis)}；Hub 對外 ${fmt(e.hub)}、路由器 ${fmt(e.router)}）。`
+      + (cfg.compress ? "區網以外的回應已經壓縮（即時曲線無損壓縮）。" : "壓縮已關閉。")}</div>`;
+  const days = {}; for (const d of t.dates) { const x = (t.days[d] || {}).remote || {up: 0, down: 0}; days[d] = {up: x.up, down: x.down}; }
+  chart($("#ch-hub"), t.dates, days);
+  const today = t.dates[t.dates.length - 1];
+  $("#hnote").textContent = `今天區網以外 ${fmt(tot(days[today]))}（區網 ${fmt(tot((t.days[today] || {}).lan))}）`;
+  const L = cfg.limits || {};
+  const rows = t.cats.map(([c, name]) => { const by = t.today[c] || {}, r = t.rate[c] || {}, m = t.month[c] || {}, l = L[c] || {};
+    const cell = k => { const v = by[k]; return v ? `${fmt(v.in + v.out)}<div class="small muted">${v.n} 次</div>` : "—"; };
+    const lim = [l.rate_kbps ? `${l.rate_kbps} KB/s` : "", l.daily_mb ? `每日 ${l.daily_mb} MB（已用 ${fmt(t.used[c])}）` : ""].filter(Boolean).join("、");
+    return `<tr><td><b>${esc(name)}</b></td>${Object.keys(CLS).map(k => `<td class="n">${cell(k)}</td>`).join("")}
+      <td class="n"><b>${fmt(m.remote || 0)}</b></td><td class="n hide-sm">${rateFmt(r.remote || 0)}</td>
+      <td class="small">${lim ? esc(lim) + (l.scope === "all" ? "（全部）" : "（區網以外）") : '<span class="muted">不限</span>'}</td></tr>`; }).join("");
+  const ports = Object.entries(t.ports || {}).sort().map(([p, v]) => `${esc(p)}：${fmt(v.in + v.out)}（${v.n} 次）`).join("　");
+  $("#hubtab").innerHTML = `<div class="wrap"><table><thead><tr><th>今天</th>${Object.values(CLS).map(n => `<th class="n">${n}</th>`).join("")}
+    <th class="n">本月區網以外</th><th class="n hide-sm">目前（區網以外）</th><th>限流</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <div class="help">各埠今天：${ports || "—"}。「NAS 本機轉入」是從 NAS 自己或容器轉進來的連線：Synology 的 Tailscale 轉進來的 VPN 會算在這裡${cfg.local_remote ? "（目前算區網以外）" : "（目前算區網）"}。
+    如果區網的電腦也都出現在「NAS 本機轉入」，代表 NAS 的 Docker 看不到真正的來源 IP，請在下面把「本機轉入算區網以外」關掉。</div>`;
+  const owner = ME && ME.user && ME.user.owner;
+  if (owner && !tEditing) renderHubCfg(cfg);
+}
+function renderHubCfg(cfg) {
+  const L = cfg.limits || {}, E = cfg.economy || {};
+  $("#hubcfg").innerHTML = `<details id="hcfg"${$("#hcfg") && $("#hcfg").open ? " open" : ""}><summary>限流與壓縮設定（站長）</summary>
+  <div class="cfg" style="margin-top:8px">
+   <fieldset><legend>壓縮與省流模式</legend>
+    <label><span>壓縮</span><span><input type="checkbox" id="h-comp"${cfg.compress ? " checked" : ""}> 區網以外的回應壓縮（即時曲線無損）</span></label>
+    <label><span>本機轉入</span><span><input type="checkbox" id="h-local"${cfg.local_remote ? " checked" : ""}> 「NAS 本機轉入」算區網以外</span></label>
+    <label><span>區網網段</span><input type="text" id="h-nets" value="${esc((cfg.lan_subnets || []).join(", "))}"></label>
+    <label><span>省流模式</span><span><input type="checkbox" id="h-eco"${E.enabled ? " checked" : ""}> 今天用量超過門檻自動開</span></label>
+    <label><span>門檻</span><span><input type="number" id="h-thr" value="${E.threshold_gb}" min="0" step="1" style="width:90px"> GB</span></label>
+    <label><span>依據</span><select id="h-basis">${[["max", "Hub 對外與路由器取大的"], ["hub", "Hub 對外"], ["router", "路由器整個網段"]].map(([v, n]) => `<option value="${v}"${E.basis === v ? " selected" : ""}>${n}</option>`).join("")}</select></label>
+    <label><span>手動</span><span><input type="checkbox" id="h-force"${E.force ? " checked" : ""}> 現在就用省流模式</span></label>
+   </fieldset>
+   <fieldset><legend>各類型限流（0 = 不限）</legend>
+    <div class="wrap"><table><thead><tr><th>類型</th><th>速度 KB/s</th><th>每日 MB</th><th>範圍</th></tr></thead><tbody>
+    ${(T.cats || []).map(([c, n]) => { const l = L[c] || {}; return `<tr><td>${esc(n)}</td>
+      <td><input type="number" min="0" step="10" data-c="${c}" data-k="rate_kbps" value="${l.rate_kbps || 0}" ></td>
+      <td><input type="number" min="0" step="100" data-c="${c}" data-k="daily_mb" value="${l.daily_mb || 0}"></td>
+      <td><select data-c="${c}" data-k="scope"><option value="remote"${l.scope !== "all" ? " selected" : ""}>區網以外</option><option value="all"${l.scope === "all" ? " selected" : ""}>全部</option></select></td></tr>`; }).join("")}
+    </tbody></table></div>
+    <div class="help">速度：同一類所有連線共用。每日上限：超過後這一類回「流量已達上限」，隔天自動恢復（網路用量頁和登入不受影響）。
+      例：即時量測 每日 5000 MB、數據檔 速度 2000 KB/s。</div>
+   </fieldset>
+   <div class="row"><button class="btn pri" id="h-save">儲存</button> <span class="res" id="h-res"></span></div>
+  </div></details>`;
+  $("#hcfg").addEventListener("focusin", () => { tEditing = true; });
+  $("#h-save").onclick = async () => {
+    const limits = {};
+    document.querySelectorAll("#hcfg [data-c]").forEach(x => { (limits[x.dataset.c] = limits[x.dataset.c] || {})[x.dataset.k] = x.dataset.k === "scope" ? x.value : +x.value || 0; });
+    const body = {compress: $("#h-comp").checked, local_remote: $("#h-local").checked,
+      lan_subnets: $("#h-nets").value.split(/[,，\s]+/).filter(Boolean),
+      economy: {enabled: $("#h-eco").checked, threshold_gb: +$("#h-thr").value || 0, basis: $("#h-basis").value, force: $("#h-force").checked}, limits};
+    const el = $("#h-res"); el.className = "res"; el.textContent = "儲存中…";
+    try { await api("/api/traffic/config", {method: "PUT", json: body}); tEditing = false; await loadHub();
+      const r2 = $("#h-res"); if (r2) { r2.className = "res ok"; r2.textContent = "✔ 已儲存"; } }
+    catch (e) { el.className = "res bad"; el.textContent = "✖ " + e.message; }
+  };
+}
+async function loadHub() {
+  try { T = await api("/api/traffic?days=" + $("#range").value); renderHub(); }
+  catch (e) { $("#hubtab").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+
 async function load() {
   try { D = await api("/api/netusage?days=" + $("#range").value); render(); }
   catch (e) { $("#sum").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  loadHub();
 }
 $("#range").onchange = load;
-window.addEventListener("resize", () => { if (D) render(); });
+window.addEventListener("resize", () => { if (D) render(); if (T) renderHub(); });
 (async () => {
   try { ME = await api("/api/platform/me"); } catch (e) { ME = null; }
   await load();

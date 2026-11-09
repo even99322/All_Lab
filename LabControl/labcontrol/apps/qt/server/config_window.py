@@ -71,12 +71,21 @@ class ParamRow(QtCore.QObject):
         self.scale = split_unit(self.unit)[1] if self.unit and self.kind in ("float",) else 1.0
         self.dirty = False
         self._loading = False
+        dyn = getattr(p.owner, "param_choices", None)        # 1.0.33：driver 提供的選項（例如 GS 的量程）
+        self.choices: List[float] = list(dyn(p.name) or []) if callable(dyn) and self.kind == "float" else []
         if not p.settable:
             self.w: QtWidgets.QWidget = QtWidgets.QLabel("—")
             self.w.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         elif self.kind == "bool":
             self.w = QtWidgets.QCheckBox()
             self.w.toggled.connect(self._changed)
+        elif self.choices:
+            self.w = QtWidgets.QComboBox()
+            self.w.setEditable(True)
+            self.w.addItems([self._fmt(c) for c in self.choices])
+            self.w.setCurrentIndex(-1)
+            self.w.currentIndexChanged.connect(self._changed)
+            self.w.lineEdit().returnPressed.connect(lambda: self.edited.emit(self))
         elif self.kind == "enum" and sp is not None and sp.choices:
             self.w = QtWidgets.QComboBox()
             self.w.addItems([str(c) for c in sp.choices])
@@ -102,7 +111,7 @@ class ParamRow(QtCore.QObject):
             return
         self.dirty = True
         self.w.setStyleSheet(DIRTY)
-        if self.kind in ("bool", "enum"):
+        if self.kind in ("bool", "enum") or self.choices:
             self.edited.emit(self)
 
     def show_value(self, v: Any, err: str = "") -> None:
@@ -118,7 +127,7 @@ class ParamRow(QtCore.QObject):
             if isinstance(self.w, QtWidgets.QCheckBox):
                 self.w.setChecked(bool(v))
             elif isinstance(self.w, QtWidgets.QComboBox):
-                self.w.setCurrentText(str(v))
+                self.w.setCurrentText(self._fmt(v) if self.choices else str(v))
             else:
                 text = self._fmt(v)
                 if isinstance(self.w, QtWidgets.QLineEdit):
@@ -142,6 +151,8 @@ class ParamRow(QtCore.QObject):
         if isinstance(self.w, QtWidgets.QCheckBox):
             return self.w.isChecked()
         if isinstance(self.w, QtWidgets.QComboBox):
+            if self.choices:
+                return parse_quantity(self.w.currentText().strip(), self.unit)
             return self.w.currentText()
         text = self.w.text().strip()
         if self.kind == "int":

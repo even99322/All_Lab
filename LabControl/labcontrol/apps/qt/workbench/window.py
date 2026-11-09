@@ -197,7 +197,7 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
         from ..bridge import QtEventBridge
 
         self.st_bridge = QtEventBridge(station.bus, "station.changed", parent=self)
-        self.st_bridge.on("station.changed", lambda _p: self._instruments_changed())
+        self.st_bridge.on("station.changed", self._station_changed)
         # 1.0.28：VNA 連線 / 偵測到 port 數 → 量測方塊的 S 參數清單跟著更新（4 port → S11…S44）
         self.vna_bridge = QtEventBridge(station.bus, "*", parent=self)
         self.vna_bridge.on("instrument.connected", lambda p: self._vna_traces_changed(p.get("name")))
@@ -653,6 +653,21 @@ class LabControlWindow(RemoteMixin, QtWidgets.QMainWindow):
             return
         if now != list(m.traces):
             self.doc.set_catalog(build_catalog(self.station))
+
+    def _station_changed(self, p: dict) -> None:
+        if (p or {}).get("action") == "rename" and p.get("old") and p.get("name"):
+            self._rename_in_doc(str(p["old"]), str(p["name"]))
+        self._instruments_changed()
+
+    def _rename_in_doc(self, old: str, new: str) -> None:
+        """1.0.33：儀器改名 → 目前開著的方案裡用到的地方也改（存檔的方案在 core/rename_refs.py 改）。"""
+        from ....core.rename_refs import rename_scheme
+
+        try:
+            if self.doc.mutate(lambda sch: rename_scheme(sch, old, new)):
+                self.statusBar().showMessage(f"目前的方案：{old} 已改成 {new}", 8000)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _instruments_changed(self) -> None:
         """儀器伺服器新增 / 移除儀器後：重建儀器參數列表與方案檢查。"""

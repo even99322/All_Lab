@@ -51,6 +51,12 @@ GS820_RANGES = {   # 查詢回傳值：0.5 A 檔回 600E-3、1 A 檔回 1.2、3 
 }
 
 
+def _fmt_range(v: float, func: Optional[str]) -> str:
+    if (func or "CURR") == "CURR":
+        return f"{v * 1e3:g} mA" if v < 1 else f"{v:g} A"
+    return f"{v * 1e3:g} mV" if v < 1 else f"{v:g} V"
+
+
 def _norm_func(resp: str) -> str:
     return "CURR" if "CURR" in resp.upper() else "VOLT"
 
@@ -108,6 +114,20 @@ class GSChannel(Channel, Source):
         cur = "A" if (self.func or "CURR") == "CURR" else "V"
         other = "V" if cur == "A" else "A"
         return {"range": cur, "limiter": other, "level": cur}.get(name, "")
+
+    def param_choices(self, name: str) -> List[float]:
+        """1.0.33：儀器控制視窗的量程下拉選單（目前源功能可用的量程）。"""
+        if name != "range":
+            return []
+        return sorted(self.dev.ranges.get(self.func or "CURR", {}))
+
+    def pick_range(self, value: float) -> Optional[float]:
+        """最接近、且不小於 value 的量程（表裡沒有 → None）。"""
+        table = sorted(self.dev.ranges.get(self.func or "CURR", {}))
+        for r in table:
+            if r >= abs(value) * (1 - 1e-9):
+                return r
+        return None
 
     # ---- 量程 / 解析度 ---------------------------------------------------------
     def range_info(self) -> Optional[Tuple[float, float]]:
@@ -273,13 +293,44 @@ class YokogawaSMU(Instrument):
                     self.station.bus.log("⚠️ " + msg, "warning")
             if cfg.get("auto_range") is not None and ch._get_auto_range() not in (None, bool(cfg["auto_range"])):
                 ch._set_auto_range(bool(cfg["auto_range"]))
-            if cfg.get("range") is not None and (ch.range is None or abs(ch.range - float(cfg["range"])) > 1e-12):
-                ch.parameters["range"].set(float(cfg["range"]))
+            want = cfg.get("range") if cfg.get("range") is not None else self.connect_range(ch)
+            if want is not None and (ch.range is None or abs(ch.range - float(want)) > 1e-12):
+                try:
+                    ch.parameters["range"].set(float(want))
+                    msg = f"{ch.full_name} 量程設成 {_fmt_range(float(want), ch.func)}"
+                    log.info(msg)
+                    if self.station is not None:
+                        self.station.bus.log("ℹ️ " + msg, "info")
+                except InstrumentError as e:           # 輸出開著：不切換量程（感性負載可能跳脫），只提醒
+                    msg = f"{ch.full_name} 量程沒有改成 {_fmt_range(float(want), ch.func)}：{e}"
+                    log.warning(msg)
+                    if self.station is not None:
+                        self.station.bus.log("⚠️ " + msg, "warning")
             if cfg.get("limiter") is not None:
                 ch.parameters["limiter"].set(float(cfg["limiter"]))
             if cfg.get("output") is not None and bool(cfg["output"]) != ch.get_output():
                 ch.set_output(bool(cfg["output"]))
             ch.parameters["level"].unit = ch.unit
+
+    def connect_range(self, ch: "GSChannel") -> Optional[float]:
+        """1.0.33：連線時的預設量程。電流模式 → settings server.yokogawa_current_range（預設 0.2 A）；
+        電壓模式 → server.yokogawa_voltage_range（預設不改）。"keep" / 空白 = 不改；instruments.yaml on_connect.range 優先。"""
+        key = "server.yokogawa_current_range" if ch.func == "CURR" else "server.yokogawa_voltage_range"
+        try:
+            from ...settings import setting
+
+            want = setting(key, 0.2 if ch.func == "CURR" else "keep")
+        except Exception:  # noqa: BLE001
+            want = 0.2 if ch.func == "CURR" else None
+        if want is None or str(want).strip().lower() in ("", "keep", "none", "不改", "auto"):
+            return None
+        try:
+            v = float(want)
+        except (TypeError, ValueError):
+            from ...core.units import parse_quantity
+
+            v = parse_quantity(str(want), "A" if ch.func == "CURR" else "V")
+        return ch.pick_range(v) if ch.param_choices("range") else v
 
     def connect_function(self, cfg: Dict[str, Any]) -> Optional[str]:
         """連線時要用的源功能：instruments.yaml on_connect.function → settings server.yokogawa_function（預設 CURR）。

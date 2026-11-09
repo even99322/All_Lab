@@ -9,6 +9,17 @@ from labcontrol.core import instedit, labfile
 from labcontrol.core.station import Station
 from labcontrol.remote.groups import build_groups, filter_hidden
 from labcontrol.remote.instsync import SYNC_KEY, InstrumentSync, plan_sync
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _isolated_rename(tmp_path, monkeypatch):
+    """1.0.33：改名會一起改 LAB 資料夾裡的方案 / 範本——測試改到自己的暫存資料夾，不動共用的測試 LAB。"""
+    from labcontrol.core import rename_refs
+
+    orig = rename_refs.propagate
+    monkeypatch.setattr(rename_refs, "propagate", lambda old, new, root=None, push_projects=False:
+                        orig(old, new, root=tmp_path / "_lab", push_projects=False))
 
 U1 = "USB0::0x0B21::0x0039::91AB00001::INSTR"
 U2 = "USB0::0x0B21::0x0039::91AB00002::INSTR"

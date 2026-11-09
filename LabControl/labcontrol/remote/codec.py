@@ -28,6 +28,10 @@ def enc_array(a: Any) -> Any:
 
 def dec_array(d: Any) -> Any:
     if isinstance(d, dict):
+        if "zre" in d:                       # 1.0.33：Hub 對 VPN 用戶端壓縮過（labhub/traffic.py pack_floats）
+            return _unz(d["zre"]) + 1j * _unz(d["zim"])
+        if "zf" in d:
+            return _unz(d["zf"])
         if "re" in d:
             return _unb64(d["re"]) + 1j * _unb64(d["im"])
         if "f" in d:
@@ -39,6 +43,15 @@ def dec_array(d: Any) -> Any:
 
 def _b64(a: np.ndarray) -> str:
     return base64.b64encode(np.ascontiguousarray(a, dtype=np.float32).tobytes()).decode("ascii")
+
+
+def _unz(s: str) -> np.ndarray:
+    """位元組重排＋zlib 的 float32（Hub 1.0.33）→ 陣列。"""
+    import zlib
+
+    raw = zlib.decompress(base64.b64decode(s))
+    n = len(raw) // 4
+    return np.frombuffer(raw, dtype=np.uint8).reshape(4, n).T.copy().view(np.float32).reshape(-1).astype(float)
 
 
 def _unb64(s: str) -> np.ndarray:

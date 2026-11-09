@@ -92,6 +92,8 @@ monitor:
 # ---- 儀器伺服器 -------------------------------------------------------------------
 server:
   visa_backend: ""             # 空白 = 自動：NI-VISA（nivisa64.dll）→ 系統預設 VISA → pyvisa-py；也可填 dll 路徑或 "@py"
+  yokogawa_current_range: 0.2  # 1.0.33：連線時電流模式的量程（A；GS200：0.001 / 0.01 / 0.1 / 0.2）；keep = 不改（instruments.yaml on_connect.range 優先）
+  yokogawa_voltage_range: keep # 1.0.33：連線時電壓模式的量程（V）；keep = 不改
   yokogawa_function: CURR      # 1.0.31：Yokogawa（GS200 / GS610 / GS820）連線時預設切成電流模式；VOLT = 電壓、keep = 不改（instruments.yaml on_connect.function 優先）
   scan_include_serial: false   # 掃描 VISA 資源時是否對序列埠（ASRL）送 *IDN?
   scan_timeout_ms: 1500

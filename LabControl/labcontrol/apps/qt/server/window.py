@@ -912,7 +912,7 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
         old = d["name"] if kind == "node" else (d.get("local_name") or d["name"])
         what = "電磁鐵組" if (d.get("options") or {}).get("sources") or d.get("virtual") else "儀器"
         new, ok = QtWidgets.QInputDialog.getText(
-            self, f"{what}改名", f"{old} 的新名稱：\n（量測方案、範本裡寫到 {old} 的地方不會自動改）",
+            self, f"{what}改名", f"{old} 的新名稱：\n（量測方案、範本、專案範本、電源群組與記憶裡的 {old} 會一起改）",
             QtWidgets.QLineEdit.EchoMode.Normal, old)
         new = (new or "").strip()
         if not ok or not new or new == old:
@@ -946,6 +946,14 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
                 res = {}
                 if online:
                     res = self._call_node(node, "rename_instrument", old=old, new=new) or {}
+                if not local_name:                    # 1.0.33：這台的方案 / 範本也要改（儀器不在這台的設定檔）
+                    try:
+                        from ....core.rename_refs import propagate
+
+                        res = {**res, "updated": [*(res.get("updated") or []), *propagate(old, new)]}
+                        self.station.bus.publish("station.changed", action="rename", name=new, old=old)
+                    except Exception:  # noqa: BLE001
+                        pass
                 if local_name:
                     try:
                         instedit.rename_instrument(self.station, self.config_path, local_name, new)
@@ -969,6 +977,9 @@ class InstrumentServerWindow(QtWidgets.QMainWindow):
             if w is not None:
                 w.close()
             extra = f"；一起改了 {'、'.join(res['touched'])} 的電源" if res.get("touched") else ""
+            if res.get("updated"):
+                extra += f"；更新 {len(res['updated'])} 個檔（{'、'.join(Path(x).name for x in res['updated'][:6])}" \
+                         + ("…" if len(res["updated"]) > 6 else "") + "）"
             self._log(f"✎ {old} → {new}{extra}" + (f"（{node}）" if kind == "node" and node else "") + res.get("note", ""))
             self._publish()
             self.fetch_registry(force=True)

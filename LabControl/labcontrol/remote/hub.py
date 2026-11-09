@@ -131,6 +131,18 @@ class Hub:
         self.token = token
         self.timeout = timeout
 
+    @property
+    def remote(self) -> bool:
+        """1.0.33：連的不是區網位址（VPN 100.x、網域名稱或外網）→ 送出的 JSON 壓縮。"""
+        import ipaddress
+
+        host = urllib.parse.urlsplit(self.url).hostname or ""
+        try:
+            a = ipaddress.ip_address(host)
+        except ValueError:
+            return host not in ("localhost",)
+        return not (a.is_loopback or (a.is_private and a not in ipaddress.ip_network("100.64.0.0/10")))
+
     def __repr__(self) -> str:
         return f"Hub({self.url})"
 
@@ -141,20 +153,38 @@ class Hub:
         if params:
             url += "?" + urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
         data = raw if raw is not None else (dumps(body) if body is not None else None)
+        gz = data is not None and raw is None and len(data) > 4096 and self.remote
+        if gz:                                       # 1.0.33：經 VPN 時送出的 JSON 先壓縮
+            import gzip
+
+            data = gzip.compress(data, 6)
         req = urllib.request.Request(url, data=data, method=method)
         if data is not None:
             req.add_header("Content-Type", ctype)
+            if gz:
+                req.add_header("Content-Encoding", "gzip")
+        req.add_header("Accept-Encoding", "gzip")
+        req.add_header("X-Labhub-Enc", "zs")        # 看得懂 Hub 壓縮過的曲線（codec.dec_array）
         if self.token:
             req.add_header("Authorization", f"Bearer {self.token}")
         try:
             with _OPENER.open(req, timeout=timeout or self.timeout) as r:
                 payload = r.read()
+                if (r.headers.get("Content-Encoding") or "").lower() == "gzip":
+                    import gzip
+
+                    payload = gzip.decompress(payload)
                 if r.headers.get_content_type() == "application/json":
                     return json.loads(payload.decode("utf-8"))
                 return payload
         except urllib.error.HTTPError as e:
             try:
-                msg = json.loads(e.read().decode("utf-8")).get("error") or str(e)
+                eb = e.read()
+                if (e.headers.get("Content-Encoding") or "").lower() == "gzip":
+                    import gzip
+
+                    eb = gzip.decompress(eb)
+                msg = json.loads(eb.decode("utf-8")).get("error") or str(e)
             except Exception:  # noqa: BLE001
                 msg = str(e)
             if e.code == 409:

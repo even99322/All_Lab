@@ -187,9 +187,11 @@ async function loadDetail() {
   if (!current || busy) return;
   busy = true;
   try {
-    const q = frame ? `?frame=${encodeURIComponent(frame.id)}&since=${ver}` : "";
+    const tv = detail && detail.trace && detail.tv != null ? `tv=${detail.tv}` : "";
+    const q = frame ? `?frame=${encodeURIComponent(frame.id)}&since=${ver}` + (tv ? "&" + tv : "") : (tv ? "?" + tv : "");
     const d = await api("/api/m/" + encodeURIComponent(current) + q);
     if (d.name !== current) return;
+    if (d.trace_same && detail && detail.trace) d.trace = detail.trace;     // 1.0.33：最後一條沒變，Hub 不重送
     merge(d);
     detail = d;
     render();

@@ -222,3 +222,27 @@ def test_sim_mirrors_real_parameter_tables(station: Station):
     assert {"start_freq", "if_bw", "power", "averages"} <= set(vna.parameters)
     assert vna.parameters["if_bw"].spec.limits == (1, 30e6)
     assert "limiter" in station.instruments["DC5"].channels["ch2"].parameters
+
+
+def test_gs200_default_current_range_on_connect():
+    """1.0.33：電流模式連線時量程預設 200 mA（server.yokogawa_current_range）；輸出開著不改；keep = 不改。"""
+    from labcontrol.settings import settings
+
+    inst, t = _gs200({"lev": "0", "func": "CURR", "rang": "0.01", "outp": "0"})
+    assert ":SOUR:RANG 0.2" in t.writes
+    assert inst.channels["ch1"].param_choices("range") == [1e-3, 10e-3, 100e-3, 200e-3]
+    inst, t = _gs200({"lev": "0", "func": "CURR", "rang": "0.01", "outp": "1"})
+    assert not any(w.startswith(":SOUR:RANG") for w in t.writes)              # 輸出開著：不切量程
+    inst, t = _gs200({"lev": "0", "func": "CURR", "rang": "0.01", "outp": "0"}, on_connect={"range": 0.1})
+    assert ":SOUR:RANG 0.1" in t.writes                                        # instruments.yaml 優先
+    s = settings()
+    old = s.get("server.yokogawa_current_range")
+    try:
+        s.set("server.yokogawa_current_range", "keep")
+        inst, t = _gs200({"lev": "0", "func": "CURR", "rang": "0.01", "outp": "0"})
+        assert not any(w.startswith(":SOUR:RANG") for w in t.writes)
+        s.set("server.yokogawa_current_range", "150mA")                          # 不在表上 → 取上面一檔
+        inst, t = _gs200({"lev": "0", "func": "CURR", "rang": "0.01", "outp": "0"})
+        assert ":SOUR:RANG 0.2" in t.writes
+    finally:
+        s.set("server.yokogawa_current_range", old)
