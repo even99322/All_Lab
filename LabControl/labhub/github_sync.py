@@ -27,6 +27,7 @@ from .packages import PackageError, identify_binary
 PREFIXES = ("labcontrol-v", "lablogviewer-v", "hfss-v", "netmeter-v")     # 1.0.17 模擬工具；1.0.30 流量監看
 CACHE_S = 60.0
 AUTO_EVERY_S = 30 * 60.0
+RETRY_FAILED_S = 24 * 3600.0          # 1.0.32：自動模式下載 / 暫存失敗的檔，24 小時內不再自動重抓（避免每 30 分鐘重下載同一個大檔）
 _ZIP = re.compile(r"^(?P<name>LabControlHub|LabControlMonitor|LabControl|LabLogViewerPets|LabLogViewer|paperlib)"
                   r"[_-]v?(?P<ver>\d+(?:\.\d+){0,3})(?P<upd>[_-]update)?\.zip$", re.I)
 _ZIP_TARGET = {"labcontrolhub": "hub", "labcontrolmonitor": "monitor", "labcontrol": "labcontrol",
@@ -66,6 +67,7 @@ class GithubSync:
         self._cache: Optional[tuple] = None
         self.job: Optional[Dict[str, Any]] = None
         self.cfg_path = Path(console.dir).parent / "github_sync.json"
+        self.on_bytes: Optional[Callable[[int, int], None]] = None      # 1.0.32：下載了多少（網路用量頁的「Hub 從 GitHub 下載」）
         self._auto_thread: Optional[threading.Thread] = None
         if self.config().get("auto"):
             self._start_auto()
@@ -156,13 +158,16 @@ class GithubSync:
             return json.loads(json.dumps(self.job)) if self.job else None
 
     def fetch(self, by: str, publish: bool = False, names: Optional[List[str]] = None,
-              wait: bool = False) -> Dict[str, Any]:
+              wait: bool = False, auto: bool = False) -> Dict[str, Any]:
         with self.lock:
             if self.job and not self.job.get("done"):
                 return json.loads(json.dumps(self.job))
         files = self.wanted(self.latest(force=True))
         if names:
             files = [f for f in files if f["name"] in names]
+        if auto:
+            failed = self.config().get("failed") or {}
+            files = [f for f in files if time.time() - float(failed.get(f["name"], 0)) > RETRY_FAILED_S]
         job = {"id": secrets.token_hex(4), "by": by, "publish": bool(publish), "started": time.time(),
                "done": not files, "files": [{"name": f["name"], "size": f["size"], "got": 0, "status": "等待",
                                             "item": None} for f in files], "message": "" if files else "線上都是最新版"}
@@ -190,6 +195,11 @@ class GithubSync:
                 f.write(chunk)
                 got += len(chunk)
                 progress(got)
+                if self.on_bytes is not None:
+                    try:
+                        self.on_bytes(len(chunk), 0)
+                    except Exception:  # noqa: BLE001
+                        pass
         os.replace(tmp, dst)
 
     def _run(self, job: Dict[str, Any], files: List[Dict[str, Any]]) -> None:
@@ -208,6 +218,9 @@ class GithubSync:
                 self._set(job, i, status="已下載", item=it["id"], got=f["size"])
             except Exception as e:  # noqa: BLE001 - 一個檔失敗不影響其他的
                 self._set(job, i, status=f"❌ {e}")
+                failed = dict(self.config().get("failed") or {})
+                failed[f["name"]] = time.time()
+                self._save_cfg(failed={k: v for k, v in failed.items() if time.time() - v < 7 * 86400})
                 try:
                     dst.unlink()
                 except OSError:
@@ -237,7 +250,7 @@ class GithubSync:
 
     def auto_once(self) -> Dict[str, Any]:
         try:
-            job = self.fetch(self.config().get("auto_by") or "自動", publish=True, wait=True)
+            job = self.fetch(self.config().get("auto_by") or "自動", publish=True, wait=True, auto=True)
             result = job.get("message") or ""
         except GithubError as e:
             result = f"❌ {e}"

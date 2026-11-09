@@ -51,6 +51,10 @@ class RemoteManager(QObject):
         self.timer.start(int(max(1.0, float(setting("remote.heartbeat_s", 2))) * 1000))
         self.retry = QtCore.QTimer(self)
         self.retry.timeout.connect(self.find)
+        # 1.0.32：連在 VPN 位址（內網剛好連不到時）→ 每 5 分鐘試一次改回內網，不讓量測資料繞外網
+        self.prefer = QtCore.QTimer(self)
+        self.prefer.timeout.connect(self._prefer_lan)
+        self.prefer.start(300_000)
         # 1.0.4：手機看即時量測（Hub /m）——這台的量測摘要定期送到 Hub
         self._live_name: Optional[str] = None
         self.live = None
@@ -87,6 +91,23 @@ class RemoteManager(QObject):
             if not self.retry.isActive():
                 self.retry.start(15000)
         run_bg(find_hub, ok, fail)
+
+    def _prefer_lan(self) -> None:
+        cur = self.hub
+        if cur is None or self._searching:
+            return
+        from ....remote import better_hub
+
+        def ok(h):
+            if h is None or self.hub is not cur:
+                return
+            log.info("Hub 改走 %s（原本 %s）", h.url, cur.url)
+            self.hub = h
+            if self.node is not None and self.node.hub.url == cur.url:
+                self.node.hub = h
+            self.hub_changed.emit("ok", h.url)
+
+        run_bg(lambda: better_hub(cur), ok, lambda msg: None)
 
     def _set_error(self, msg: str) -> None:
         if msg != self._last_error:

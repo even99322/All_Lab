@@ -44,6 +44,7 @@ LIVE = {"get", "describe", "get_all", "sources", "vnas", "vna_catalog", "vna_por
         "vna_scan", "vna_set_visible", "fine_step", "output", "group_ramp", "magnets", "magnet_memory"}
 #: 等待上傳的即時資料上限（Hub 斷線太久時丟掉最舊的曲線，不影響量測）
 MAX_PENDING = 4000
+PREFER_LAN_S = 300.0                 # 1.0.32：連在 VPN 位址時，多久試一次改回內網
 
 
 def owner_guard(owners_fn: Callable[[], Dict[str, str]], station: Station, host: Callable[[], str],
@@ -248,9 +249,13 @@ class NodeService:
         hb = float(setting("remote.heartbeat_s", 2))
         live = float(setting("remote.live_interval_s", 0.5))
         last_hb = 0.0
+        last_pref = time.time()
         while not self._stop.is_set():
             try:
                 now = time.time()
+                if now - last_pref >= PREFER_LAN_S:
+                    last_pref = now
+                    self._prefer_lan()
                 if now - last_hb >= hb or self._status_now.is_set():
                     self._status_now.clear()
                     self._post_status()
@@ -263,6 +268,19 @@ class NodeService:
                 self._note_error("回報 Hub 失敗", e)
                 self._stop.wait(2.0)
             self._stop.wait(min(live, hb) / 2)
+
+    def _prefer_lan(self) -> None:
+        """1.0.32：量測資料（每一點的曲線）會即時上傳到 Hub；連的是 VPN 位址時改回內網，不要讓資料繞外網。"""
+        from .hub import better_hub
+
+        try:
+            h = better_hub(self.hub)
+        except Exception:  # noqa: BLE001
+            return
+        if h is not None:
+            log.info("節點 %s 改走 %s（原本 %s）", self.name, h.url, self.hub.url)
+            self.hub = h
+            self._status_now.set()
 
     def _sync_loop(self) -> None:
         """1.0.27：這台的儀器清單有變就放到 Hub；別台的清單有變就同步過來（見 remote/instsync.py）。"""

@@ -55,6 +55,7 @@
   .res { font-size:12px; margin-top:6px; white-space:pre-wrap; }
   .res.ok { color:var(--ok); } .res.bad { color:var(--err); }
   .help { font-size:12px; color:var(--muted); margin-top:6px; }
+  .pill.warn { background:#fff4e6; color:#d9480f; }
   .empty { background:var(--card); border:1px dashed var(--line); border-radius:12px; padding:20px; text-align:center; color:var(--muted); }
   details summary { cursor:pointer; color:var(--muted); font-size:13px; margin-top:16px; }
   @media (max-width: 640px) { .hide-sm { display:none; } .spark { width:80px; } }
@@ -73,6 +74,12 @@
   <h2>NAS <span id="nhost" class="small muted"></span> <span id="nst"></span></h2>
   <div class="card"><svg class="chart" id="ch-nas"></svg>
     <div class="legend"><span><i style="background:var(--down)"></i>收到</span><span><i style="background:var(--up)"></i>送出</span><span id="nnote"></span></div></div>
+
+  <h2>Tailscale（VPN） <span id="tst"></span></h2>
+  <div id="tswarn"></div>
+  <div class="card"><svg class="chart" id="ch-ts"></svg>
+    <div class="legend"><span><i style="background:var(--down)"></i>NAS 收到</span><span><i style="background:var(--up)"></i>NAS 送出</span><span>只畫<b>經外網</b>的部分（外網直連＋DERP 中繼）</span><span id="tnote"></span></div></div>
+  <div id="tspeers" style="margin-top:10px"></div>
 
   <h2>各台裝置 <span class="small muted">（流量監看程式：只算連到實驗室網段時那張網卡的流量；含區網內傳檔）</span>
     <a class="btn" href="/get" style="text-decoration:none;font-weight:400">⬇ 下載流量監看程式</a></h2>
@@ -166,7 +173,10 @@ function render() {
     card("全網 昨天", fmt(tot(r.days[yday])), ud(r.days[yday])) +
     card("全網 本月", r.month ? fmt(tot(r.month)) : "—", ud(r.month)) +
     card("NAS 今天", fmt(tot(n.days[today])), ud(n.days[today])) +
-    card("NAS 本月", fmt(tot(n.month)), ud(n.month));
+    card("NAS 本月", fmt(tot(n.month)), ud(n.month)) +
+    (d.tailscale ? card("VPN 經外網 今天", fmt(tot(d.tailscale.ext[today])), ud(d.tailscale.ext[today])) : "") +
+    (d.github ? card("Hub 從 GitHub 下載 今天", fmt(tot(d.github.days[today])), d.github.month ? "本月 " + fmt(tot(d.github.month)) : "") : "");
+  renderTs(d);
   $("#rst").innerHTML = status(r.status, r.enabled);
   $("#nst").innerHTML = status(n.status, n.enabled);
   $("#nhost").textContent = n.host ? "（" + n.host + "）" : "";
@@ -202,6 +212,30 @@ function render() {
     };
   }
   if (owner && d.config && !$("#cfg")) renderConfig(d.config);
+}
+
+const PATH = {lan: ["區網直連", "ok", "不經外網"], wan: ["外網直連", "warn", "經外網（不經中繼）"], relay: ["DERP 中繼", "bad", "經外網，繞到 Tailscale 的中繼伺服器"]};
+function renderTs(d) {
+  const t = d.tailscale; if (!t) return;
+  const st = t.status || {}, today = d.today;
+  $("#tst").innerHTML = !st.time ? `<span class="pill off">等待第一次讀取</span>` : st.ok
+    ? `<span class="pill ok">正常</span> <span class="small muted">${ago(st.time)}讀取${st.version ? "　Tailscale " + esc(st.version.split("-")[0]) : ""}　連線中：區網 ${st.online.lan}、外網直連 ${st.online.wan}、中繼 ${st.online.relay}</span>`
+    : `<span class="pill bad">讀不到</span> <span class="small" style="color:var(--err)">${esc(st.error)}</span>`;
+  const w = [];
+  if (st.exit_node) w.push(`⚠️ NAS 開著 Tailscale「<b>出口節點</b>」：在外面用這個出口上網的裝置，<b>所有</b>上網流量都會經過實驗室對外線路（進來一次、出去一次，等於算兩倍）。不需要的話到 NAS 的 Tailscale 設定或 Tailscale 管理頁關掉 Exit node。`);
+  if (st.routes && st.routes.length) w.push(`ℹ️ NAS 分享子網路由 ${esc(st.routes.join("、"))}：在外面經 VPN 連實驗室其他設備的流量會經過實驗室對外線路。`);
+  const users = t.peers.filter(p => p.exit_node_user); if (users.length) w.push(`⚠️ ${users.map(p => esc(p.name)).join("、")} 正在用 NAS 當出口節點上網。`);
+  $("#tswarn").innerHTML = w.map(x => `<div class="card" style="border-color:var(--err);margin-bottom:8px">${x}</div>`).join("");
+  chart($("#ch-ts"), d.dates, t.ext);
+  $("#tnote").textContent = `本月經外網 ${fmt(tot(t.month_ext))}　（VPN 全部 ${fmt(tot(t.month))}，其餘是區網直連，不算對外）`;
+  $("#tspeers").innerHTML = !t.peers.length ? `<div class="empty">${st.ok ? "這個月還沒有 VPN 裝置跟 NAS 傳資料" : "Hub 讀不到 Tailscale：docker-compose.yml 的 labhub 要掛載 /var/packages/Tailscale/var:/tailscale:ro"}</div>` :
+    `<div class="wrap"><table><thead><tr><th>VPN 裝置</th><th>目前路徑</th><th class="n">今天</th><th class="n">今天經外網</th><th class="n">本月</th><th class="hide-sm">近 14 天</th><th class="hide-sm">最後上線</th></tr></thead><tbody>` +
+    t.peers.map(p => { const P = PATH[p.path] || ["—", "off", ""];
+      return `<tr><td class="who"><span class="dot${p.online ? " on" : ""}"></span><b>${esc(p.name)}</b><div class="small muted" style="padding-left:15px">${esc(p.os)}　${esc(p.ip)}</div></td>
+      <td>${p.online ? `<span class="pill ${P[1]}" title="${esc(P[2])}${p.cur ? "：" + esc(p.cur) : ""}">${P[0]}${p.path === "relay" && p.relay ? " " + esc(p.relay) : ""}</span>` : `<span class="muted small">離線</span>`}</td>
+      <td class="n">${fmt(tot(p.days[today]))}</td><td class="n">${p.ext[today] ? `<b>${fmt(p.ext[today])}</b>` : "—"}</td>
+      <td class="n"><b>${fmt(tot(p.month))}</b></td><td class="hide-sm">${spark(d.dates, p.days)}</td><td class="small muted hide-sm">${p.online ? "線上" : ago(p.seen)}</td></tr>`; }).join("") +
+    `</tbody></table></div><div class="help">數字是 NAS 跟這台 VPN 裝置之間的傳輸量。「區網直連」= 兩台都在實驗室、不經外網；「外網直連」「DERP 中繼」= 經過實驗室對外線路（中繼最慢）。實驗室裡的電腦如果顯示中繼，通常是防火牆擋了 UDP，請改用內網位址 192.168.50.2 連 Hub。</div>`;
 }
 
 function renderConfig(c) {

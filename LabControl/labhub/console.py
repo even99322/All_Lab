@@ -155,6 +155,13 @@ class Console:
             from .github_sync import GithubSync
 
             self._github = GithubSync(self)
+            try:                                       # 1.0.32：下載量記到「網路用量」
+                from .netusage import store as _nu
+
+                nu = _nu(self.hub)
+                self._github.on_bytes = lambda n, files=0: nu.add_github(n, files)
+            except Exception:  # noqa: BLE001
+                pass
         return self._github
 
     def items(self) -> List[Dict[str, Any]]:

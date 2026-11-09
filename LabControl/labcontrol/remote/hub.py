@@ -312,6 +312,25 @@ class Hub:
         return dst
 
 
+def better_hub(current: Optional["Hub"]) -> Optional["Hub"]:
+    """1.0.32：目前連的不是第一優先的網址（例如啟動時內網剛好連不到，改走了 VPN）→ 試排在前面的網址，
+    連得到就回傳新的 Hub（之後改走內網，不再繞 VPN / 外網）；不用換 → None。"""
+    if current is None:
+        return None
+    urls = hub_urls()
+    if current.url not in urls or urls.index(current.url) == 0:
+        return None
+    for u in urls[:urls.index(current.url)]:
+        h = Hub(u, current.token, timeout=current.timeout)
+        try:
+            p = h.ping()
+        except HubError:
+            continue
+        if p.get("server") == "labhub" and p.get("auth"):
+            return h
+    return None
+
+
 def find_hub() -> Hub:
     """依序嘗試 settings.yaml remote.hub_urls，回傳第一個連得到且 token 正確的 Hub。"""
     urls = hub_urls()

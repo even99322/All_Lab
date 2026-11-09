@@ -22,6 +22,11 @@
     DELETE /api/netusage/pc/<裝置 id>      （站長）
     GET    /network                       → 網頁「網路用量」
 
+4. 1.0.32 Tailscale（VPN）：每分鐘讀 NAS 上 tailscaled 的 LocalAPI（/localapi/v0/status，跟內網 https 憑證同一個 socket），
+   每個 VPN 裝置跟 NAS 之間的位元組數，依連線路徑分成：區網直連（不經外網）、外網直連、DERP 中繼（經外網）。
+   也檢查 NAS 有沒有開「出口節點 / 子網路由」（別人經 NAS 上網會吃掉實驗室的對外流量）。
+5. 1.0.32 Hub 自己從 GitHub 下載新版的量（控制台「從 GitHub 取得新版」與自動更新）。
+
 路由器密碼只存在 Hub 的資料夾（data/netusage_secret.json），API 不會回傳。
 """
 from __future__ import annotations
@@ -46,6 +51,10 @@ log = logging.getLogger(__name__)
 KEEP_DAYS = 400
 ROUTER_EVERY = 600.0
 NAS_EVERY = 60.0
+TS_EVERY = 60.0
+TS_PATHS = ("lan", "wan", "relay")       # 區網直連 / 外網直連 / DERP 中繼
+TS_SOCKETS = ("/tailscale/tailscaled.sock", "/var/run/tailscale/tailscaled.sock",
+              "/var/packages/Tailscale/var/tailscaled.sock")
 PC_OFFLINE_S = 180.0
 GAP_S = 7200.0                       # NAS 超過 2 小時沒讀到 → 那段時間的流量不算（不知道是哪天）
 MAX_DAY = 100 * 1024 ** 4            # 一台裝置一天超過 100 TB → 當成錯誤資料
@@ -411,6 +420,39 @@ def _trim(days: Dict[str, Any], today: str) -> None:
         days.pop(k, None)
 
 
+def _private_ip(host: str) -> bool:
+    import ipaddress
+
+    try:
+        ip = ipaddress.ip_address(host.strip("[]"))
+    except ValueError:
+        return False
+    return ip.is_private and not str(ip).startswith("100.")      # 100.64/10（CGNAT / Tailscale）不算區網
+
+
+def ts_path(peer: Dict[str, Any]) -> str:
+    """這個 VPN 裝置目前跟 NAS 的連線路徑：lan（區網直連）、wan（經外網直連）、relay（DERP 中繼，經外網）。"""
+    cur = str(peer.get("CurAddr") or "")
+    if cur:
+        host = cur.rsplit(":", 1)[0] if cur.count(":") == 1 or cur.startswith("[") else cur
+        return "lan" if _private_ip(host) else "wan"
+    return "relay"
+
+
+def ts_socket() -> str:
+    env = os.environ.get("LABHUB_TAILSCALE_SOCKET", "")
+    for p in ([env] if env else list(TS_SOCKETS)):
+        if p and os.path.exists(p):
+            return p
+    return ""
+
+
+def ts_status(sock: str) -> Dict[str, Any]:
+    from .lan_tls import local_api
+
+    return json.loads(local_api(sock, "/localapi/v0/status", timeout=15).decode("utf-8"))
+
+
 class NetUsage:
     def __init__(self, data_dir: Path, now=time.time) -> None:
         self.file = Path(data_dir) / "netusage.json"
@@ -433,7 +475,14 @@ class NetUsage:
         self.nas.setdefault("days", {})
         # 1.0.30：流量監看程式回報的裝置（key = 程式產生的裝置 id）；1.0.29 由 Lab Control 回報的舊資料（pcs）不再使用
         self.pcs: Dict[str, Dict[str, Any]] = {k: v for k, v in (d.get("devices") or {}).items() if isinstance(v, dict)}
-        self.status: Dict[str, Dict[str, Any]] = {"router": {}, "nas": {}}
+        # 1.0.32：Tailscale（days[日期][路徑] = {up, down}；peers[節點 id] = {name, os, ip, path, days, last}）
+        self.ts: Dict[str, Any] = dict(d.get("tailscale") or {})
+        self.ts.setdefault("days", {})
+        self.ts.setdefault("peers", {})
+        # 1.0.32：Hub 自己從 GitHub 下載的量（days[日期] = {down, files}）
+        self.github: Dict[str, Any] = dict(d.get("github") or {})
+        self.github.setdefault("days", {})
+        self.status: Dict[str, Dict[str, Any]] = {"router": {}, "nas": {}, "tailscale": {}}
         self._dirty = False
         self._last_save = 0.0
         self._stop = threading.Event()
@@ -465,7 +514,8 @@ class NetUsage:
             if not force and self.now() - self._last_save < 30:
                 return
             try:
-                self._write(self.file, {"cfg": self.cfg, "router": self.router, "nas": self.nas, "devices": self.pcs})
+                self._write(self.file, {"cfg": self.cfg, "router": self.router, "nas": self.nas, "devices": self.pcs,
+                                        "tailscale": self.ts, "github": self.github})
                 self._dirty = False
                 self._last_save = self.now()
             except OSError as e:
@@ -596,6 +646,77 @@ class NetUsage:
         self.save()
         return st
 
+    # ---- Tailscale（VPN）----
+    def poll_tailscale(self, status: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        st: Dict[str, Any] = {"time": self.now()}
+        try:
+            if status is None:
+                sock = ts_socket()
+                if not sock:
+                    raise RuntimeError("找不到 tailscaled 的 socket（docker-compose.yml 要掛載 /var/packages/Tailscale/var:/tailscale:ro）")
+                status = ts_status(sock)
+            me = status.get("Self") or {}
+            allowed = [str(x) for x in (me.get("AllowedIPs") or [])]
+            exit_node = bool(me.get("ExitNodeOption")) or any(x in ("0.0.0.0/0", "::/0") for x in allowed)
+            routes = [str(x) for x in (me.get("PrimaryRoutes") or []) if str(x) not in ("0.0.0.0/0", "::/0")]
+            today = self.today()
+            now = self.now()
+            n_on = {"lan": 0, "wan": 0, "relay": 0}
+            with self.lock:
+                peers = self.ts["peers"]
+                for key, p in (status.get("Peer") or {}).items():
+                    pid = str(p.get("ID") or key)[:80]
+                    rx, tx = int(p.get("RxBytes") or 0), int(p.get("TxBytes") or 0)
+                    path = ts_path(p)
+                    rec = peers.setdefault(pid, {"days": {}})
+                    last = rec.get("last")
+                    if last and now - float(last.get("t") or 0) <= GAP_S:
+                        drx, dtx = rx - int(last["rx"]), tx - int(last["tx"])
+                        if drx < 0:                                # tailscaled 重新啟動 / 重新連線 → 計數歸零
+                            drx = rx
+                        if dtx < 0:
+                            dtx = tx
+                        if (drx or dtx) and drx <= MAX_DELTA and dtx <= MAX_DELTA:
+                            # 用上一次讀到的路徑（這段時間大多走那條）；路徑剛換的話用現在的
+                            use = last.get("path") if last.get("path") in TS_PATHS else path
+                            day = self.ts["days"].setdefault(today, {})
+                            _add(day, use, dtx, drx)
+                            _add(rec["days"], today, dtx, drx)
+                            pd = rec.setdefault("paths", {}).setdefault(today, {})
+                            pd[use] = int(pd.get(use, 0)) + drx + dtx
+                    rec["last"] = {"rx": rx, "tx": tx, "t": now, "path": path}
+                    ips = p.get("TailscaleIPs") or []
+                    rec.update(name=_s(p.get("HostName") or (p.get("DNSName") or "").split(".")[0] or pid, 80),
+                               os=_s(p.get("OS"), 30), ip=_s(ips[0] if ips else "", 60), path=path,
+                               relay=_s(p.get("Relay"), 20), cur=_s(p.get("CurAddr"), 60),
+                               online=bool(p.get("Online")), exit_node_user=bool(p.get("ExitNode")))
+                    if p.get("Online"):
+                        rec["seen"] = now
+                        n_on[path] += 1
+                    _trim(rec["days"], today)
+                    for k in [k for k in rec.get("paths", {}) if k < min(rec["days"] or {today: 0})]:
+                        rec["paths"].pop(k, None)
+                _trim(self.ts["days"], today)
+                self._dirty = True
+            st.update(ok=True, version=_s(status.get("Version"), 40), exit_node=exit_node, routes=routes,
+                      name=_s(me.get("HostName"), 80), online=n_on,
+                      using_exit=bool((status.get("ExitNodeStatus") or {}).get("Online")))
+        except Exception as e:  # noqa: BLE001
+            st.update(ok=False, error=str(e))
+        self.status["tailscale"] = st
+        self.save()
+        return st
+
+    # ---- Hub 從 GitHub 下載 ----
+    def add_github(self, nbytes: int, files: int = 0) -> None:
+        with self.lock:
+            day = self.github["days"].setdefault(self.today(), {"up": 0, "down": 0, "files": 0})
+            day["down"] = int(day.get("down", 0)) + max(0, int(nbytes))
+            day["files"] = int(day.get("files", 0)) + int(files)
+            _trim(self.github["days"], self.today())
+            self._dirty = True
+        self.save()
+
     # ---- 各台裝置（流量監看程式回報）----
     def report_device(self, b: Dict[str, Any], ip: str = "") -> Dict[str, Any]:
         did = str(b.get("id") or "")
@@ -687,13 +808,35 @@ class NetUsage:
                     "nas": {"days": pick(self.nas["days"]), "month": month_sum(self.nas["days"]),
                             "status": self.status.get("nas") or {}, "enabled": bool(self.cfg["nas"].get("enabled")),
                             "host": self.cfg["nas"].get("host", "")},
-                    "pcs": pcs}
+                    "pcs": pcs, "tailscale": self._ts_view(pick, month_sum, now),
+                    "github": {"days": pick(self.github["days"]), "month": month_sum(self.github["days"])}}
+
+    def _ts_view(self, pick, month_sum, now: float) -> Dict[str, Any]:
+        days = self.ts["days"]
+        flat = {k: {"up": sum(int(x.get("up", 0)) for x in v.values()), "down": sum(int(x.get("down", 0)) for x in v.values())}
+                for k, v in days.items()}
+        ext = {k: {"up": sum(int(v.get(p, {}).get("up", 0)) for p in ("wan", "relay")),
+                   "down": sum(int(v.get(p, {}).get("down", 0)) for p in ("wan", "relay"))} for k, v in days.items()}
+        peers = []
+        for pid, r in self.ts["peers"].items():
+            m = month_sum(r.get("days") or {})
+            if not (r.get("online") or m["up"] or m["down"]):
+                continue
+            pext = {k: int(v.get("wan", 0)) + int(v.get("relay", 0)) for k, v in (r.get("paths") or {}).items()}
+            peers.append({"id": pid, "name": r.get("name", pid), "os": r.get("os", ""), "ip": r.get("ip", ""),
+                          "path": r.get("path", ""), "relay": r.get("relay", ""), "cur": r.get("cur", ""),
+                          "online": bool(r.get("online")), "seen": r.get("seen"), "exit_node_user": bool(r.get("exit_node_user")),
+                          "days": pick(r.get("days") or {}), "month": m, "ext": pick(pext)})
+        peers.sort(key=lambda p: -(p["month"]["up"] + p["month"]["down"]))
+        return {"days": pick(flat), "ext": pick(ext), "by_path": pick(days), "month": month_sum(flat),
+                "month_ext": month_sum(ext), "peers": peers, "status": self.status.get("tailscale") or {}}
 
     # ---- 背景執行緒 ----
     def start(self) -> None:
         if self._threads:
             return
-        for fn, every, what in ((self.poll_router, ROUTER_EVERY, "router"), (self.poll_nas, NAS_EVERY, "nas")):
+        for fn, every, what in ((self.poll_router, ROUTER_EVERY, "router"), (self.poll_nas, NAS_EVERY, "nas"),
+                                (self.poll_tailscale, TS_EVERY, "tailscale")):
             th = threading.Thread(target=self._loop, args=(fn, every, what), name=f"netusage-{what}", daemon=True)
             th.start()
             self._threads.append(th)
@@ -701,7 +844,7 @@ class NetUsage:
     def _loop(self, fn, every: float, what: str) -> None:
         self._stop.wait(5.0)
         while not self._stop.is_set():
-            if self.cfg[what].get("enabled"):
+            if what == "tailscale" or self.cfg[what].get("enabled"):
                 try:
                     fn()
                 except Exception:  # noqa: BLE001
