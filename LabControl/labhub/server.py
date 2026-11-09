@@ -809,7 +809,8 @@ class Handler(BaseHTTPRequestHandler):
             raise HubHTTPError(400, f"JSON 格式錯誤：{e}")
 
     def _send(self, code: int, body: bytes, ctype: str, headers: Optional[Dict[str, str]] = None) -> None:
-        if self._meter is not None and self.command != "HEAD":    # 1.0.33：區網以外 gzip
+        if self._meter is not None and self.command != "HEAD" and not any(
+                k.lower() == "content-encoding" for k in (headers or {})):   # 1.0.33：區網以外 gzip（已經壓過的不再壓）
             from .traffic import maybe_gzip
 
             body, extra = maybe_gzip(self, body, ctype)

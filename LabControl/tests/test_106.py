@@ -338,6 +338,15 @@ def test_phone_data_browser_api(tmp_path, nc_files, llvcore):
             assert np.allclose(np.array(p["y"], dtype=float), arrays["y"], equal_nan=True)
         assert isinstance(p["metadata"], list) and p["metadata"]
         assert _get(base + "/api/data/preview?path=proj/none.nc", auth)[0] == 404
+        # 1.0.34：重新建立預覽 → 下一輪索引程式重算
+        req = urllib.request.Request(base + "/api/data/reindex?path=" + urllib.request.quote(rel), data=b"", method="POST",
+                                     headers=auth)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            assert json.loads(r.read())["ok"]
+        d = json.loads(_get(base + "/api/data/preview?path=" + urllib.request.quote(rel), auth)[1])
+        assert d["preview"] is None and "還沒算到" in d["reason"]
+        assert indexer.Indexer(share, data).pass_once()["indexed"] >= 1
+        assert json.loads(_get(base + "/api/data/preview?path=" + urllib.request.quote(rel), auth)[1])["preview"]
 
         class NoRedirect(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, *a, **k):

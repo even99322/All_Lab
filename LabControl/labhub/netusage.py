@@ -49,9 +49,9 @@ from typing import Any, Dict, List, Optional, Tuple
 log = logging.getLogger(__name__)
 
 KEEP_DAYS = 400
-ROUTER_EVERY = 600.0
-NAS_EVERY = 60.0
-TS_EVERY = 60.0
+ROUTER_EVERY = 120.0                     # 1.0.34：即時頁（原本 10 分鐘）
+NAS_EVERY = 20.0
+TS_EVERY = 20.0
 TS_PATHS = ("lan", "wan", "relay")       # 區網直連 / 外網直連 / DERP 中繼
 TS_SOCKETS = ("/tailscale/tailscaled.sock", "/var/run/tailscale/tailscaled.sock",
               "/var/packages/Tailscale/var/tailscaled.sock")
@@ -483,6 +483,10 @@ class NetUsage:
         self.github: Dict[str, Any] = dict(d.get("github") or {})
         self.github.setdefault("days", {})
         self.status: Dict[str, Dict[str, Any]] = {"router": {}, "nas": {}, "tailscale": {}}
+        from .netrecent import Recent                       # 1.0.34：每分鐘一格（即時）
+
+        self.recent = Recent(Path(data_dir) / "netusage_recent.json", now=now)
+        self._router_last: Optional[Tuple[str, int, int, float]] = None
         self._dirty = False
         self._last_save = 0.0
         self._stop = threading.Event()
@@ -508,6 +512,7 @@ class NetUsage:
         tmp.replace(p)
 
     def save(self, force: bool = False) -> None:
+        self.recent.save(force)
         with self.lock:
             if not (self._dirty or force):
                 return
@@ -592,6 +597,14 @@ class NetUsage:
             with self.lock:
                 days = self.router["days"]
                 days[today] = {"up": int((tm.get("TodayUpload") or 0) * MB), "down": int((tm.get("TodayDownload") or 0) * MB)}
+                now = self.now()
+                last = self._router_last
+                cu, cd = days[today]["up"], days[today]["down"]
+                if last and now - last[3] <= GAP_S:
+                    du, dd = (cu - last[1], cd - last[2]) if last[0] == today else (cu, cd)
+                    if du >= 0 and dd >= 0:
+                        self.recent.add("router", du, dd, now, now - last[3])
+                self._router_last = (today, cu, cd, now)
                 if tm.get("YesterdayUpload") is not None or tm.get("YesterdayDownload") is not None:
                     days[yday] = {"up": int((tm.get("YesterdayUpload") or 0) * MB),
                                   "down": int((tm.get("YesterdayDownload") or 0) * MB)}
@@ -636,6 +649,7 @@ class NetUsage:
                         dtx = tx
                     if drx <= MAX_DELTA and dtx <= MAX_DELTA:
                         _add(self.nas["days"], self.today(), dtx, drx)
+                        self.recent.add("nas", dtx, drx, self.now(), self.now() - float(last.get("t") or 0))
                 self.nas["last"] = {"rx": rx, "tx": tx, "t": self.now(), "ifs": sorted(pick)}
                 _trim(self.nas["days"], self.today())
                 self._dirty = True
@@ -676,6 +690,8 @@ class NetUsage:
                             drx = rx
                         if dtx < 0:
                             dtx = tx
+                        if drx <= MAX_DELTA and dtx <= MAX_DELTA:
+                            self.recent.add(f"ts:{pid}", dtx, drx, now, now - float(last.get("t") or 0))
                         if (drx or dtx) and drx <= MAX_DELTA and dtx <= MAX_DELTA:
                             # 用上一次讀到的路徑（這段時間大多走那條）；路徑剛換的話用現在的
                             use = last.get("path") if last.get("path") in TS_PATHS else path
@@ -741,6 +757,14 @@ class NetUsage:
             if did not in self.pcs and len(self.pcs) >= MAX_DEVICES:
                 raise ValueError("裝置太多")
             dev = self.pcs.setdefault(did, {"days": {}})
+            tk = today.isoformat()
+            old, new = dev["days"].get(tk), clean.get(tk)
+            if old and new and now - float(dev.get("seen") or 0) <= GAP_S:      # 1.0.34：這一分鐘傳了多少（即時頁）
+                du, dd = int(new["up"]) - int(old["up"]), int(new["down"]) - int(old["down"])
+                if 0 <= du <= MAX_DELTA and 0 <= dd <= MAX_DELTA:
+                    self.recent.add(f"pc:{did}", du, dd, now)
+            elif new and not old and dev.get("seen"):                           # 換日後第一次回報
+                self.recent.add(f"pc:{did}", min(int(new["up"]), MAX_DELTA), min(int(new["down"]), MAX_DELTA), now)
             dev["days"].update(clean)                  # 程式自己累計：同一天以最新的數字為準
             ifs = b.get("ifaces") if isinstance(b.get("ifaces"), list) else []
             try:
@@ -750,6 +774,7 @@ class NetUsage:
             dev.update(seen=now, src_ip=_s(ip, 60), on_net=bool(b.get("on_net", True)))
             if rate:
                 dev["rate"] = r
+                self.recent.set_rate(f"pc:{did}", r["up"], r["down"], now)
             for k, n in (("ip", 60), ("host", 80), ("user", 60), ("os", 60), ("version", 20), ("subnet", 40)):
                 if b.get(k):
                     dev[k] = _s(b[k], n)
@@ -772,6 +797,7 @@ class NetUsage:
     def remove_pc(self, host: str) -> None:
         with self.lock:
             self.pcs.pop(host, None)
+            self.recent.forget(f"pc:{host}")
             self._dirty = True
         self.save(force=True)
 
@@ -831,6 +857,47 @@ class NetUsage:
         return {"days": pick(flat), "ext": pick(ext), "by_path": pick(days), "month": month_sum(flat),
                 "month_ext": month_sum(ext), "peers": peers, "status": self.status.get("tailscale") or {}}
 
+    # ---- 1.0.34：即時（每分鐘一格）----
+    def recent_view(self, window: int, chart: str = "") -> Dict[str, Any]:
+        from .netrecent import WINDOWS
+
+        window = min(WINDOWS, key=lambda w: abs(w - int(window or 600)))
+        now = self.now()
+        rc = self.recent
+        out: List[Dict[str, Any]] = []
+
+        def src(key: str, name: str, kind: str, **extra: Any) -> None:
+            w = rc.window(key, window, now=now)
+            out.append({"key": key, "name": name, "kind": kind, "up": w["up"], "down": w["down"],
+                        "rate": w.get("rate"), **extra})
+
+        with self.lock:
+            if self.cfg["router"].get("enabled"):
+                src("router", "整個網段（路由器）", "router")
+            if self.cfg["nas"].get("enabled"):
+                src("nas", "NAS", "nas")
+            for did, pc in self.pcs.items():
+                online = now - float(pc.get("seen") or 0) < PC_OFFLINE_S
+                src(f"pc:{did}", pc.get("label") or pc.get("host") or did, "pc", online=online,
+                    sub=" ".join(x for x in (pc.get("ip", ""), pc.get("user", "")) if x))
+            for pid, r in self.ts["peers"].items():
+                if not r.get("online") and f"ts:{pid}" not in rc.data:
+                    continue
+                src(f"ts:{pid}", r.get("name", pid), "vpn", online=bool(r.get("online")), path=r.get("path", ""),
+                    sub=" ".join(x for x in (r.get("os", ""), r.get("ip", "")) if x))
+        src("hub:remote", "Hub ⇄ 區網以外", "hub")
+        src("hub:lan", "Hub ⇄ 區網", "hub")
+        out = [o for o in out if o["up"] or o["down"] or o.get("online")
+               or (o.get("rate") and (o["rate"]["up"] or o["rate"]["down"]))
+               or o["kind"] in ("router", "nas")]
+        keys = {o["key"] for o in out}
+        if chart not in keys:
+            chart = "router" if "router" in keys else "nas" if "nas" in keys else (out[0]["key"] if out else "")
+        ch = rc.window(chart, window, series=True, now=now) if chart else {"series": [], "step": 60}
+        return {"now": now, "window": window, "windows": list(WINDOWS), "sources": out,
+                "chart": {"key": chart, "series": ch.get("series", []), "step": ch.get("step", 60)},
+                "every": {"router": ROUTER_EVERY, "nas": NAS_EVERY, "tailscale": TS_EVERY}}
+
     # ---- 背景執行緒 ----
     def start(self) -> None:
         if self._threads:
@@ -888,6 +955,18 @@ def _report(h: Handler) -> None:
         h._json(store(h.hub).report_device(b, h.ip))
     except ValueError as e:
         raise HubHTTPError(400, str(e)) from None
+
+
+@route("GET", r"/api/netusage/recent", auth="any")
+def _recent(h: Handler) -> None:
+    """1.0.34：即時——window 秒（60 / 600 / 1800 / 3600 / 10800 / 21600 / 86400）內各來源的總量與目前速率，
+    chart = 要畫每分鐘曲線的來源（router / nas / pc:<id> / ts:<id> / hub:remote / hub:lan）。"""
+    q = h._query()
+    try:
+        window = int(q.get("window") or 600)
+    except (TypeError, ValueError):
+        window = 600
+    h._json({"ok": True, **store(h.hub).recent_view(window, str(q.get("chart") or ""))})
 
 
 @route("GET", r"/api/netusage", auth="any")

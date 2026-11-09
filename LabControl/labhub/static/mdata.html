@@ -226,8 +226,8 @@ function when(t) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-async function api(path) {
-  const r = await fetch(path, { credentials:"same-origin", cache:"no-store" });
+async function api(path, opt = {}) {
+  const r = await fetch(path, { credentials:"same-origin", cache:"no-store", method: opt.method || "GET" });
   if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent(location.pathname + location.hash); throw new Error("login"); }
   const d = await r.json().catch(() => ({}));
   if (!r.ok || d.ok === false) throw new Error(d.error || r.statusText);
@@ -365,7 +365,18 @@ async function openFile(rel) {
     Object.assign(f, d.file); file = f;
     $("dSub").textContent = [when(f.created || f.mtime), f.dims, size(f.size), f.log_name && f.log_name !== f.name.replace(/\.[^.]+$/, "") ? f.log_name : ""].filter(Boolean).join(" · ");
     $("dTags").innerHTML = (f.star ? '<span class="tag star">★ 星號</span>' : "") + (f.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join("");
-    if (!d.preview) { plotMsg(d.reason || "這個檔沒有預覽"); return; }
+    if (!d.preview) {
+      plotMsg(d.reason || "這個檔沒有預覽");
+      if (d.can_retry) {                                   // 1.0.34：請 NAS 重新建立這個檔的預覽
+        const b = document.createElement("button"); b.className = "btn"; b.style.marginTop = "10px"; b.textContent = "重新建立預覽";
+        b.onclick = async () => { b.disabled = true;
+          try { await api("/api/data/reindex?path=" + encodeURIComponent(rel), { method: "POST" });
+                plotMsg("已經請 NAS 重新建立預覽（大約一分鐘），稍後再打開這個檔"); }
+          catch (e) { b.disabled = false; alert(e.message); } };
+        $("plotMsg").appendChild(document.createElement("br")); $("plotMsg").appendChild(b);
+      }
+      return;
+    }
     pv = d.preview;
     if (pv.kind === "2d") {
       Z.db = b64f32(pv.z);

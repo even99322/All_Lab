@@ -62,12 +62,37 @@
   .empty { background:var(--card); border:1px dashed var(--line); border-radius:12px; padding:20px; text-align:center; color:var(--muted); }
   details summary { cursor:pointer; color:var(--muted); font-size:13px; margin-top:16px; }
   @media (max-width: 640px) { .hide-sm { display:none; } .spark { width:80px; } }
+  /* 1.0.34：即時 */
+  .seg { display:flex; gap:4px; flex-wrap:wrap; margin:4px 0 10px; }
+  .seg button { font:inherit; font-size:13px; padding:4px 12px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--text); cursor:pointer; }
+  .seg button.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+  .rtchart { display:flex; align-items:stretch; }
+  .rtchart .yax { flex:0 0 56px; height:200px; }
+  .hscroll { flex:1; overflow-x:auto; overflow-y:hidden; -webkit-overflow-scrolling:touch; }
+  .hscroll svg { display:block; height:200px; }
+  .rowsel { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:6px; font-size:13px; }
+  .rowsel select { font:inherit; padding:3px 8px; border:1px solid var(--line); border-radius:7px; background:var(--card); color:var(--text); max-width:100%; }
+  .wrap th:first-child, .wrap td:first-child { position:sticky; left:0; z-index:1; background:var(--card); }
+  tr.pick { cursor:pointer; } tr.pick:hover td { background:var(--soft, rgba(127,127,127,.08)); }
+  tr.sel td { background:var(--soft, rgba(25,113,194,.10)); }
+  .rt-k { font-size:11px; color:var(--muted); }
 </style>
 </head>
 <body>
 <!--QEL-NAV-->
 <main>
   <h1>網路用量 <select id="range"><option value="14">最近 14 天</option><option value="31" selected>最近 31 天</option><option value="92">最近 3 個月</option><option value="366">最近一年</option></select></h1>
+  <h2>即時 <span class="small muted" id="rtnote"></span></h2>
+  <div class="seg" id="rtwin"></div>
+  <div class="sum" id="rtsum"></div>
+  <div class="card">
+    <div class="rowsel"><span>每分鐘：</span><select id="rtsrc"></select><span class="muted" id="rtcnote"></span></div>
+    <div class="rtchart"><svg class="yax" id="rt-y"></svg><div class="hscroll" id="rtscroll"><svg id="ch-rt"></svg></div></div>
+    <div class="legend"><span><i style="background:var(--down)"></i><span id="rt-ld">下載 / 收到</span></span><span><i style="background:var(--up)"></i><span id="rt-lu">上傳 / 送出</span></span><span class="muted">左右滑動看更早的時間</span></div>
+  </div>
+  <div id="rttab" style="margin-top:10px"></div>
+
+  <h2>每日</h2>
   <div class="sum" id="sum"></div>
 
   <h2>整個網段（路由器 Traffic Meter） <span id="rst"></span></h2>
@@ -152,8 +177,8 @@ function chart(svg, dates, days) {
     } else {
       g += `<g><title>${d}　沒有資料</title><rect x="${x}" y="${y(0) - 1}" width="${bw}" height="1" fill="${cl}"/></g>`;
     }
-    if (i % every === 0 || i === n - 1)
-      g += `<text x="${x + bw / 2}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${cm}">${d.slice(5)}</text>`;
+    if ((i % every === 0 && (n - 1 - i) >= every * 0.6) || i === n - 1)
+      g += `<text x="${Math.min(W - 18, x + bw / 2)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${cm}">${d.slice(5)}</text>`;
   });
   svg.innerHTML = g;
 }
@@ -367,21 +392,112 @@ function renderHubCfg(cfg) {
   };
 }
 async function loadHub() {
-  try { T = await api("/api/traffic?days=" + $("#range").value); renderHub(); }
+  try { T = await api("/api/traffic?days=" + $("#range").value); keepScroll(renderHub); }
   catch (e) { $("#hubtab").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
 }
 
+// ---- 1.0.34：即時（每分鐘一格；每 20 秒更新）----
+let RT = null, rtWin = 600, rtSrc = "";
+try { rtWin = +(localStorage.getItem("qel-net-win") || 600); rtSrc = localStorage.getItem("qel-net-src") || ""; } catch (e) {}
+const WIN = [[60, "1 分"], [600, "10 分"], [1800, "30 分"], [3600, "1 小時"], [10800, "3 小時"], [21600, "6 小時"], [86400, "1 天"]];
+const KIND = {router: "路由器", nas: "NAS", pc: "電腦", vpn: "VPN", hub: "Hub"};
+const DIR = {router: ["下載", "上傳"], pc: ["下載", "上傳"], nas: ["收到", "送出"], vpn: ["NAS 收到", "NAS 送出"], hub: ["Hub 收到", "Hub 送出"]};
+const bps = v => v == null ? "—" : fmt(v) + "/s";
+function keepScroll(fn) {                                         // 重畫時保留表格 / 圖的左右捲動位置
+  const m = {};
+  document.querySelectorAll(".wrap, .hscroll").forEach(e => { const k = e.dataset.k || (e.closest("[id]") || {}).id; if (k) m[k] = [e.scrollLeft, e.scrollLeft + e.clientWidth >= e.scrollWidth - 4]; });
+  fn();
+  document.querySelectorAll(".wrap, .hscroll").forEach(e => { const k = e.dataset.k || (e.closest("[id]") || {}).id; const v = m[k];
+    if (v) e.scrollLeft = (e.classList.contains("hscroll") && v[1]) ? e.scrollWidth : v[0]; });
+}
+function renderRtWin() {
+  $("#rtwin").innerHTML = WIN.map(([w, n]) => `<button data-w="${w}" class="${w === rtWin ? "on" : ""}">${n}</button>`).join("");
+  $("#rtwin").querySelectorAll("button").forEach(b => b.onclick = () => { rtWin = +b.dataset.w;
+    try { localStorage.setItem("qel-net-win", rtWin); } catch (e) {} renderRtWin(); loadRt(true); });
+}
+function minuteChart(series, step, kind) {
+  const box = $("#rtscroll"), svg = $("#ch-rt"), ya = $("#rt-y");
+  const H = 200, padB = 22, padT = 8, n = series.length;
+  const avail = box.clientWidth || 600, bw0 = Math.max(6, Math.min(40, avail / Math.max(1, n)));
+  const W = Math.max(avail, Math.ceil(n * bw0)), stepX = W / Math.max(1, n), bw = Math.max(2, stepX * 0.75);
+  const max = Math.max(1, ...series.map(p => p[1] + p[2]));
+  const y = v => padT + (H - padT - padB) * (1 - v / max);
+  const cd = css("--down"), cu = css("--up"), cl = css("--line"), cm = css("--muted");
+  const [ld, lu] = DIR[kind] || ["下載", "上傳"];
+  let g = "", ax = "";
+  for (let k = 0; k <= 4; k++) {
+    const v = max * k / 4, yy = y(v);
+    g += `<line x1="0" x2="${W}" y1="${yy}" y2="${yy}" stroke="${cl}" stroke-width="1"/>`;
+    ax += `<text x="50" y="${yy + 4}" text-anchor="end" font-size="11" fill="${cm}">${fmt(v)}</text>`;
+  }
+  const hm = t => { const d = new Date(t * 1000); return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0"); };
+  const every = Math.max(1, Math.ceil(64 / stepX));
+  series.forEach(([t, up, dn], i) => {
+    const x = i * stepX + (stepX - bw) / 2;
+    const tip = `${hm(t)}　${ld} ${fmt(dn)}　${lu} ${fmt(up)}　平均 ${bps((dn + up) / step)}`;
+    if (dn + up > 0) g += `<g><title>${tip}</title><rect x="${x}" y="${y(dn)}" width="${bw}" height="${y(0) - y(dn)}" fill="${cd}" rx="1"/>` +
+      `<rect x="${x}" y="${y(dn + up)}" width="${bw}" height="${y(dn) - y(dn + up)}" fill="${cu}" rx="1"/></g>`;
+    else g += `<g><title>${hm(t)}　沒有流量</title><rect x="${x}" y="${y(0) - 1}" width="${bw}" height="1" fill="${cl}"/></g>`;
+    if (i % every === 0 && (n - 1 - i) >= every * 0.6 || i === n - 1)
+      g += `<text x="${Math.min(W - 18, Math.max(18, x + bw / 2))}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${cm}">${hm(t)}</text>`;
+  });
+  svg.setAttribute("width", W); svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.innerHTML = g;
+  ya.setAttribute("viewBox", `0 0 56 ${H}`); ya.innerHTML = ax;
+  $("#rt-ld").textContent = ld; $("#rt-lu").textContent = lu;
+}
+function renderRt() {
+  const r = RT; if (!r) return;
+  const wn = (WIN.find(w => w[0] === r.window) || [0, ""])[1];
+  $("#rtnote").textContent = `最近 ${wn}　（路由器每 ${r.every.router / 60} 分鐘、NAS 與 VPN 每 ${r.every.nas} 秒、電腦每分鐘回報；這頁每 20 秒更新）`;
+  const S = r.sources, get = k => S.find(x => x.key === k);
+  const card = (k, src) => !src ? "" : `<div class="stat"><div class="k">${k}　${wn}</div><div class="v">${fmt(src.up + src.down)}</div>
+    <div class="ud">↓ ${fmt(src.down)}　↑ ${fmt(src.up)}<br><span class="rt-k">目前</span> ${src.rate ? `↓ ${bps(src.rate.down)}　↑ ${bps(src.rate.up)}` : "—"}</div></div>`;
+  const vpnExt = S.filter(x => x.kind === "vpn" && x.path && x.path !== "lan");
+  const ve = vpnExt.length ? {up: vpnExt.reduce((a, x) => a + x.up, 0), down: vpnExt.reduce((a, x) => a + x.down, 0),
+    rate: {up: vpnExt.reduce((a, x) => a + ((x.rate || {}).up || 0), 0), down: vpnExt.reduce((a, x) => a + ((x.rate || {}).down || 0), 0)}} : null;
+  $("#rtsum").innerHTML = card("全網", get("router")) + card("NAS", get("nas")) + card("Hub ⇄ 區網以外", get("hub:remote")) + card("VPN 經外網", ve);
+  const sel = $("#rtsrc");
+  sel.innerHTML = S.map(x => `<option value="${esc(x.key)}"${x.key === r.chart.key ? " selected" : ""}>${esc(KIND[x.kind] || "")}　${esc(x.name)}</option>`).join("");
+  sel.onchange = () => { rtSrc = sel.value; try { localStorage.setItem("qel-net-src", rtSrc); } catch (e) {} loadRt(true); };
+  const ch = S.find(x => x.key === r.chart.key) || {};
+  $("#rtcnote").textContent = r.chart.series.length ? `${r.chart.series.length} 分鐘，合計 ${fmt(r.chart.series.reduce((a, p) => a + p[1] + p[2], 0))}` : "";
+  keepScroll(() => {
+    minuteChart(r.chart.series, r.chart.step, ch.kind);
+    const rows = [...S].sort((a, b) => (b.up + b.down) - (a.up + a.down));
+    const P = {lan: "區網直連", wan: "外網直連", relay: "DERP 中繼"};
+    $("#rttab").innerHTML = `<div class="wrap" data-k="rttab"><table><thead><tr><th>來源</th><th class="n">${esc(wn)}合計</th><th class="n">↓</th><th class="n">↑</th><th class="n">目前 ↓</th><th class="n">目前 ↑</th><th class="hide-sm">類型</th></tr></thead><tbody>` +
+      rows.map(x => `<tr class="pick${x.key === r.chart.key ? " sel" : ""}" data-key="${esc(x.key)}"><td class="who">${x.online === undefined ? "" : `<span class="dot${x.online ? " on" : ""}"></span>`}<b>${esc(x.name)}</b>
+        ${x.sub ? `<div class="small muted" style="padding-left:15px">${esc(x.sub)}</div>` : ""}</td>
+        <td class="n"><b>${fmt(x.up + x.down)}</b></td><td class="n">${fmt(x.down)}</td><td class="n">${fmt(x.up)}</td>
+        <td class="n">${x.rate ? bps(x.rate.down) : "—"}</td><td class="n">${x.rate ? bps(x.rate.up) : "—"}</td>
+        <td class="small muted hide-sm">${esc(KIND[x.kind] || "")}${x.path ? "　" + esc(P[x.path] || x.path) : ""}</td></tr>`).join("") +
+      `</tbody></table></div><div class="help">點一列看那個來源的每分鐘圖。「目前」是最近一次讀到的速率；電腦的數字是它自己的流量監看程式回報的（含區網內傳檔）。</div>`;
+  });
+  $("#rttab").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { rtSrc = tr.dataset.key; try { localStorage.setItem("qel-net-src", rtSrc); } catch (e) {} loadRt(true); });
+}
+let rtBusy = false;
+async function loadRt(scrollEnd) {
+  if (rtBusy) return; rtBusy = true;
+  try { RT = await api(`/api/netusage/recent?window=${rtWin}&chart=${encodeURIComponent(rtSrc)}`); renderRt();
+        if (scrollEnd) { const b = $("#rtscroll"); b.scrollLeft = b.scrollWidth; } }
+  catch (e) { $("#rtsum").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  finally { rtBusy = false; }
+}
+
 async function load() {
-  try { D = await api("/api/netusage?days=" + $("#range").value); render(); }
+  try { D = await api("/api/netusage?days=" + $("#range").value); keepScroll(render); }
   catch (e) { $("#sum").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
   loadHub();
 }
 $("#range").onchange = load;
-window.addEventListener("resize", () => { if (D) render(); if (T) renderHub(); });
+window.addEventListener("resize", () => { if (D) keepScroll(render); if (T) keepScroll(renderHub); if (RT) renderRt(); });
 (async () => {
   try { ME = await api("/api/platform/me"); } catch (e) { ME = null; }
+  renderRtWin();
+  loadRt(true);
   await load();
   timer = setInterval(() => { if (!document.hidden) load(); }, 60000);
+  setInterval(() => { if (!document.hidden) loadRt(false); }, 20000);
 })();
 </script>
 </body>

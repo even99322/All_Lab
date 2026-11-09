@@ -254,6 +254,12 @@ class Traffic:
             c[1] += int(nout)
             c[2] += int(nreq)
             sec = int(time.time())
+            nu = self.netusage
+            if nu is not None:                                   # 1.0.34：即時頁的「Hub ⇄ 區網以外 / 區網」
+                try:
+                    nu.recent.add("hub:remote" if self.is_remote(cls) else "hub:lan", int(nout), int(nin))
+                except Exception:  # noqa: BLE001
+                    pass
             r = self.recent.setdefault(sec, {})
             k = f"{cat}|{cls}"
             r[k] = r.get(k, 0) + int(nin) + int(nout)

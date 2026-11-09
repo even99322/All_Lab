@@ -220,6 +220,43 @@ def _search(h: Handler) -> None:
         con.close()
 
 
+def no_preview_reason(row) -> str:
+    """1.0.34：為什麼沒有預覽（以前只說「這個檔沒有預覽」）。"""
+    pv = row["preview"]
+    if pv is None:
+        return "索引還沒算到這個檔（NAS 正在建立索引，稍後再看）"
+    pv = str(pv)
+    if row["status"] != "ok":
+        return f"讀檔程式讀不懂這個檔（{row['status']}）" + (f"：{row['error']}" if row["error"] else "")
+    if pv.startswith("none: too big"):
+        return "檔案超過預覽的大小上限（Hub 設定 LABHUB_INDEX_PREVIEW_MAX_MB），請用讀檔程式開"
+    if pv.startswith("none: indexer stopped"):
+        return "上次建立這個檔的預覽時索引程式中斷（記憶體不夠或格式特殊），已跳過；可以按「重新建立預覽」再試一次"
+    if pv.startswith("none: "):
+        return "建立預覽失敗：" + pv[6:]
+    return row["error"] or "這個檔沒有預覽"
+
+
+@route("POST", r"/api/data/reindex", auth="any")
+def _reindex(h: Handler) -> None:
+    """1.0.34：這個檔下一輪重新建立索引與預覽（索引程式在另一個容器，大約一分鐘內）。"""
+    from .indexer import connect, db_path
+
+    rel = norm_rel(h._query().get("path", "") or str((h._json_body() or {}).get("path") or ""))
+    path = db_path(h.hub.cfg.data_dir)
+    if not path.is_file():
+        raise HubHTTPError(404, "還沒有數據索引")
+    con = connect(path)
+    try:
+        n = con.execute("UPDATE files SET parser = '', preview = NULL, error = NULL WHERE rel = ?", (rel,)).rowcount
+        con.commit()
+    finally:
+        con.close()
+    if not n:
+        raise HubHTTPError(404, "數據索引裡沒有這個檔")
+    h._json({"ok": True})
+
+
 @route("GET", r"/api/data/preview", auth=False)
 def _preview(h: Handler) -> None:
     _allowed(h)
@@ -233,8 +270,8 @@ def _preview(h: Handler) -> None:
         raise HubHTTPError(404, "數據索引裡沒有這個檔")
     info = _file(row)
     if row["preview"] != "ok":
-        _send_json(h, {"ok": True, "file": info, "preview": None,
-                       "reason": row["error"] or ("索引還沒算到這個檔" if row["preview"] is None else "這個檔沒有預覽")})
+        _send_json(h, {"ok": True, "file": info, "preview": None, "reason": no_preview_reason(row),
+                       "can_retry": row["preview"] is not None})
         return
     cplx = h._query().get("complex") == "1"                # 1.0.23：要切換相位 / 實部 / 虛部時才送複數資料
     key = (rel, row["size"], row["mtime"], cplx)
