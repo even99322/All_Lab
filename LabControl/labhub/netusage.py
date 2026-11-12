@@ -595,17 +595,24 @@ class NetUsage:
             today = self.today()
             yday = (_dt.date.fromisoformat(today) - _dt.timedelta(days=1)).isoformat()
             with self.lock:
+                # 1.0.35：每日量改成自己累加差值（台北時間的日期）。路由器的「Today」在它自己的時鐘換日才歸零，
+                # 時區 / 時間不對時，以前會在我們換日那一刻把它前一天的累計整筆算進來（一根假的尖峰）。
                 days = self.router["days"]
-                days[today] = {"up": int((tm.get("TodayUpload") or 0) * MB), "down": int((tm.get("TodayDownload") or 0) * MB)}
+                cu = int((tm.get("TodayUpload") or 0) * MB)
+                cd = int((tm.get("TodayDownload") or 0) * MB)
                 now = self.now()
                 last = self._router_last
-                cu, cd = days[today]["up"], days[today]["down"]
                 if last and now - last[3] <= GAP_S:
-                    du, dd = (cu - last[1], cd - last[2]) if last[0] == today else (cu, cd)
-                    if du >= 0 and dd >= 0:
+                    du = cu - last[1] if cu >= last[1] else cu         # 變小 = 路由器歸零了（它自己的換日）
+                    dd = cd - last[2] if cd >= last[2] else cd
+                    if du <= MAX_DELTA and dd <= MAX_DELTA:
+                        _add(days, today, du, dd)
                         self.recent.add("router", du, dd, now, now - last[3])
+                elif today not in days:                               # Hub 剛啟動：先用路由器的今天當起點
+                    days[today] = {"up": cu, "down": cd}
                 self._router_last = (today, cu, cd, now)
-                if tm.get("YesterdayUpload") is not None or tm.get("YesterdayDownload") is not None:
+                self.router["raw_today"] = {"up": cu, "down": cd, "time": now}
+                if (tm.get("YesterdayUpload") is not None or tm.get("YesterdayDownload") is not None) and yday not in days:
                     days[yday] = {"up": int((tm.get("YesterdayUpload") or 0) * MB),
                                   "down": int((tm.get("YesterdayDownload") or 0) * MB)}
                 self.router["month"] = {"up": int((tm.get("MonthUpload") or 0) * MB),

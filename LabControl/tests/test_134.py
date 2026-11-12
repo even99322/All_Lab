@@ -128,3 +128,36 @@ def test_no_preview_reason():
     assert "中斷" in no_preview_reason(dict(base, preview="none: indexer stopped"))
     assert no_preview_reason(dict(base, preview="none: MemoryError: ")) == "建立預覽失敗：MemoryError: "
     assert "讀不懂" in no_preview_reason({"status": "error", "error": "bad header", "preview": "none"})
+
+
+def test_router_day_change_without_router_reset(tmp_path):
+    """1.0.35：路由器的「今天」在它自己的時鐘換日才歸零；我們換日時不能把它前一天的累計當成一筆。"""
+    import datetime as dt
+
+    clk = Clock(dt.datetime(2026, 11, 12, 23, 56).timestamp())
+    st = nu.NetUsage(tmp_path, now=clk)
+    st.cfg["router"]["host"] = "192.0.2.1"
+
+    class R:
+        port, ssl = 5000, False
+        up, down = 11000.0, 900.0
+
+        def traffic_meter(self):
+            return {"TodayUpload": self.up, "TodayDownload": self.down}
+
+        def info(self):
+            return {}
+
+    r = R()
+    st.poll_router(r)
+    for k in range(4):                                    # 23:58、00:00、00:02、00:04；路由器沒有歸零
+        clk.t += 120
+        r.down += 100.0
+        st.poll_router(r)
+    d13 = st.router["days"]["2026-11-13"]
+    assert d13["up"] == 0 and d13["down"] == 3 * 100 * nu.MB          # 只算換日後的三筆（00:00、00:02、00:04），沒有 11 GB 的尖峰
+    clk.t += 120
+    r.up, r.down = 1.0, 5.0                               # 路由器自己換日歸零
+    st.poll_router(r)
+    assert st.router["days"]["2026-11-13"]["down"] == (300 + 5) * nu.MB
+    assert max(c[0] for c in st.recent.data["router"].values()) == 1 * nu.MB
