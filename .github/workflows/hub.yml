@@ -1,0 +1,95 @@
+# Lab Control Hub（NAS 上的網站，LabControl/labhub/）：1.0.36 起跟 Lab Control 分開發佈。
+# Actions → Build Hub → Run workflow：跑 Hub 的測試、產生 LabControlHub_v<版本>.zip 與 QELPlatform_NAS_v<版本>.zip，
+# 勾「建立 GitHub 發佈」就建立 / 更新 hub-v<版本>（版本在 LabControl/labhub/__init__.py，
+# 說明在 LabControl/docs/releases/hub/v<版本>.md）。平台控制台「從 GitHub 取得新版」看得到 hub-v*。
+# 改了 labhub/ 推到 main 只跑測試與打包檢查，不發佈。
+name: Build Hub
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "建立 GitHub 發佈 hub-v<版本>"
+        type: boolean
+        default: true
+  push:
+    branches: [main]
+    paths: ["LabControl/labhub/**", "LabControl/deploy/**", "LabControl/docs/releases/hub/**", ".github/workflows/hub.yml"]
+
+permissions:
+  contents: write
+
+env:
+  PYTHONUTF8: "1"
+  QT_QPA_PLATFORM: offscreen
+
+defaults:
+  run:
+    working-directory: LabControl
+
+jobs:
+  build:
+    name: Tests and Hub zip
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install packages
+        run: python -m pip install --disable-pip-version-check -r requirements.txt pytest pytest-timeout
+      - name: Hub tests
+        run: >
+          python -m pytest -q -p no:cacheprovider --timeout=120
+          tests/test_netusage.py tests/test_113.py tests/test_122.py tests/test_131_notebook.py
+          tests/test_132.py tests/test_133_traffic.py tests/test_134.py tests/test_settings.py
+      - name: Version and release notes
+        id: v
+        run: |
+          v=$(python -c "import re;print(re.search(r'__version__ = \"([^\"]+)\"', open('labhub/__init__.py', encoding='utf-8').read()).group(1))")
+          test -f "docs/releases/hub/v$v.md" || { echo "::error::缺少 docs/releases/hub/v$v.md"; exit 1; }
+          grep -q "^## $v" HUB_CHANGELOG.md || { echo "::error::HUB_CHANGELOG.md 沒有 $v"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+      - name: Hub zip
+        run: |
+          python tools/make_release.py dist --only hub
+          ls -l dist
+      - uses: actions/upload-artifact@v5
+        with:
+          name: Hub
+          path: |
+            LabControl/dist/LabControlHub_v*.zip
+            LabControl/dist/QELPlatform_NAS_v*.zip
+            LabControl/docs/releases/hub/v${{ steps.v.outputs.version }}.md
+          retention-days: 14
+
+  release:
+    name: GitHub release
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.release
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: Hub
+          path: out
+      - name: Create / update release hub-v${{ needs.build.outputs.version }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ needs.build.outputs.version }}"
+          tag="hub-v$v"
+          notes=$(find out -name "v$v.md" | head -1)
+          files=$(find out -name "*.zip")
+          ls -l $files
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" $files --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$tag" $files --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Lab Control Hub $v" --notes-file "$notes"
+          fi

@@ -29,7 +29,34 @@ def test_hub_version_matches_app():
     import labhub
     import labmonitor
 
-    assert labhub.__version__ == __version__ == labmonitor.__version__     # Hub、Monitor 與 Lab Control 一起發佈
+    assert labmonitor.__version__ == __version__                          # Monitor 跟 Lab Control 一起發佈
+    # 1.0.36：Hub 自己發佈（hub-v<版本>），有自己的說明與更新紀錄
+    root = Path(__file__).resolve().parents[1]
+    assert (root / "docs" / "releases" / "hub" / f"v{labhub.__version__}.md").exists()
+    assert f"## {labhub.__version__}" in (root / "HUB_CHANGELOG.md").read_text(encoding="utf-8")
+
+
+def test_make_release_separates_hub(tmp_path):
+    import subprocess
+    import sys
+    import zipfile
+
+    import labhub
+
+    root = Path(__file__).resolve().parents[1]
+    subprocess.run([sys.executable, str(root / "tools" / "make_release.py"), str(tmp_path / "lc"), "--only", "labcontrol"],
+                   check=True, capture_output=True)
+    subprocess.run([sys.executable, str(root / "tools" / "make_release.py"), str(tmp_path / "hub"), "--only", "hub"],
+                   check=True, capture_output=True)
+    lc = sorted(p.name for p in (tmp_path / "lc").glob("*.zip"))
+    hb = sorted(p.name for p in (tmp_path / "hub").glob("*.zip"))
+    assert lc == [f"LabControlMonitor_v{__version__}.zip", f"LabControl_v{__version__}.zip"]
+    assert hb == [f"LabControlHub_v{labhub.__version__}.zip", f"QELPlatform_NAS_v{labhub.__version__}.zip"]
+    z = zipfile.ZipFile(tmp_path / "hub" / hb[0])
+    import json
+
+    m = json.loads(z.read("LabControlHub/qel-module.json"))
+    assert m["id"] == "hub" and m["version"] == labhub.__version__ and "自己發佈" in m.get("notes", "")
 
 
 def test_lab_home_created_with_defaults(lab):

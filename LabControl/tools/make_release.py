@@ -1,8 +1,12 @@
-"""產生發佈檔（在 repo 根目錄執行：python tools/make_release.py [輸出資料夾]）。
+"""產生發佈檔（在 LabControl/ 執行：python tools/make_release.py [輸出資料夾] [--only labcontrol|hub|all]）。
 
-    LabControl_v<版本>.zip          Lab Control（Lab APP 程式，整個 repo）
-    LabControlHub_v<版本>.zip       NAS 上的 Hub（docker-compose.yml + labhub/ + data/；在 Hub 控制台選這個 zip 更新）
-    LabControlMonitor_v<版本>.zip   Lab Control Monitor（Lab APP 程式：main.py + labmonitor/ + 內附的 labhub/）
+1.0.36 起 Hub 跟 Lab Control 分開發佈、各自的版本號：
+    --only labcontrol（GitHub 發佈 labcontrol-v<Lab Control 版本>）
+        LabControl_v<版本>.zip          Lab Control（Lab APP 程式，整個 repo）
+        LabControlMonitor_v<版本>.zip   Lab Control Monitor（Lab APP 程式：main.py + labmonitor/ + 內附的 labhub/）
+    --only hub（GitHub 發佈 hub-v<Hub 版本>；版本在 labhub/__init__.py，說明在 docs/releases/hub/v<版本>.md）
+        LabControlHub_v<版本>.zip       NAS 上的 Hub（labhub/ + data/；在 Hub 控制台選這個 zip 更新）
+        QELPlatform_NAS_v<版本>.zip     NAS 安裝包（docker-compose.yml 與說明）
 
 Monitor 的 Lab APP 資料夾也會放在 <輸出資料夾>/LabControlMonitor/，可以直接推到 Lab APP 的 NAS git。
 """
@@ -20,9 +24,13 @@ SKIP_DIRS = {"__pycache__", ".pytest_cache", "build", "dist", ".git", ".venv", "
 SKIP_FILES = {"build_log.txt", "_design_tmp.md"}
 
 
-def version() -> str:
-    text = (ROOT / "labcontrol" / "__init__.py").read_text(encoding="utf-8")
+def version(pkg: str = "labcontrol") -> str:
+    text = (ROOT / pkg / "__init__.py").read_text(encoding="utf-8")
     return re.search(r'__version__\s*=\s*"([^"]+)"', text).group(1)
+
+
+def hub_version() -> str:
+    return version("labhub")
 
 
 def _files(base: Path):
@@ -40,7 +48,7 @@ def manifest(target: str, v: str) -> str:
     from labhub.packages import manifest as _m
 
     notes = ""
-    rel = ROOT / "docs" / "releases" / f"v{v}.md"
+    rel = ROOT / "docs" / "releases" / ("hub" if target == "hub" else "") / f"v{v}.md"
     if rel.exists():
         m = re.search(r"##\s*摘要[^\n]*\n(.*?)(?:\n##\s|\Z)", rel.read_text(encoding="utf-8"), re.S)
         notes = m.group(1).strip() if m else ""
@@ -147,11 +155,22 @@ def monitor_app(out: Path, v: str) -> Path:
 
 
 def main(argv) -> int:
-    out = Path(argv[1]) if len(argv) > 1 else ROOT / "dist"
+    import argparse
+
+    ap = argparse.ArgumentParser(description="產生發佈檔")
+    ap.add_argument("out", nargs="?", default=str(ROOT / "dist"), help="輸出資料夾")
+    ap.add_argument("--only", choices=("all", "labcontrol", "hub"), default="all",
+                    help="labcontrol = Lab Control 與 Monitor；hub = Hub 與 NAS 安裝包")
+    a = ap.parse_args(argv[1:])
+    out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    v = version()
-    made = [zip_dir(ROOT, out / f"LabControl_v{v}.zip", "LabControl", "labcontrol"), hub_zip(out, v),
-            monitor_app(out, v), nas_bundle(out, v)]
+    made = []
+    if a.only in ("all", "labcontrol"):
+        v = version()
+        made += [zip_dir(ROOT, out / f"LabControl_v{v}.zip", "LabControl", "labcontrol"), monitor_app(out, v)]
+    if a.only in ("all", "hub"):
+        hv = hub_version()
+        made += [hub_zip(out, hv), nas_bundle(out, hv)]
     for p in made:
         print(f"{p}  ({p.stat().st_size / 1024:.0f} KB)")
     return 0

@@ -161,3 +161,33 @@ def test_router_day_change_without_router_reset(tmp_path):
     st.poll_router(r)
     assert st.router["days"]["2026-11-13"]["down"] == (300 + 5) * nu.MB
     assert max(c[0] for c in st.recent.data["router"].values()) == 1 * nu.MB
+
+
+def test_github_sync_reads_hub_releases(tmp_path, monkeypatch):
+    """1.0.36：Hub 分開發佈（hub-v*）：控制台「從 GitHub 取得新版」看得到。"""
+    import io
+    import zipfile
+
+    from labhub.server import Config, make_server
+    from tests import fake_paperlib
+    from tests.test_113 import _fake_github
+
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z:
+        z.writestr("LabControlHub/qel-module.json", json.dumps({"id": "hub", "version": "9.0.1", "kind": "web"}))
+        z.writestr("LabControlHub/labhub/__init__.py", '__version__ = "9.0.1"\n')
+    assets = {"LabControlHub_v9.0.1.zip": b.getvalue(), "QELPlatform_NAS_v9.0.1.zip": b"PK"}
+    gsrv, gurl, hits = _fake_github(assets, {"hub-v9.0.1": list(assets)})
+    monkeypatch.setenv("LABHUB_GITHUB_API", gurl)
+    monkeypatch.setenv("LABHUB_GITHUB_REPO", "o/r")
+    psrv, _, purl = fake_paperlib.start()
+    srv, state = make_server(Config(tmp_path / "hub", token="t", paperlib_url=purl), "127.0.0.1", 0)
+    try:
+        rel = state.console.github.latest(force=True)
+        hub = [r for r in rel if r["tag"] == "hub-v9.0.1"]
+        assert hub and [f["name"] for f in hub[0]["files"]] == ["LabControlHub_v9.0.1.zip"]
+        assert [f["name"] for f in state.console.github.wanted(rel)] == ["LabControlHub_v9.0.1.zip"]
+    finally:
+        srv.server_close()
+        psrv.shutdown()
+        gsrv.shutdown()

@@ -30,8 +30,9 @@ jobs:
           github-token: ${{ github.token }}
           path: artifacts
           merge-multiple: true
-      # 1.0.13：量測（labcontrol-v*）的發佈也附上 Hub 更新包與量測 / Monitor 的程式 zip（從打包那次的 commit 產生），
+      # 1.0.13：量測（labcontrol-v*）的發佈也附上量測 / Monitor 的程式 zip（從打包那次的 commit 產生），
       # 平台網頁「控制台 → 從 GitHub 取得新版」由 NAS 直接下載全部，不用站長先下載再上傳。
+      # 1.0.36：Hub 不再跟著量測發佈 —— Hub 用 Actions → Build Hub（hub.yml）發佈 hub-v<Hub 版本>。
       - name: Find the build commit
         id: build
         env:
@@ -42,12 +43,12 @@ jobs:
         with:
           ref: ${{ steps.build.outputs.sha }}
           path: src
-      - name: Module zips (Hub, Lab Control, Monitor)
+      - name: Module zips (Lab Control, Monitor)
         if: startsWith(inputs.tag, 'labcontrol-')
         run: |
-          python3 src/LabControl/tools/make_release.py "$PWD/zips"
+          python3 src/LabControl/tools/make_release.py "$PWD/zips" --only labcontrol
           mkdir -p artifacts/zips
-          cp zips/LabControlHub_v*.zip zips/LabControl_v*.zip zips/LabControlMonitor_v*.zip artifacts/zips/
+          cp zips/LabControl_v*.zip zips/LabControlMonitor_v*.zip artifacts/zips/
           ls -la artifacts/zips
       - name: Create the release
         env:
@@ -58,7 +59,7 @@ jobs:
           ls -la artifacts
           mkdir files
           find artifacts -type f \( -name "*.exe" -o -name "*.dmg" -o -name "LabLogViewerPets_v*.zip" \
-            -o -name "LabControlHub_v*.zip" -o -name "LabControl_v*.zip" -o -name "LabControlMonitor_v*.zip" \) -exec cp {} files/ \;
+            -o -name "LabControl_v*.zip" -o -name "LabControlMonitor_v*.zip" \) -exec cp {} files/ \;
           ls -la files
           test -n "$(ls files)"
           {

@@ -24,7 +24,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from .packages import PackageError, identify_binary
 
-PREFIXES = ("labcontrol-v", "lablogviewer-v", "hfss-v", "netmeter-v")     # 1.0.17 模擬工具；1.0.30 流量監看
+PREFIXES = ("labcontrol-v", "hub-v", "lablogviewer-v", "hfss-v", "netmeter-v")   # 1.0.17 模擬工具；1.0.30 流量監看；1.0.36 Hub 分開發佈
 CACHE_S = 60.0
 AUTO_EVERY_S = 30 * 60.0
 RETRY_FAILED_S = 24 * 3600.0          # 1.0.32：自動模式下載 / 暫存失敗的檔，24 小時內不再自動重抓（避免每 30 分鐘重下載同一個大檔）

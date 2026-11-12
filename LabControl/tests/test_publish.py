@@ -73,6 +73,7 @@ def test_identify_real_release_zips(tmp_path):
     root = Path(__file__).resolve().parents[1]
     subprocess.run([sys.executable, str(root / "tools" / "make_release.py"), str(tmp_path)], check=True,
                    capture_output=True)
+    from labcontrol import __version__ as lc
     from labhub import __version__
     got = {}
     for p in tmp_path.glob("*.zip"):
@@ -80,7 +81,7 @@ def test_identify_real_release_zips(tmp_path):
             got[identify(p)["target"]] = identify(p)["version"]
         except PackageError as e:
             assert "NAS 安裝包" in str(e) and p.name.startswith("QELPlatform_NAS_")
-    assert got == {"labcontrol": __version__, "hub": __version__, "monitor": __version__}
+    assert got == {"labcontrol": lc, "hub": __version__, "monitor": lc}         # 1.0.36：Hub 自己的版本號
 
 
 def _port() -> int:
