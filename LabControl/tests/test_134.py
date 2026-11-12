@@ -134,7 +134,9 @@ def test_router_day_change_without_router_reset(tmp_path):
     """1.0.35：路由器的「今天」在它自己的時鐘換日才歸零；我們換日時不能把它前一天的累計當成一筆。"""
     import datetime as dt
 
-    clk = Clock(dt.datetime(2026, 11, 12, 23, 56).timestamp())
+    from zoneinfo import ZoneInfo
+
+    clk = Clock(dt.datetime(2026, 11, 12, 23, 56, tzinfo=ZoneInfo("Asia/Taipei")).timestamp())   # Hub 用台北時間換日
     st = nu.NetUsage(tmp_path, now=clk)
     st.cfg["router"]["host"] = "192.0.2.1"
 
