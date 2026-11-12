@@ -7,6 +7,8 @@
   * 剛連上 / 剛離開的那一段不算（不知道是在哪個網路用的）；
   * 重開機（boot 變了）或計數變小（網卡重設）→ 重新取基準，不算；
   * 日期用這台電腦的當地時間。
+  * 1.0.2：Tailscale 的網卡（100.64.0.0/10 的位址）另外記成 vpn_up / vpn_down（在實驗室網段時才記）——
+    這部分也已經算在實驗網卡的流量裡（VPN 封包包起來後經實驗網卡送出），Hub 用它看「其中經 VPN 的有多少」。
 """
 from __future__ import annotations
 
@@ -20,6 +22,7 @@ from typing import Any, Callable, Dict, List, Optional
 from .config import _read, write_json
 
 MAX_STEP = 10 * 1024 ** 4        # 一次差值超過 10 TB → 當成計數錯亂
+VPN_NETS = [ipaddress.ip_network("100.64.0.0/10")]
 
 
 def today_str(t: Optional[float] = None) -> str:
@@ -46,7 +49,8 @@ class Meter:
         self.keep_days = keep_days
         st = _read(self.file)
         self.id: str = str(st.get("id") or f"nm-{uuid.uuid4().hex[:16]}")
-        self.days: Dict[str, Dict[str, int]] = {k: {"up": int(v.get("up", 0)), "down": int(v.get("down", 0))}
+        self.days: Dict[str, Dict[str, int]] = {k: {kk: int(v.get(kk, 0)) for kk in ("up", "down", "vpn_up", "vpn_down")
+                                                    if kk in ("up", "down") or v.get(kk)}
                                                 for k, v in (st.get("days") or {}).items() if isinstance(v, dict)}
         self.last: Optional[Dict[str, Any]] = st.get("last") if isinstance(st.get("last"), dict) else None
         self.rate = {"up": 0.0, "down": 0.0}
@@ -58,16 +62,23 @@ class Meter:
     def step(self) -> Dict[str, Any]:
         s = self.sampler()
         t, boot = float(s["t"]), str(s.get("boot") or "")
-        cur = {n: {"rx": int(v["rx"]), "tx": int(v["tx"]), "on": on_net(v.get("ips") or [], self.nets)}
+        cur = {n: {"rx": int(v["rx"]), "tx": int(v["tx"]), "on": on_net(v.get("ips") or [], self.nets),
+                   "vpn": on_net(v.get("ips") or [], VPN_NETS)}
                for n, v in (s.get("ifaces") or {}).items()}
         self.on_ifaces = sorted(n for n, v in cur.items() if v["on"])
         self.ips = [ip for n in self.on_ifaces for ip in (s["ifaces"][n].get("ips") or []) if on_net([ip], self.nets)]
-        up = down = 0
+        up = down = vup = vdown = 0
         last = self.last
         if last and last.get("boot") == boot and t > float(last.get("t") or 0):
             prev = last.get("ifaces") or {}
+            lab_on = any(v["on"] and (prev.get(n) or {}).get("on") for n, v in cur.items())
             for n, v in cur.items():
                 p = prev.get(n)
+                if v.get("vpn") and p and p.get("vpn") and lab_on:
+                    drx, dtx = v["rx"] - int(p["rx"]), v["tx"] - int(p["tx"])
+                    if 0 <= drx <= MAX_STEP and 0 <= dtx <= MAX_STEP:
+                        vdown += drx
+                        vup += dtx
                 if not (v["on"] and p and p.get("on")):
                     continue
                 drx, dtx = v["rx"] - int(p["rx"]), v["tx"] - int(p["tx"])
@@ -78,14 +89,17 @@ class Meter:
             self.rate = {"up": up / el, "down": down / el} if el > 0 else {"up": 0.0, "down": 0.0}
         else:
             self.rate = {"up": 0.0, "down": 0.0}
-        if up or down:
+        if up or down or vup or vdown:
             d = self.days.setdefault(today_str(t), {"up": 0, "down": 0})
             d["up"] += up
             d["down"] += down
+            if vup or vdown:
+                d["vpn_up"] = int(d.get("vpn_up", 0)) + vup
+                d["vpn_down"] = int(d.get("vpn_down", 0)) + vdown
         self.last = {"t": t, "boot": boot, "ifaces": cur}
         self.dirty = True
         self._trim(t)
-        return {"up": up, "down": down, "on": bool(self.on_ifaces)}
+        return {"up": up, "down": down, "vpn_up": vup, "vpn_down": vdown, "on": bool(self.on_ifaces)}
 
     def _trim(self, t: float) -> None:
         cut = (dt.date.fromisoformat(today_str(t)) - dt.timedelta(days=self.keep_days)).isoformat()

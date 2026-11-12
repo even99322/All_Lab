@@ -19,6 +19,11 @@
 
 ## 版本
 
+### v1.0.2
+
+另外記「經 Tailscale（VPN）」的流量（Tailscale 網卡，100.x 位址；在實驗室網段時才記），一起回報給 Hub。
+Hub 1.0.37 的「網路用量」把每台電腦的流量分成：跟 NAS 之間（區網）、其中經 VPN、其餘（多半是外網）。
+
 ### v1.0.1
 
 Windows 改成正式安裝程式（`QELNetMeter_v1.0.1_windows-setup.exe`，資料夾版＋版本資訊）：1.0.0 的單一 exe

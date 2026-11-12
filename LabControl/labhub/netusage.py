@@ -25,6 +25,9 @@
 4. 1.0.32 Tailscale（VPN）：每分鐘讀 NAS 上 tailscaled 的 LocalAPI（/localapi/v0/status，跟內網 https 憑證同一個 socket），
    每個 VPN 裝置跟 NAS 之間的位元組數，依連線路徑分成：區網直連（不經外網）、外網直連、DERP 中繼（經外網）。
    也檢查 NAS 有沒有開「出口節點 / 子網路由」（別人經 NAS 上網會吃掉實驗室的對外流量）。
+6. 1.0.37 NAS 分流：記帳容器（labhub/netacct.py，控制代理建立）在 NAS 主機的 iptables 計數，
+   分成 NAS ⇄ 區網、NAS ⇄ VPN（Tailscale 的 WireGuard，含 DERP 中繼）、NAS ⇄ 外網（直接）；
+   也記 NAS 跟每台裝了流量監看的電腦之間傳了多少（電腦的流量因此可以分成「跟 NAS」與「其餘，多半是外網」）。
 5. 1.0.32 Hub 自己從 GitHub 下載新版的量（控制台「從 GitHub 取得新版」與自動更新）。
 
 路由器密碼只存在 Hub 的資料夾（data/netusage_secret.json），API 不會回傳。
@@ -482,7 +485,12 @@ class NetUsage:
         # 1.0.32：Hub 自己從 GitHub 下載的量（days[日期] = {down, files}）
         self.github: Dict[str, Any] = dict(d.get("github") or {})
         self.github.setdefault("days", {})
-        self.status: Dict[str, Dict[str, Any]] = {"router": {}, "nas": {}, "tailscale": {}}
+        # 1.0.37：NAS 分流（days[日期] = {"lan": {up, down}, "vpn": {...}, "wan": {...}}；up = NAS 送出）
+        self.nasdir: Dict[str, Any] = dict(d.get("nasdir") or {})
+        self.nasdir.setdefault("days", {})
+        self._acct_last: Optional[Dict[str, Any]] = None
+        self._hosts_written: Optional[List[str]] = None
+        self.status: Dict[str, Dict[str, Any]] = {"router": {}, "nas": {}, "tailscale": {}, "netacct": {}}
         from .netrecent import Recent                       # 1.0.34：每分鐘一格（即時）
 
         self.recent = Recent(Path(data_dir) / "netusage_recent.json", now=now)
@@ -520,7 +528,7 @@ class NetUsage:
                 return
             try:
                 self._write(self.file, {"cfg": self.cfg, "router": self.router, "nas": self.nas, "devices": self.pcs,
-                                        "tailscale": self.ts, "github": self.github})
+                                        "tailscale": self.ts, "github": self.github, "nasdir": self.nasdir})
                 self._dirty = False
                 self._last_save = self.now()
             except OSError as e:
@@ -704,6 +712,7 @@ class NetUsage:
                             use = last.get("path") if last.get("path") in TS_PATHS else path
                             day = self.ts["days"].setdefault(today, {})
                             _add(day, use, dtx, drx)
+                            self.recent.add(f"tspath:{use}", dtx, drx, now)          # 1.0.37：NAS 分流扣掉中繼
                             _add(rec["days"], today, dtx, drx)
                             pd = rec.setdefault("paths", {}).setdefault(today, {})
                             pd[use] = int(pd.get(use, 0)) + drx + dtx
@@ -740,6 +749,100 @@ class NetUsage:
             self._dirty = True
         self.save()
 
+    # ---- 1.0.37：NAS 分流（記帳容器寫的 data/netacct.json）----
+    def _pc_hosts(self) -> List[str]:
+        ips: List[str] = []
+        with self.lock:
+            for pc in self.pcs.values():
+                for ip in str(pc.get("ip") or "").replace(";", ",").split(","):
+                    ip = ip.strip()
+                    if ip and ip not in ips:
+                        ips.append(ip)
+        return sorted(ips)[:64]
+
+    def poll_netacct(self, st_file: Optional[Path] = None) -> Dict[str, Any]:
+        data_dir = self.file.parent
+        hosts = self._pc_hosts()
+        if hosts != self._hosts_written:                     # 告訴記帳容器要分開記哪些電腦
+            try:
+                self._write(data_dir / "netacct_hosts.json", {"hosts": hosts})
+                self._hosts_written = hosts
+            except OSError:
+                pass
+        p = st_file or (data_dir / "netacct.json")
+        now = self.now()
+        try:
+            a = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            st = {"time": now, "ok": False, "error": "還沒有記帳資料：Hub 控制代理（1.0.37 起）會自動建立 labcontrol-netacct 容器"}
+            self.status["netacct"] = st
+            return st
+        t = float(a.get("t") or 0)
+        if not a.get("ok"):
+            st = {"time": now, "ok": False, "error": str(a.get("error") or "記帳容器回報錯誤")}
+        elif now - t > 120:
+            st = {"time": now, "ok": False, "error": f"記帳容器 {int(now - t)} 秒沒有更新（labcontrol-netacct 有在跑嗎？）"}
+        else:
+            st = {"time": now, "ok": True, "mode": a.get("mode"), "ifaces": a.get("ifaces"), "tun": a.get("tun"),
+                  "lan": a.get("lan"), "hosts": a.get("hosts")}
+            self._acct_step(a, t)
+        self.status["netacct"] = st
+        self.save()
+        return st
+
+    def _acct_step(self, a: Dict[str, Any], t: float) -> None:
+        cur: Dict[str, int] = {}
+        for v in ("v4", "v6"):
+            for io in ("in", "out"):
+                for k, n in ((a.get(v) or {}).get(io) or {}).items():
+                    key = f"{io}:{k}"
+                    cur[key] = cur.get(key, 0) + int(n or 0)
+        last = self._acct_last
+        self._acct_last = {"t": t, "c": cur}
+        if not last or t <= float(last["t"]) or t - float(last["t"]) > GAP_S:
+            return
+        prev = last["c"]
+
+        def d(key: str) -> int:
+            x, y = cur.get(key, 0), prev.get(key)
+            if y is None:
+                return 0
+            v = x - y if x >= y else x                     # 規則重建（計數歸零）→ 從 0 算
+            return v if 0 <= v <= MAX_DELTA else 0
+        now = self.now()
+        dt_ = t - float(last["t"])
+        today = self.today()
+        out: Dict[str, Tuple[int, int]] = {}
+        for io, idx in (("out", 0), ("in", 1)):
+            lan, wgl, wg, al = d(f"{io}:lan"), d(f"{io}:wg_lan"), d(f"{io}:wg"), d(f"{io}:all")
+            vals = {"lan": max(0, lan - wgl), "vpn": wg, "wan": max(0, al - lan - (wg - wgl))}
+            for k, v in vals.items():
+                o = out.get(k, (0, 0))
+                out[k] = (o[0] + v, o[1]) if idx == 0 else (o[0], o[1] + v)
+        with self.lock:
+            day = self.nasdir["days"].setdefault(today, {})
+            for k, (up, down) in out.items():
+                _add(day, k, up, down)
+                self.recent.add(f"nasdir:{k}", up, down, now, dt_)
+            ip2pc = {}
+            for did, pc in self.pcs.items():
+                for ip in str(pc.get("ip") or "").replace(";", ",").split(","):
+                    if ip.strip():
+                        ip2pc[ip.strip()] = did
+            for key in cur:
+                if not key.startswith("out:h:"):
+                    continue
+                ip = key[6:]
+                up, down = d(f"out:h:{ip}"), d(f"in:h:{ip}")    # NAS 送給電腦 = 電腦下載
+                did = ip2pc.get(ip)
+                if did and did in self.pcs and (up or down):
+                    pc = self.pcs[did]
+                    _add(pc.setdefault("nas_days", {}), today, down, up)     # 電腦的角度：up = 電腦上傳到 NAS
+                    self.recent.add(f"pcnas:{did}", down, up, now, dt_)
+                    _trim(pc["nas_days"], today)
+            _trim(self.nasdir["days"], today)
+            self._dirty = True
+
     # ---- 各台裝置（流量監看程式回報）----
     def report_device(self, b: Dict[str, Any], ip: str = "") -> Dict[str, Any]:
         did = str(b.get("id") or "")
@@ -758,6 +861,12 @@ class NetUsage:
                 continue
             if 0 <= up <= MAX_DAY and 0 <= down <= MAX_DAY:
                 clean[k] = {"up": up, "down": down}
+                try:                                     # 1.0.37（流量監看 1.0.2）：其中經 Tailscale 的
+                    vu, vd = int(v.get("vpn_up") or 0), int(v.get("vpn_down") or 0)
+                except (TypeError, ValueError):
+                    vu = vd = 0
+                if 0 < vu + vd and vu <= MAX_DAY and vd <= MAX_DAY:
+                    clean[k].update(vpn_up=vu, vpn_down=vd)
         rate = b.get("rate") if isinstance(b.get("rate"), dict) else {}
         now = self.now()
         with self.lock:
@@ -832,7 +941,12 @@ class NetUsage:
                             "ip": pc.get("ip", ""), "user": pc.get("user", ""), "seen": pc.get("seen"),
                             "os": pc.get("os", ""), "version": pc.get("version", ""), "ifaces": pc.get("ifaces") or [],
                             "online": online, "rate": pc.get("rate") if online else None,
-                            "days": pick(pc.get("days") or {}), "month": month_sum(pc.get("days") or {})})
+                            "days": pick(pc.get("days") or {}), "month": month_sum(pc.get("days") or {}),
+                            "nas_days": pick(pc.get("nas_days") or {}), "nas_month": month_sum(pc.get("nas_days") or {}),
+                            "vpn_month": {"up": sum(int(v.get("vpn_up", 0)) for k, v in (pc.get("days") or {}).items()
+                                                    if k.startswith(month)),
+                                          "down": sum(int(v.get("vpn_down", 0)) for k, v in (pc.get("days") or {}).items()
+                                                      if k.startswith(month))}})
             pcs.sort(key=lambda p: -(p["month"]["up"] + p["month"]["down"]))
             return {"now": now, "today": dates[-1], "dates": dates,
                     "router": {"days": pick(self.router["days"]), "month": self.router.get("month"),
@@ -842,7 +956,26 @@ class NetUsage:
                             "status": self.status.get("nas") or {}, "enabled": bool(self.cfg["nas"].get("enabled")),
                             "host": self.cfg["nas"].get("host", "")},
                     "pcs": pcs, "tailscale": self._ts_view(pick, month_sum, now),
-                    "github": {"days": pick(self.github["days"]), "month": month_sum(self.github["days"])}}
+                    "github": {"days": pick(self.github["days"]), "month": month_sum(self.github["days"])},
+                    "nasdir": self._nasdir_view(pick, month)}
+
+    def _nasdir_view(self, pick, month: str) -> Dict[str, Any]:
+        """NAS 分流每日：DERP 中繼（TCP 443，記帳時算在外網）從外網移到 VPN。"""
+        days: Dict[str, Dict[str, Dict[str, int]]] = {}
+        for k, v in self.nasdir["days"].items():
+            relay = (self.ts["days"].get(k) or {}).get("relay") or {}
+            ru, rd = int(relay.get("up", 0)), int(relay.get("down", 0))
+            w = v.get("wan") or {"up": 0, "down": 0}
+            vp = v.get("vpn") or {"up": 0, "down": 0}
+            wu, wd = int(w.get("up", 0)), int(w.get("down", 0))
+            mu, md = min(ru, wu), min(rd, wd)
+            days[k] = {"lan": dict(v.get("lan") or {"up": 0, "down": 0}),
+                       "vpn": {"up": int(vp.get("up", 0)) + mu, "down": int(vp.get("down", 0)) + md},
+                       "wan": {"up": wu - mu, "down": wd - md}}
+        mon = {c: {"up": sum(int(x[c]["up"]) for k, x in days.items() if k.startswith(month)),
+                   "down": sum(int(x[c]["down"]) for k, x in days.items() if k.startswith(month))}
+               for c in ("lan", "vpn", "wan")}
+        return {"days": pick(days), "month": mon, "status": self.status.get("netacct") or {}}
 
     def _ts_view(self, pick, month_sum, now: float) -> Dict[str, Any]:
         days = self.ts["days"]
@@ -883,10 +1016,24 @@ class NetUsage:
                 src("router", "整個網段（路由器）", "router")
             if self.cfg["nas"].get("enabled"):
                 src("nas", "NAS", "nas")
+            if "nasdir:lan" in rc.data:                             # 1.0.37：NAS 分流；DERP 中繼從外網移到 VPN
+                w = {k: rc.window(f"nasdir:{k}", window, now=now) for k in ("lan", "vpn", "wan")}
+                rl = rc.window("tspath:relay", window, now=now)
+                mu, md = min(rl["up"], w["wan"]["up"]), min(rl["down"], w["wan"]["down"])
+                adj = {"lan": (0, 0), "vpn": (mu, md), "wan": (-mu, -md)}
+                for k, name in (("lan", "NAS ⇄ 區網"), ("vpn", "NAS ⇄ VPN"), ("wan", "NAS ⇄ 外網（直接）")):
+                    r = w[k].get("rate")
+                    out.append({"key": f"nasdir:{k}", "name": name, "kind": "nasdir", "up": w[k]["up"] + adj[k][0],
+                                "down": w[k]["down"] + adj[k][1], "rate": r})
             for did, pc in self.pcs.items():
                 online = now - float(pc.get("seen") or 0) < PC_OFFLINE_S
                 src(f"pc:{did}", pc.get("label") or pc.get("host") or did, "pc", online=online,
                     sub=" ".join(x for x in (pc.get("ip", ""), pc.get("user", "")) if x))
+                if f"pcnas:{did}" in rc.data:                        # 1.0.37：其中跟 NAS 之間的、其餘（多半外網）
+                    o = out[-1]
+                    nw = rc.window(f"pcnas:{did}", window, now=now)
+                    o["nas"] = {"up": nw["up"], "down": nw["down"]}
+                    o["other"] = {"up": max(0, o["up"] - nw["up"]), "down": max(0, o["down"] - nw["down"])}
             for pid, r in self.ts["peers"].items():
                 if not r.get("online") and f"ts:{pid}" not in rc.data:
                     continue
@@ -910,7 +1057,7 @@ class NetUsage:
         if self._threads:
             return
         for fn, every, what in ((self.poll_router, ROUTER_EVERY, "router"), (self.poll_nas, NAS_EVERY, "nas"),
-                                (self.poll_tailscale, TS_EVERY, "tailscale")):
+                                (self.poll_tailscale, TS_EVERY, "tailscale"), (self.poll_netacct, NAS_EVERY, "netacct")):
             th = threading.Thread(target=self._loop, args=(fn, every, what), name=f"netusage-{what}", daemon=True)
             th.start()
             self._threads.append(th)
@@ -918,7 +1065,7 @@ class NetUsage:
     def _loop(self, fn, every: float, what: str) -> None:
         self._stop.wait(5.0)
         while not self._stop.is_set():
-            if what == "tailscale" or self.cfg[what].get("enabled"):
+            if what in ("tailscale", "netacct") or self.cfg[what].get("enabled"):
                 try:
                     fn()
                 except Exception:  # noqa: BLE001

@@ -56,7 +56,7 @@ def test_make_release_separates_hub(tmp_path):
     import json
 
     m = json.loads(z.read("LabControlHub/qel-module.json"))
-    assert m["id"] == "hub" and m["version"] == labhub.__version__ and "自己發佈" in m.get("notes", "")
+    assert m["id"] == "hub" and m["version"] == labhub.__version__ and m.get("notes")        # 說明取自 docs/releases/hub/v<版本>.md
 
 
 def test_lab_home_created_with_defaults(lab):

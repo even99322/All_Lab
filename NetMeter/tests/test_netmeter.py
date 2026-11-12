@@ -37,10 +37,10 @@ def test_on_net():
 def test_meter_counts_only_lab_interface(tmp_path):
     s = Seq()
     m = Meter(tmp_path / "state.json", NETS, s)
-    assert m.step() == {"up": 0, "down": 0, "on": True}          # 第一次：基準
+    assert m.step() == {"up": 0, "down": 0, "vpn_up": 0, "vpn_down": 0, "on": True}          # 第一次：基準
     s.add("Ethernet", 3000, 400)
     s.add("Wi-Fi", 9999, 999, dt=0)                              # 不在實驗室網段的網卡不算
-    assert m.step() == {"up": 400, "down": 3000, "on": True}
+    assert m.step() == {"up": 400, "down": 3000, "vpn_up": 0, "vpn_down": 0, "on": True}
     assert m.rate == {"up": 400 / 30, "down": 3000 / 30}
     assert m.days[today_str(s.t)] == {"up": 400, "down": 3000}
     # 離開實驗室網段 → 這段與回來的第一段都不算
@@ -171,3 +171,33 @@ def test_self_test_runs(monkeypatch, capsys):
     monkeypatch.setenv("NETMETER_SELFTEST_GUI", "0")
     assert app.self_test() == 0
     assert "網卡計數" in capsys.readouterr().out
+
+
+def test_meter_counts_tailscale_separately(tmp_path):
+    """1.0.2：Tailscale（100.x）網卡另外記成 vpn_up / vpn_down（在實驗室網段時才記）。"""
+    clk = {"t": 1_000_000.0}
+    cnt = {"eth": [0, 0], "ts": [0, 0]}
+    lab = {"on": True}
+
+    def sampler():
+        return {"t": clk["t"], "boot": "b", "ifaces": {
+            "eth": {"rx": cnt["eth"][0], "tx": cnt["eth"][1], "ips": ["192.168.50.11"] if lab["on"] else ["10.0.0.5"]},
+            "Tailscale": {"rx": cnt["ts"][0], "tx": cnt["ts"][1], "ips": ["100.67.66.99"]}}}
+
+    m = Meter(tmp_path / "s.json", NETS, sampler)
+    m.step()
+    clk["t"] += 30
+    cnt["eth"] = [1000, 500]
+    cnt["ts"] = [300, 200]
+    r = m.step()
+    assert r["down"] == 1000 and r["vpn_down"] == 300 and r["vpn_up"] == 200
+    lab["on"] = False                                        # 不在實驗室：都不算
+    clk["t"] += 30
+    cnt["eth"] = [5000, 5000]
+    cnt["ts"] = [900, 900]
+    r = m.step()
+    assert r["down"] == 0 and r["vpn_down"] == 0
+    day = list(m.days.values())[0]
+    assert day == {"up": 500, "down": 1000, "vpn_up": 200, "vpn_down": 300}
+    m.save()
+    assert Meter(tmp_path / "s.json", NETS, sampler).days == m.days

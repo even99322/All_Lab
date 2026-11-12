@@ -293,6 +293,9 @@ class AgentConfig:
         self.paperlib_verify_s = paperlib_verify_s
         # 1.0.4：NAS 上的數據索引（同一份 labhub 程式）；Hub 換程式後跟著重新啟動
         self.indexer_container = os.environ.get("INDEXER_CONTAINER", "qel-indexer")
+        # 1.0.37：NAS 流量分流記帳（labhub/netacct.py）——控制代理自己建立、維持這個容器；NETACCT=off 關掉
+        self.netacct_container = os.environ.get("NETACCT_CONTAINER", "labcontrol-netacct")
+        self.netacct = os.environ.get("NETACCT", "on").lower() not in ("off", "0", "false", "no")
 
     @classmethod
     def from_env(cls) -> "AgentConfig":
@@ -372,6 +375,7 @@ class Agent:
         ping = self.hub_ping()
         cur = self.current
         return {"agent_version": __version__, "container": c, "indexer": self.indexer_status(),
+                "netacct": self.netacct_status(),
                 "hub_online": ping is not None,
                 "hub_version": (ping or {}).get("version"), "code_version": package_version(self.code_dir),
                 "hub_dir": str(self.cfg.hub_dir), "backups": self.backups()[:10],
@@ -394,6 +398,94 @@ class Agent:
                  exit_code=stt.get("ExitCode"), error=stt.get("Error") or "", started=stt.get("StartedAt"))
         c["log"] = self.docker.logs(info["Id"], 12)
         return c
+
+    # ---- 1.0.37：NAS 流量分流記帳容器 ----------------------------------------------
+    def netacct_status(self) -> Dict[str, Any]:
+        if not getattr(self.cfg, "netacct_container", ""):
+            return {"status": "off"}
+        c: Dict[str, Any] = {"name": self.cfg.netacct_container, "enabled": self.cfg.netacct}
+        try:
+            info = self.docker.inspect(self.cfg.netacct_container)
+        except DockerError as e:
+            c.update(status="unknown", error=str(e))
+            return c
+        if not info:
+            c["status"] = "missing"
+            return c
+        stt = info.get("State") or {}
+        c.update(status=stt.get("Status"), running=bool(stt.get("Running")), restarts=info.get("RestartCount"),
+                 error=stt.get("Error") or "")
+        c["log"] = self.docker.logs(info["Id"], 6)
+        return c
+
+    def netacct_spec(self) -> Dict[str, Any]:
+        """跟 Hub 容器用同一個映像、同一份 labhub 程式（唯讀）與 data 資料夾；privileged + host 網路 + host pid
+        （在 NAS 主機的 iptables 加只計數的規則）。"""
+        hub = self.docker.inspect(self.cfg.container)
+        if not hub:
+            raise DockerError(f"找不到 Hub 容器 {self.cfg.container}")
+        binds = []
+        for m in hub.get("Mounts") or []:
+            dst = m.get("Destination")
+            if dst in ("/app/labhub", "/data") and m.get("Source"):
+                binds.append(f"{m['Source']}:{dst}{':ro' if dst == '/app/labhub' else ''}")
+        if len(binds) != 2:
+            raise DockerError("Hub 容器沒有掛載 /app/labhub 與 /data，不知道程式與資料在哪裡")
+        env = [e for e in ((hub.get("Config") or {}).get("Env") or []) if e.startswith(("TZ=",))]
+        return {"Image": (hub.get("Config") or {}).get("Image") or hub.get("Image"),
+                "Cmd": ["python", "-m", "labhub.netacct", "--data", "/data"], "WorkingDir": "/app",
+                "Env": env + ["LABHUB_DATA=/data", "PYTHONUNBUFFERED=1"],
+                "Labels": {"qel.role": "netacct", "qel.managed-by": "labcontrol-hub-agent"},
+                "HostConfig": {"Privileged": True, "NetworkMode": "host", "PidMode": "host", "Binds": binds,
+                               "RestartPolicy": {"Name": "unless-stopped"},
+                               "LogConfig": {"Type": "json-file", "Config": {"max-size": "1m", "max-file": "2"}}}}
+
+    def ensure_netacct(self) -> str:
+        """沒有就建立、停了就啟動；回傳做了什麼。"""
+        if not self.cfg.netacct:
+            return "off"
+        info = self.docker.inspect(self.cfg.netacct_container)
+        if info is None:
+            spec = self.netacct_spec()
+            st, data = self.docker.req("POST", f"/containers/create?name={urllib.parse.quote(self.cfg.netacct_container)}",
+                                       spec)
+            cid = self.docker._ok(st, data, "建立記帳容器")["Id"]
+            self.docker.start(cid)
+            log.info("已建立 NAS 流量分流記帳容器 %s", self.cfg.netacct_container)
+            return "created"
+        if not (info.get("State") or {}).get("Running"):
+            self.docker.start(info["Id"])
+            return "started"
+        return "ok"
+
+    def remove_netacct(self) -> None:
+        """拿掉容器，並跑一次 --remove 把 NAS 上的記帳規則拿掉。"""
+        info = self.docker.inspect(self.cfg.netacct_container)
+        spec = self.netacct_spec()
+        if info:
+            self.docker.remove(info["Id"])
+        spec["Cmd"] = ["python", "-m", "labhub.netacct", "--data", "/data", "--remove"]
+        spec["HostConfig"]["RestartPolicy"] = {"Name": "no"}
+        name = self.cfg.netacct_container + "-remove"
+        old = self.docker.inspect(name)
+        if old:
+            self.docker.remove(old["Id"])
+        st, data = self.docker.req("POST", f"/containers/create?name={urllib.parse.quote(name)}", spec)
+        cid = self.docker._ok(st, data, "建立清除容器")["Id"]
+        self.docker.start(cid)
+        self.docker.req("POST", f"/containers/{cid}/wait", timeout=120)
+        self.docker.remove(cid)
+
+    def netacct_loop(self, every: float = 600.0) -> None:
+        time.sleep(20)
+        while True:
+            try:
+                r = self.ensure_netacct()
+                if r == "off":
+                    return
+            except Exception as e:  # noqa: BLE001
+                log.warning("NAS 流量分流記帳容器：%s", e)
+            time.sleep(every)
 
     # ---- 啟動工作 --------------------------------------------------------
     STEPS = {
@@ -591,18 +683,22 @@ class Agent:
             shutil.rmtree(work, ignore_errors=True)
 
     def _restart_indexer(self, job: Job) -> None:
-        """數據索引用同一份 labhub 程式：重新啟動讓它用新版（沒有這個容器 → 略過）。"""
-        try:
-            info = self.docker.inspect(self.cfg.indexer_container)
-        except DockerError:
-            return
-        if not info:
-            return
-        try:
-            self.docker.restart(info["Id"])
-            job.say(f"數據索引（{self.cfg.indexer_container}）已重新啟動")
-        except DockerError as e:
-            job.say(f"⚠ 數據索引沒有重新啟動：{e}")
+        """數據索引、NAS 流量記帳用同一份 labhub 程式：重新啟動讓它們用新版（沒有這個容器 → 略過）。"""
+        for name, what in ((self.cfg.indexer_container, "數據索引"),
+                           (getattr(self.cfg, "netacct_container", ""), "NAS 流量記帳")):
+            if not name:
+                continue
+            try:
+                info = self.docker.inspect(name)
+            except DockerError:
+                continue
+            if not info:
+                continue
+            try:
+                self.docker.restart(info["Id"])
+                job.say(f"{what}（{name}）已重新啟動")
+            except DockerError as e:
+                job.say(f"⚠ {what}沒有重新啟動：{e}")
 
     def _restore(self, job: Job, backup_zip: Path) -> None:
         tmp = self.cfg.hub_dir / ".update" / f"restore-{job.id}"
@@ -1243,6 +1339,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     logging.basicConfig(level=os.environ.get("LABHUB_LOG", "INFO"), format="%(asctime)s %(levelname)s %(message)s")
     cfg = AgentConfig.from_env()
     srv, agent = make_agent_server(cfg, a.host, a.port)
+    threading.Thread(target=agent.netacct_loop, name="netacct", daemon=True).start()   # 1.0.37
     log.info("Hub 控制代理 %s 啟動：http://%s:%d/（Hub 容器 %s，資料夾 %s，Docker %s）", __version__, a.host, a.port,
              cfg.container, cfg.hub_dir, cfg.docker_host)
     try:
