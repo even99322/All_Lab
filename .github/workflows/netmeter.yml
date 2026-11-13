@@ -66,7 +66,10 @@ jobs:
           $home_ = "$env:ProgramData\QELNetMeter"
           New-Item -ItemType Directory -Force $home_ | Out-Null
           # 假的 Hub：記下回報；runner 的位址當成「實驗室網段」
-          $ip = (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } | Select-Object -First 1).IPAddress
+          # 預設路由那張網卡（不是 Hyper-V 的 vEthernet）：分內網 / 外網要看得到對外的流量
+          $idx = (Get-NetRoute -DestinationPrefix '0.0.0.0/0' | Sort-Object { $_.RouteMetric + $_.InterfaceMetric } | Select-Object -First 1).ifIndex
+          $ip = (Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $idx | Select-Object -First 1).IPAddress
+          Write-Output "lab ip: $ip (ifIndex $idx)"
           # 127.0.0.1 也當實驗室網段：假 Hub 在 127.0.0.1，回報時給 https 網域 → hosts 要把它指到 127.0.0.1
           '{"subnets": ["' + $ip + '/32", "127.0.0.1/32"], "hubs": ["http://127.0.0.1:18765"], "sample_s": 1, "report_s": 1}' | Set-Content "$home_\config.json" -Encoding utf8
           $hubpy = "$env:RUNNER_TEMP\fake_hub.py"
