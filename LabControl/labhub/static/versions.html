@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>版本紀錄</title>
+<style>
+  :root { --bg:#f3f4f6; --card:#fff; --text:#1c1f24; --muted:#6b7280; --line:#e2e5e9; --soft:#eef0f3;
+          --accent:#1971c2; --accent-soft:#e7f1fb; --ok:#2b8a3e; --warn:#e67700; --err:#e03131; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1116; --card:#151a21; --text:#e9ecef; --muted:#8b939d; --line:#2a313b; --soft:#1c222b;
+            --accent:#4dabf7; --accent-soft:#16283a; --ok:#40c057; --warn:#ffa94d; --err:#ff6b6b; }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); }
+  body { font:14px/1.55 -apple-system,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; }
+  main { max-width:980px; margin:0 auto; padding:12px 16px 48px; }
+  h1 { font-size:20px; margin:4px 0 10px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .tabs { display:flex; gap:6px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
+  .tabs::-webkit-scrollbar { display:none; }
+  .tab { flex:none; border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:999px;
+         padding:5px 12px; font:inherit; font-weight:600; cursor:pointer; white-space:nowrap; }
+  .tab.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .tab .v { font-weight:400; opacity:.75; margin-left:4px; font-size:12px; }
+  input[type=search] { font:inherit; padding:6px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card);
+                       color:var(--text); min-width:0; flex:1 1 200px; max-width:320px; }
+  .btn { border:1px solid var(--line); background:var(--soft); color:var(--text); border-radius:8px; padding:5px 10px; font:inherit; cursor:pointer; }
+  .gh { margin-left:auto; }
+  .note { background:var(--accent-soft); border-radius:10px; padding:8px 12px; margin:0 0 10px; font-size:13px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:10px; }
+  .card.cur { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .head { display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; }
+  .ver { font-size:16px; font-weight:700; }
+  .app { font-weight:700; }
+  .pill { display:inline-block; padding:0 8px; border-radius:999px; font-size:12px; font-weight:700; background:var(--soft); color:var(--muted); }
+  .pill.cur { background:var(--accent); color:#fff; }
+  .when { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); margin:2px 0 6px; }
+  .when b { font-weight:600; color:var(--text); }
+  .when a { color:var(--accent); }
+  .md { overflow-wrap:anywhere; }
+  .md p { margin:6px 0; } .md ul, .md ol { margin:4px 0; padding-left:22px; } .md li { margin:2px 0; }
+  .md h3, .md h4, .md h5 { margin:10px 0 4px; font-size:14px; }
+  .md code { background:var(--soft); border-radius:5px; padding:0 4px; font-size:12.5px; }
+  .md pre { background:var(--soft); border-radius:8px; padding:8px 10px; overflow-x:auto; font-size:12.5px; }
+  .md table { border-collapse:collapse; margin:6px 0; display:block; overflow-x:auto; }
+  .md th, .md td { border:1px solid var(--line); padding:3px 8px; text-align:left; font-size:13px; }
+  .md a { color:var(--accent); }
+  details { margin-top:6px; } summary { cursor:pointer; color:var(--accent); font-size:13px; }
+  details .md { border-left:3px solid var(--line); padding-left:10px; margin-top:6px; }
+  .empty { color:var(--muted); padding:20px 0; text-align:center; }
+  mark { background:#ffe066; color:inherit; border-radius:3px; }
+</style>
+</head>
+<body>
+<!--QEL-NAV-->
+<main>
+  <h1>版本紀錄 <span class="muted small" id="hubv"></span></h1>
+  <div class="bar">
+    <div class="tabs" id="tabs"></div>
+  </div>
+  <div class="bar">
+    <input type="search" id="q" placeholder="搜尋版本號或內容…">
+    <span class="gh small muted" id="gh"></span>
+    <button class="btn" id="refresh" title="重新從 GitHub 讀取發佈紀錄">↻ GitHub</button>
+  </div>
+  <div id="body"><div class="empty">讀取中…</div></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+let D = null, tab = "recent", shown = 30;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad = n => String(n).padStart(2, "0");
+function ts(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function fmtWhen(w) {                      // ISO（GitHub）→ 本地時間；日期（修改紀錄）照寫
+  if (!w) return "";
+  if (/T/.test(w)) { const d = new Date(w); return isNaN(d) ? w : ts(d); }
+  return w;
+}
+const fmtEpoch = t => t ? ts(new Date(t * 1000)) : "";
+function ago(t) {
+  if (!t) return "還沒讀過";
+  const s = Date.now() / 1000 - t;
+  return s < 90 ? "剛剛" : s < 3600 ? `${Math.round(s / 60)} 分鐘前` : s < 86400 ? `${Math.round(s / 3600)} 小時前` : `${Math.round(s / 86400)} 天前`;
+}
+
+// 簡單的 Markdown：標題、清單、粗體、程式碼、連結（只限 http/https）、表格
+function inline(s) {
+  s = esc(s);
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  s = s.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  s = s.replace(/\[([^\]]+)\]\(([^)]*)\)/g, "$1");
+  return s;
+}
+// 修改紀錄是手動換行的：同一段的續行接起來（中文直接接，英文中間補空格）
+const CJK = /[\u3000-\u9fff\uff00-\uffef]/;
+function joinLines(a) {
+  return a.reduce((s, l) => !s ? l : s + (CJK.test(s.slice(-1)) || CJK.test(l[0]) ? "" : " ") + l, "");
+}
+function md(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  let out = "", list = null, para = [], i = 0;
+  const flushP = () => { if (para.length) { out += "<p>" + inline(joinLines(para)) + "</p>"; para = []; } };
+  const flushL = () => { if (list) { out += `<${list.t}>` + list.items.map(x => "<li>" + inline(joinLines(x)) + "</li>").join("") + `</${list.t}>`; list = null; } };
+  while (i < lines.length) {
+    const raw = lines[i], l = raw.trim();
+    if (l.startsWith("```")) {
+      flushP(); flushL();
+      const buf = []; i++;
+      while (i < lines.length && !lines[i].trim().startsWith("```")) buf.push(lines[i++]);
+      out += "<pre>" + esc(buf.join("\n")) + "</pre>"; i++; continue;
+    }
+    if (l.startsWith("|") && i + 1 < lines.length && /^\|?\s*:?-{2,}/.test(lines[i + 1].trim())) {
+      flushP(); flushL();
+      const row = r => r.trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+      let h = "<table><tr>" + row(l).map(c => "<th>" + inline(c) + "</th>").join("") + "</tr>";
+      i += 2;
+      while (i < lines.length && lines[i].trim().startsWith("|")) { h += "<tr>" + row(lines[i]).map(c => "<td>" + inline(c) + "</td>").join("") + "</tr>"; i++; }
+      out += h + "</table>"; continue;
+    }
+    let m;
+    if (!l) { flushP(); flushL(); i++; continue; }
+    if ((m = l.match(/^(#{1,6})\s+(.*)$/))) { flushP(); flushL(); const n = Math.min(5, m[1].length + 2); out += `<h${n}>${inline(m[2])}</h${n}>`; i++; continue; }
+    if (/^-{3,}$/.test(l)) { flushP(); flushL(); i++; continue; }
+    if ((m = raw.match(/^\s*([-*•]|\d+[.)、]|[①-⑳])\s+(.*)$/))) {
+      flushP();
+      const t = /^\d/.test(m[1]) ? "ol" : "ul";
+      if (!list || list.t !== t) { flushL(); list = {t, items: []}; }
+      list.items.push([m[2]]); i++; continue;
+    }
+    if (list && /^\s{2,}\S/.test(raw)) { list.items[list.items.length - 1].push(l); i++; continue; }  // 清單項目的續行
+    flushL(); para.push(l); i++;
+  }
+  flushP(); flushL();
+  return out;
+}
+
+function hit(e, q) {
+  if (!q) return true;
+  const s = (e.version + " " + (e.title || "") + " " + (e.text || "") + " " + (e.detail || "")).toLowerCase();
+  return q.split(/\s+/).every(w => s.includes(w));
+}
+
+function entryCard(e, app) {
+  const w = [];
+  if (e.published) w.push(`發佈 <b>${esc(fmtWhen(e.published))}</b>${e.url ? ` · <a href="${esc(e.url)}" target="_blank" rel="noopener">GitHub</a>` : ""}`);
+  else if (e.date) w.push(`發佈 <b>${esc(e.date)}</b>`);
+  if (e.hub_time) w.push(`上線到這台 Hub <b>${esc(fmtEpoch(e.hub_time))}</b>${e.hub_by ? `（${esc(e.hub_by)}）` : ""}`);
+  const title = e.title && !/^\S+\s+v?\d+(\.\d+)*\s*$/.test(e.title) ? `<span class="muted">${esc(e.title.replace(/^.*?\d+(\.\d+)+\s*[—–-]?\s*/, ""))}</span>` : "";
+  const body = e.text ? `<div class="md">${md(e.text)}</div>` : `<div class="muted small">（沒有寫說明）</div>`;
+  const det = e.detail ? `<details><summary>詳細說明</summary><div class="md">${md(e.detail)}</div></details>` : "";
+  return `<div class="card${e.current ? " cur" : ""}" id="v-${esc(app)}-${esc(e.version)}">
+    <div class="head">${app && tab === "recent" ? `<span class="app">${esc(appName(app))}</span>` : ""}
+      <span class="ver">${esc(e.version)}</span>${e.current ? '<span class="pill cur">這台 Hub 目前的版本</span>' : ""} ${title}</div>
+    <div class="when">${w.join("") ? w.map(x => `<span>${x}</span>`).join("") : '<span>沒有發佈時間的紀錄</span>'}</div>
+    ${body}${det}</div>`;
+}
+const appName = id => (D.apps.find(a => a.id === id) || {}).name || id;
+
+function render() {
+  if (!D) return;
+  const q = $("#q").value.trim().toLowerCase();
+  $("#tabs").innerHTML = [`<button class="tab${tab === "recent" ? " on" : ""}" data-t="recent">最近更新</button>`]
+    .concat(D.apps.map(a => `<button class="tab${tab === a.id ? " on" : ""}" data-t="${a.id}">${esc(a.name)}${a.current ? `<span class="v">v${esc(a.current)}</span>` : ""}</button>`)).join("");
+  const g = D.github || {};
+  $("#gh").textContent = g.busy ? "正在讀 GitHub…" : g.error ? `⚠ ${g.error}（顯示上次的）` : `GitHub 發佈紀錄：${ago(g.fetched)}`;
+  let html = "";
+  if (tab === "recent") {
+    const all = [];
+    for (const a of D.apps) for (const e of a.entries) if (e.published || e.date || e.hub_time) all.push([a.id, e]);
+    const key = e => { const w = e.published || (e.date ? e.date + "T12:00:00+08:00" : ""); const t = w ? Date.parse(w) : NaN; return isNaN(t) ? (e.hub_time || 0) * 1000 : t; };
+    all.sort((x, y) => key(y[1]) - key(x[1]));
+    const list = all.filter(([_, e]) => hit(e, q));
+    html = list.slice(0, shown).map(([id, e]) => entryCard(e, id)).join("");
+    if (list.length > shown) html += `<button class="btn" id="more">顯示更多（還有 ${list.length - shown} 筆）</button>`;
+    if (!list.length) html = `<div class="empty">沒有符合的版本</div>`;
+  } else {
+    const a = D.apps.find(x => x.id === tab);
+    if (!a) { tab = "recent"; return render(); }
+    const list = a.entries.filter(e => hit(e, q));
+    html = (a.note ? `<div class="note">${esc(a.note)}</div>` : "") +
+      `<div class="muted small" style="margin-bottom:8px">共 ${a.entries.length} 個版本${a.current ? `；這台 Hub 目前是 <b>${esc(a.current)}</b>` : ""}</div>` +
+      list.slice(0, shown).map(e => entryCard(e, a.id)).join("") +
+      (list.length > shown ? `<button class="btn" id="more">顯示更多（還有 ${list.length - shown} 個版本）</button>` : "") +
+      (!list.length ? `<div class="empty">沒有符合的版本</div>` : "");
+  }
+  $("#body").innerHTML = html;
+}
+
+async function load() {
+  try {
+    const r = await fetch("/api/versions", {credentials: "same-origin"});
+    if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent(location.pathname + location.hash); return; }
+    D = await r.json();
+    $("#hubv").textContent = `Hub ${D.hub}`;
+    render();
+    if (D.github && D.github.busy) setTimeout(load, 4000);
+  } catch (e) {
+    $("#body").innerHTML = `<div class="empty">讀不到版本紀錄：${esc(e.message || e)}</div>`;
+  }
+}
+
+function fromHash() {
+  const m = location.hash.match(/^#\/?([a-z]+)?(?:\/(.+))?$/);
+  if (m && m[1]) tab = m[1];
+  return m && m[2] ? decodeURIComponent(m[2]) : "";
+}
+$("#tabs").addEventListener("click", e => {
+  const b = e.target.closest(".tab"); if (!b) return;
+  tab = b.dataset.t; shown = 30; history.replaceState(null, "", "#/" + tab); render(); window.scrollTo(0, 0);
+});
+$("#body").addEventListener("click", e => { if (e.target.id === "more") { shown += 30; render(); } });
+$("#q").addEventListener("input", () => { shown = 30; render(); });
+$("#refresh").addEventListener("click", async () => {
+  $("#gh").textContent = "正在讀 GitHub…";
+  try { await fetch("/api/versions/refresh", {method: "POST", credentials: "same-origin"}); } catch (e) {}
+  setTimeout(load, 3000);
+});
+const want = fromHash();
+load().then(() => { if (want) { const el = document.getElementById(`v-${tab}-${want}`); if (el) el.scrollIntoView({block: "start"}); } });
+</script>
+</body>
+</html>

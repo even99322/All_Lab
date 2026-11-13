@@ -76,7 +76,15 @@ def hub_zip(out: Path, v: str) -> Path:
                    "0.0.15 起 Hub、控制代理、論文庫在同一個 Docker 專案（docker/QELPlatform/docker-compose.yml），\n"
                    "見 QELPlatform_NAS_v<版本>.zip。更新 Hub 只要在 Monitor「發佈中心」丟這個 zip。\n")
         for p, rel in _files(ROOT / "labhub"):
+            if rel.as_posix() == "version_history.json":
+                continue
             z.write(p, f"LabControlHub/labhub/{rel.as_posix()}")
+        # 1.0.39：各程式的修改紀錄（Hub「版本紀錄」頁；NAS 上沒有 repo，打包時整理好放進去）
+        sys.path.insert(0, str(ROOT / "tools"))
+        import version_history
+
+        z.writestr("LabControlHub/labhub/version_history.json",
+                   json.dumps(version_history.build(), ensure_ascii=False, separators=(",", ":")))
         z.writestr("LabControlHub/data/README.txt",
                    "Hub 的資料（節點狀態、量測檔、備份）。這個資料夾要存在，docker-compose 才能掛載。\n")
         z.writestr("LabControlHub/backups/README.txt", "Hub 控制台每次更新前的自動備份。\n")
@@ -134,6 +142,11 @@ def monitor_app(out: Path, v: str) -> Path:
             d = app / pkg / rel
             d.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(p, d)
+    sys.path.insert(0, str(ROOT / "tools"))
+    import version_history                     # 1.0.39：內附的 Hub 也帶版本紀錄
+
+    (app / "labhub" / "version_history.json").write_text(
+        json.dumps(version_history.build(), ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     (app / "assets").mkdir()
     for n in ("icon.ico", "icon.png"):
         if (ROOT / "assets" / n).exists():

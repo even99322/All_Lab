@@ -1323,6 +1323,7 @@ from . import notify  # noqa: E402,F401  （1.0.25 推播通知：/notify、/api
 from . import netusage  # noqa: E402,F401  （1.0.29 網路用量：/network、/api/netusage）
 from . import traffic  # noqa: E402,F401  （1.0.33 各埠流量與限流：/api/traffic）
 from . import notebook  # noqa: E402,F401  （1.0.31 電子實驗記錄：/notebook、/api/notebook）
+from . import versions  # noqa: E402,F401  （1.0.39 版本紀錄：/versions、/api/versions）
 
 
 # ---------------------------------------------------------------------------
@@ -1364,6 +1365,10 @@ def serve(cfg: Config, host: str = "0.0.0.0", port: int = DEFAULT_PORT) -> None:
         netusage.start(state)                         # 1.0.29：網路用量（路由器 Traffic Meter、NAS SNMP）
     except Exception:  # noqa: BLE001
         log.exception("網路用量啟動失敗")
+    try:
+        versions.store(state)                         # 1.0.39：版本紀錄（記下這一版 Hub 第一次啟動的時間）
+    except Exception:  # noqa: BLE001
+        log.exception("版本紀錄啟動失敗")
     log.info("Lab Control Hub %s 啟動：http://%s:%d/（資料 %s；發佈 %s；token %s）", __version__, host, port,
              cfg.data_dir, cfg.releases_dir or "未設定", "關閉" if cfg.token is None else "已啟用")
     try:

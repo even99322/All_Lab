@@ -63,6 +63,12 @@ jobs:
           ls -la files
           test -n "$(ls files)"
           {
+            # Hub 1.0.39 起：版本紀錄頁會讀發佈說明 → 先放這一版的修改紀錄
+            if [ -f src/LabControl/CHANGELOG.md ]; then
+              awk -v v="${TAG#*-v}" 'index($0, "## " v " ") == 1 {f=1; next} f && (/^## / || /^---/) {exit} f' \
+                src/LabControl/CHANGELOG.md | sed -E 's/[[:space:]]*詳見[[:space:]]*\[[^]]*\]\([^)]*\)。?//' | sed '/./,$!d'
+              echo
+            fi
             echo "平台網頁「控制台 → 從 GitHub 取得新版」會直接下載這些檔案並發佈；也可以下載後拖進控制台。"
             echo
             echo "| 檔案 | 大小 | sha256 |"

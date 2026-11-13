@@ -3,6 +3,10 @@
 1.0.36 起 Hub 跟 Lab Control 分開發佈（GitHub 發佈 `hub-v<版本>`）；1.0.35 以前的紀錄在 [CHANGELOG.md](CHANGELOG.md)。
 每一版的說明在 [docs/releases/hub/](docs/releases/hub/)。
 
+## 1.0.39 — 2026-11-13
+
+新增「版本紀錄」頁（/versions）：各程式每一版的內容、發佈時間、上線到這台 Hub 的時間，可搜尋。詳見 [docs/releases/hub/v1.0.39.md](docs/releases/hub/v1.0.39.md)。
+
 ## 1.0.38 — 2026-11-13
 
 每台電腦的流量分成內網／外網／VPN（流量監看 1.0.4 回報）；回報時給 https 網域，讓流量監看在內網把它指到 NAS（沒開 VPN 也能用 https 網址）。詳見 [docs/releases/hub/v1.0.38.md](docs/releases/hub/v1.0.38.md)。
