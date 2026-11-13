@@ -35,6 +35,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import ipaddress
 import json
 import logging
 import os
@@ -557,6 +558,15 @@ class NetUsage:
                                                 if isinstance(v, dict)}
         self._rdev_online: set = set()
         self._acct_last: Optional[Dict[str, Any]] = None
+        # 1.0.41：NAS 上誰在用網路（記憶體裡留 1 小時）
+        import collections
+
+        self._top_last: Optional[Dict[str, Any]] = None
+        self._top_status: Dict[str, Any] = {}
+        self._top_rates: Dict[str, Any] = {}
+        self._ns_info: Dict[str, Dict[str, Any]] = {}
+        self._flows: Any = collections.deque(maxlen=60000)
+        self._rdns_cache: Dict[str, str] = {}
         self._hosts_written: Optional[List[str]] = None
         self.status: Dict[str, Dict[str, Any]] = {"router": {}, "nas": {}, "tailscale": {}, "netacct": {}}
         from .netrecent import Recent                       # 1.0.34：每分鐘一格（即時）
@@ -911,8 +921,166 @@ class NetUsage:
                   "lan": a.get("lan"), "hosts": a.get("hosts")}
             self._acct_step(a, t)
         self.status["netacct"] = st
+        try:
+            self._top_step(data_dir / "netacct_top.json")
+        except Exception:  # noqa: BLE001
+            log.exception("NAS 連線")
         self.save()
         return st
+
+    # ---- 1.0.41：NAS 上誰在用網路（記帳容器寫的 data/netacct_top.json）----
+    def _top_step(self, p: Path) -> None:
+        try:
+            a = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        t = float(a.get("t") or 0)
+        last = self._top_last
+        if last and t <= last["t"]:
+            return
+        now = self.now()
+        self._top_last = {"t": t, "ifaces": a.get("ifaces") or {},
+                          "netns": {self._ns_key(x): x for x in a.get("netns") or []}}
+        self._top_status = {"time": t, "conntrack": a.get("conntrack") or {}}
+        if not last or t - last["t"] > 300:
+            return
+        dt_ = t - last["t"]
+        rates: Dict[str, Any] = {}
+        for name, v in (a.get("ifaces") or {}).items():
+            o = last["ifaces"].get(name)
+            if not o:
+                continue
+            drx, dtx = int(v[0]) - int(o[0]), int(v[1]) - int(o[1])
+            if drx < 0 or dtx < 0 or drx > MAX_DELTA or dtx > MAX_DELTA:
+                continue
+            rates[name] = {"rx": drx / dt_, "tx": dtx / dt_}
+            if drx or dtx:
+                self.recent.add(f"nif:{name}", dtx, drx, now, dt_)
+        self._top_rates = rates
+        for k, x in self._top_last["netns"].items():
+            o = last["netns"].get(k)
+            if not o:
+                continue
+            drx, dtx = int(x.get("rx", 0)) - int(o.get("rx", 0)), int(x.get("tx", 0)) - int(o.get("tx", 0))
+            if 0 <= drx <= MAX_DELTA and 0 <= dtx <= MAX_DELTA and (drx or dtx):
+                self.recent.add(f"nns:{k}", dtx, drx, now, dt_)          # 容器的「送出」= 它網卡的 tx
+            self._ns_info[k] = {"comm": x.get("comm", ""), "cmd": x.get("cmd", ""),
+                                "container": x.get("container", ""), "ips": x.get("ips") or []}
+        with self.lock:
+            for f in a.get("flows") or []:
+                self._flows.append((now, str(f.get("proc") or ""), str(f.get("container") or ""),
+                                    str(f.get("cmd") or "")[:120], str(f.get("proto") or ""),
+                                    str(f.get("remote") or ""), int(f.get("rport") or 0),
+                                    str(f.get("local") or ""), int(f.get("lport") or 0),
+                                    int(f.get("rx") or 0), int(f.get("tx") or 0), bool(f.get("out"))))
+            cut = now - 3600
+            while self._flows and self._flows[0][0] < cut:
+                self._flows.popleft()
+
+    @staticmethod
+    def _ns_key(x: Dict[str, Any]) -> str:
+        return str(x.get("container") or f"{x.get('comm', '')}-{x.get('pid', '')}")
+
+    def _rdns(self, ip: str) -> str:
+        """外網位址的反查名稱（背景查、快取）。"""
+        c = self._rdns_cache.get(ip)
+        if c is not None:
+            return c
+        self._rdns_cache[ip] = ""
+        if len(self._rdns_cache) > 2000:
+            self._rdns_cache.clear()
+
+        def look() -> None:
+            import socket as _sk
+
+            try:
+                self._rdns_cache[ip] = _sk.gethostbyaddr(ip)[0][:80]
+            except (OSError, UnicodeError):
+                pass
+        threading.Thread(target=look, daemon=True).start()
+        return ""
+
+    def nastop_view(self, window: int = 600) -> Dict[str, Any]:
+        """NAS 的網卡、容器、程式、對方（window 秒內）。"""
+        from .netrecent import WINDOWS
+
+        window = min(WINDOWS, key=lambda w: abs(w - int(window or 600)))
+        window = min(window, 3600)
+        now = self.now()
+        lan = [ipaddress.ip_network(x, strict=False) for x in self._lan_list()]
+        vpn = ipaddress.ip_network("100.64.0.0/10")
+
+        def where(ip: str) -> str:
+            try:
+                a = ipaddress.ip_address(ip)
+            except ValueError:
+                return "?"
+            if a.version == 4 and a in vpn:
+                return "vpn"
+            if a.is_loopback or a.is_link_local or any(a.version == n.version and a in n for n in lan):
+                return "lan"
+            if a.is_private:
+                return "local"
+            return "wan"
+        with self.lock:
+            fl = [f for f in self._flows if f[0] >= now - window]
+        procs: Dict[str, Dict[str, Any]] = {}
+        rem: Dict[Tuple[str, str, int, str], Dict[str, Any]] = {}
+        for (_t, proc, cont, cmd, proto, remote, rport, local, lport, rx, tx, out_) in fl:
+            pk = f"容器 {cont}" if cont else (proc or "（對不到程式）")
+            p = procs.setdefault(pk, {"name": pk, "proc": proc, "container": cont, "cmd": cmd, "rx": 0, "tx": 0,
+                                      "wan_rx": 0, "wan_tx": 0, "n": set()})
+            p["rx"] += rx
+            p["tx"] += tx
+            w = where(remote)
+            if w == "wan":
+                p["wan_rx"] += rx
+                p["wan_tx"] += tx
+            p["n"].add((remote, rport))
+            port = rport if out_ else lport
+            r = rem.setdefault((remote, proto, port, pk), {"remote": remote, "proto": proto, "port": port,
+                                                           "dir": "NAS 連出" if out_ else "連進 NAS",
+                                                           "proc": pk, "where": w, "rx": 0, "tx": 0})
+            r["rx"] += rx
+            r["tx"] += tx
+        plist = sorted(procs.values(), key=lambda x: -(x["rx"] + x["tx"]))[:30]
+        for p in plist:
+            p["conns"] = len(p.pop("n"))
+        rlist = sorted(rem.values(), key=lambda x: -(x["rx"] + x["tx"]))[:40]
+        for r in rlist:
+            if r["where"] == "wan":
+                r["host"] = self._rdns(r["remote"])
+        ifs = []
+        for k in self.recent.keys():
+            if k.startswith("nif:"):
+                w = self.recent.window(k, window, now=now)
+                name = k[4:]
+                ifs.append({"name": name, "rx": w["down"], "tx": w["up"],
+                            "rate": (self._top_rates or {}).get(name)})
+        ifs.sort(key=lambda x: -(x["rx"] + x["tx"]))
+        cons = []
+        for k in self.recent.keys():
+            if k.startswith("nns:"):
+                w = self.recent.window(k, window, now=now)
+                if w["up"] or w["down"]:
+                    cons.append(dict(self._ns_info.get(k[4:]) or {}, key=k[4:], rx=w["down"], tx=w["up"]))
+        cons.sort(key=lambda x: -(x["rx"] + x["tx"]))
+        st = dict(self._top_status or {})
+        if not st:
+            st = {"error": "還沒有資料：Hub 1.0.41 更新後，記帳容器（labcontrol-netacct）會重新啟動並開始讀"}
+        elif now - float(st.get("time") or 0) > 120:
+            st["error"] = f"記帳容器 {int(now - float(st.get('time') or 0))} 秒沒有更新"
+        return {"window": window, "ifaces": ifs, "containers": cons[:20], "procs": plist, "remotes": rlist,
+                "status": st}
+
+    def _lan_list(self) -> List[str]:
+        try:
+            a = json.loads((self.file.parent / "netacct.json").read_text(encoding="utf-8"))
+            if a.get("lan"):
+                return list(a["lan"])
+        except (OSError, ValueError):
+            pass
+        return ["192.168.50.0/24"]
 
     def _acct_step(self, a: Dict[str, Any], t: float) -> None:
         cur: Dict[str, int] = {}
@@ -1213,6 +1381,9 @@ class NetUsage:
                 out.append({"key": "unknown", "name": "路由器有、監看不到的", "kind": "unknown", "nochart": True,
                             "up": max(0, r["up"] - ku), "down": max(0, r["down"] - kd), "rate": None,
                             "known": {"up": ku, "down": kd}})
+        for k in sorted(rc.keys()):                                      # 1.0.41：NAS 主機每張網卡
+            if k.startswith("nif:"):
+                src(k, f"NAS 網卡 {k[4:]}", "nif")
         src("hub:remote", "Hub ⇄ 區網以外", "hub")
         src("hub:lan", "Hub ⇄ 區網", "hub")
         out = [o for o in out if o["up"] or o["down"] or o.get("online")
@@ -1386,6 +1557,16 @@ def _label(h: Handler) -> None:
 def _remove(h: Handler, host: str) -> None:
     store(h.hub).remove_pc(host)
     h._json({"ok": True})
+
+
+@route("GET", r"/api/netusage/nastop", auth="any")
+def _nastop(h: Handler) -> None:
+    q = h._query()
+    try:
+        w = int(q.get("window") or 600)
+    except ValueError:
+        w = 600
+    h._json(store(h.hub).nastop_view(w))
 
 
 @route("GET", r"/network/?", auth="any")

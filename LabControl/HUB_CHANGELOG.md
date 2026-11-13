@@ -3,6 +3,10 @@
 1.0.36 起 Hub 跟 Lab Control 分開發佈（GitHub 發佈 `hub-v<版本>`）；1.0.35 以前的紀錄在 [CHANGELOG.md](CHANGELOG.md)。
 每一版的說明在 [docs/releases/hub/](docs/releases/hub/)。
 
+## 1.0.41 — 2026-11-13
+
+網路用量新增「NAS 上誰在用網路」：NAS 每張網卡、每個容器、每個程式與連線對方的收送量（記帳容器讀 /proc 與連線追蹤）。詳見 [docs/releases/hub/v1.0.41.md](docs/releases/hub/v1.0.41.md)。
+
 ## 1.0.40 — 2026-11-13
 
 網路用量：列出路由器上連著的每個裝置（有線 / 無線 / 訪客）並標出沒被監看的；即時頁新增「監看不到」＝路由器 − 已知各裝置的外網量。詳見 [docs/releases/hub/v1.0.40.md](docs/releases/hub/v1.0.40.md)。

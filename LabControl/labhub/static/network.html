@@ -107,6 +107,9 @@
     <div class="legend"><span><i style="background:var(--down)"></i>收到</span><span><i style="background:var(--up)"></i>送出</span><span id="nnote"></span></div></div>
   <div id="nasdir" style="margin-top:10px"></div>
 
+  <h2>NAS 上誰在用網路 <span class="seg" id="topwin"></span> <span class="small muted" id="topst"></span></h2>
+  <div id="nastop"><div class="empty">讀取中…</div></div>
+
   <h2>Tailscale（VPN） <span id="tst"></span></h2>
   <div id="tswarn"></div>
   <div class="card"><svg class="chart" id="ch-ts"></svg>
@@ -465,7 +468,7 @@ async function loadHub() {
 let RT = null, rtWin = 600, rtSrc = "";
 try { rtWin = +(localStorage.getItem("qel-net-win") || 600); rtSrc = localStorage.getItem("qel-net-src") || ""; } catch (e) {}
 const WIN = [[60, "1 分"], [600, "10 分"], [1800, "30 分"], [3600, "1 小時"], [10800, "3 小時"], [21600, "6 小時"], [86400, "1 天"]];
-const KIND = {router: "路由器", nas: "NAS", nasdir: "NAS 分流", pc: "電腦", vpn: "VPN", hub: "Hub", unknown: "推算"};
+const KIND = {router: "路由器", nas: "NAS", nasdir: "NAS 分流", pc: "電腦", vpn: "VPN", hub: "Hub", unknown: "推算", nif: "NAS 網卡"};
 const DIR = {router: ["下載", "上傳"], pc: ["下載", "上傳"], nas: ["收到", "送出"], nasdir: ["NAS 收到", "NAS 送出"], vpn: ["NAS 收到", "NAS 送出"], hub: ["Hub 收到", "Hub 送出"]};
 const bps = v => v == null ? "—" : fmt(v) + "/s";
 function keepScroll(fn) {                                         // 重畫時保留表格 / 圖的左右捲動位置
@@ -544,6 +547,38 @@ function renderRt() {
   });
   $("#rttab").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { rtSrc = tr.dataset.key; try { localStorage.setItem("qel-net-src", rtSrc); } catch (e) {} loadRt(true); });
 }
+// 1.0.41：NAS 上誰在用網路（網卡、容器、程式、對方）
+let topWin = 600;
+const WHERE = {lan: ["區網", "ok"], vpn: ["VPN", "off"], wan: ["外網", "bad"], local: ["本機 / 容器", "off"], "?": ["?", "off"]};
+async function loadTop() {
+  let t;
+  try { t = await api(`/api/netusage/nastop?window=${topWin}`); } catch (e) { $("#nastop").innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+  $("#topwin").innerHTML = [[600, "10 分"], [3600, "1 小時"]].map(([w, n]) => `<button class="${w === topWin ? "on" : ""}" data-w="${w}">${n}</button>`).join("");
+  $("#topwin").querySelectorAll("button").forEach(b => b.onclick = () => { topWin = +b.dataset.w; loadTop(); });
+  const st = t.status || {}, ct = st.conntrack || {};
+  $("#topst").textContent = st.error || (ct.ok === false ? "連線：" + (ct.error || "讀不到") : st.time ? `（記帳容器每 20 秒讀一次；${ct.n || 0} 條連線）` : "");
+  const sum = x => fmt(x.rx + x.tx);
+  const ifs = t.ifaces.filter(x => x.rx + x.tx > 0 || (x.rate && (x.rate.rx + x.rate.tx) > 1024));
+  const tbl = (head, rows) => `<div class="wrap"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+  let h = "";
+  h += `<div class="card" style="margin-bottom:10px"><b>網卡</b>（NAS 主機全部；tap / vnet = 虛擬機，docker / veth = 容器，ovs / eth / bond = 實體）` +
+    tbl(`<th>網卡</th><th class="n">合計</th><th class="n">↓ 收到</th><th class="n">↑ 送出</th><th class="n">目前 ↓</th><th class="n">目前 ↑</th>`,
+      ifs.map(x => `<tr><td><b>${esc(x.name)}</b></td><td class="n"><b>${sum(x)}</b></td><td class="n">${fmt(x.rx)}</td><td class="n">${fmt(x.tx)}</td>
+        <td class="n">${x.rate ? bps(x.rate.rx) : "—"}</td><td class="n">${x.rate ? bps(x.rate.tx) : "—"}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">還沒有資料</td></tr>`) + `</div>`;
+  h += `<div class="card" style="margin-bottom:10px"><b>程式 / 容器</b>（每條連線對到 NAS 上的程式；容器的連線算在容器）` +
+    tbl(`<th>程式</th><th class="n">合計</th><th class="n">↓ 收到</th><th class="n">↑ 送出</th><th class="n">其中外網</th><th class="n hide-sm">連線數</th>`,
+      t.procs.map(p => `<tr><td><b>${esc(p.name)}</b>${p.container && p.proc ? `　<span class="muted">${esc(p.proc)}</span>` : ""}${p.cmd ? `<div class="small muted" style="max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(p.cmd)}">${esc(p.cmd)}</div>` : ""}</td>
+        <td class="n"><b>${sum(p)}</b></td><td class="n">${fmt(p.rx)}</td><td class="n">${fmt(p.tx)}</td><td class="n">${p.wan_rx + p.wan_tx ? `<b>${fmt(p.wan_rx + p.wan_tx)}</b>` : "—"}</td><td class="n hide-sm">${p.conns}</td></tr>`).join("") || `<tr><td colspan="6" class="muted">${esc(ct.error || "還沒有資料")}</td></tr>`) + `</div>`;
+  h += `<div class="card"><b>對方</b>（跟 NAS 傳最多的位址）` +
+    tbl(`<th>對方</th><th>方向 / 埠</th><th>程式</th><th class="n">合計</th><th class="n">↓ 收到</th><th class="n">↑ 送出</th>`,
+      t.remotes.map(r => { const w = WHERE[r.where] || WHERE["?"]; return `<tr><td><span class="pill ${w[1]}">${w[0]}</span> <b>${esc(r.remote)}</b>${r.host ? `<div class="small muted">${esc(r.host)}</div>` : ""}</td>
+        <td class="small">${esc(r.dir)}<br><span class="muted">${esc(r.proto.toUpperCase())} ${r.port}</span></td><td class="small">${esc(r.proc)}</td>
+        <td class="n"><b>${sum(r)}</b></td><td class="n">${fmt(r.rx)}</td><td class="n">${fmt(r.tx)}</td></tr>`; }).join("") || `<tr><td colspan="6" class="muted">還沒有資料</td></tr>`) +
+    `</div><div class="help">「↓ 收到」= NAS 收到。連線的量是 NAS 的連線追蹤（conntrack）算的，經 Open vSwitch 橋接給虛擬機的流量不經過這裡（看上面網卡的 tap / vnet）。</div>`;
+  keepScroll(() => { $("#nastop").innerHTML = h; });
+}
+setInterval(() => { if (!document.hidden) loadTop(); }, 20000);
+setTimeout(loadTop, 300);
 let rtBusy = false;
 async function loadRt(scrollEnd) {
   if (rtBusy) return; rtBusy = true;

@@ -294,6 +294,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         log.info("已拿掉記帳規則")
         return 0
     log.info("NAS 流量分流記帳啟動（%s）", mode)
+    from . import nastop                          # 1.0.41：NAS 上誰在用網路（網卡、容器、每條連線 → 程式）
+
+    top = nastop.Top()
     while True:
         try:
             write_status(data, once(acc, data, mode))
@@ -303,6 +306,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                 write_status(data, {"t": time.time(), "ok": False, "error": str(e), "mode": mode})
             except OSError:
                 pass
+        try:
+            ips = [ip for ip in interfaces().values() if ip]
+            nastop.write(data, top.sample(ips))
+        except Exception as e:  # noqa: BLE001
+            log.warning("讀連線失敗：%s", e)
         if a.once:
             return 0
         time.sleep(max(5.0, a.every))
