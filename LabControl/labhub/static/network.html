@@ -206,7 +206,7 @@ function split(p) {
   if (s) {
     const tip = (t ? `今天：內網 ${fmt(tot(t.lan))}、外網 ${fmt(tot(t.wan))}、VPN ${fmt(tot(t.tun))}（其中經外網 ${fmt(tot(t.tunw))}）\n` : "") +
       `本月：內網 ${fmt(tot(s.lan))}、外網 ${fmt(tot(s.wan))}、VPN ${fmt(tot(s.tun))}（其中經外網 ${fmt(tot(s.tunw))}）` +
-      (tot(s.other) ? `、分不出來 ${fmt(tot(s.other))}` : "");
+      (tot(s.other) ? `\n另外 ${fmt(tot(s.other))} 是封包標頭、ICMP 等（三種只算 TCP / UDP 的內容）` : "");
     return `<span title="${esc(tip)}">${fmt(tot(s.lan))}／<b>${fmt(tot(s.wan))}</b>／${fmt(tot(s.tun))}` +
       (tot(s.tunw) ? `<br><span class="muted">VPN 經外網 ${fmt(tot(s.tunw))}</span>` : "") + `</span>`;
   }

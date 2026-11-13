@@ -261,8 +261,8 @@ def test_ensure_running_uses_boot_task(monkeypatch):
 
 
 # ---- 1.0.4：內網 / 外網 / VPN；內網 https（hosts）----
-def test_split_flows_and_scale():
-    from netmeter.meter import scale_split, split_flows
+def test_split_flows():
+    from netmeter.meter import split_flows
 
     local = {"192.168.50.11", "fe80::1"}
     fl = {("192.168.50.11", "192.168.50.2", False): [100, 1000],      # NAS → 內網
@@ -274,9 +274,6 @@ def test_split_flows_and_scale():
           ("127.0.0.1", "127.0.0.1", False): [7, 7]}
     p = split_flows(fl, local, NETS)
     assert p == {"lan": [105, 1000], "wan": [50, 2000], "tun": [50, 500], "tunw": [40, 400]}
-    x = scale_split(4200, p, 1)                                 # 網卡計數（含標頭）依比例分
-    assert x["lan"] + x["wan"] + x["tun"] == 4200 and x["wan"] == 2400 and x["tunw"] == 480
-    assert scale_split(100, {"lan": [0, 0], "wan": [0, 0], "tun": [0, 0], "tunw": [0, 0]}, 0) is None
 
 
 def test_meter_records_split(tmp_path):
@@ -298,10 +295,18 @@ def test_meter_records_split(tmp_path):
     r = m.step()
     assert r["split"]["down"] == {"lan": 1000, "wan": 2000, "tun": 0, "tunw": 0}
     d = m.days[today_str(s.t)]
-    assert d["lan_down"] == 1000 and d["wan_down"] == 2000 and d["lan_up"] == 200 and "tun_up" not in d
+    assert d["lan_down"] == 1000 and d["wan_down"] == 2000 and d["lan_up"] == 100 and "tun_up" not in d
     assert m.month(s.t)["wan_down"] == 2000 and m.rate_split["wan"]["down"] == 2000 / 30
+    # 連線資料晚到（網卡這次沒變）也照記；離開實驗室網段時不記
+    s.t += 30
+    f.q = {("192.168.50.31", "8.8.8.8", False): [0, 500]}
+    assert m.step()["split"]["down"]["wan"] == 500 and m.days[today_str(s.t)]["wan_down"] == 2500
+    s.ifs["Ethernet"]["ips"] = ["10.9.9.9"]
+    s.t += 30
+    f.q = {("10.9.9.9", "8.8.8.8", False): [0, 500]}
+    assert m.step()["split"] == {}
     m.save()
-    assert Meter(tmp_path / "state.json", NETS, s).days[today_str(s.t)]["wan_up"] == 200
+    assert Meter(tmp_path / "state.json", NETS, s).days[today_str(s.t)]["wan_up"] == 100
 
 
 def test_etw_event_parse_and_nettop():

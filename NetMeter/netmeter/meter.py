@@ -9,11 +9,12 @@
   * 日期用這台電腦的當地時間。
   * 1.0.2：Tailscale 的網卡（100.64.0.0/10 的位址）另外記成 vpn_up / vpn_down（在實驗室網段時才記）——
     這部分也已經算在實驗網卡的流量裡（VPN 封包包起來後經實驗網卡送出），Hub 用它看「其中經 VPN 的有多少」。
-  * 1.0.4：有每條連線的資料（flows.py：Windows ETW / macOS nettop）時，把實驗網卡的量依比例分成
+  * 1.0.4：有每條連線的資料（flows.py：Windows ETW / macOS nettop）時，另外記實驗網卡上
       lan  內網：對方在實驗室網段（NAS、別台電腦；不經路由器的外網口）
       wan  外網：其他（經路由器出去，算進對外的流量上限）
       tun  VPN 通道：Tailscale 程式自己送收的加密封包；其中 tunw = 經外網（直連外面的裝置 / DERP 中繼）
-    連線資料只算「內容」大小，所以用它的比例去分網卡計數（含封包標頭）；分不出來的（ICMP 等）留在總量裡不分。
+    記的是 TCP / UDP 的內容大小（不含封包標頭），所以三者加起來比網卡總量少一點（標頭、ICMP 等）。
+    不按比例去分網卡計數：連線資料晚一兩秒才到，按每次讀數的比例分會分錯。
 """
 from __future__ import annotations
 
@@ -68,17 +69,6 @@ def split_flows(flows: Dict[Any, List[int]], local_ips: Set[str], nets: List[Any
     return out
 
 
-def scale_split(total: int, parts: Dict[str, List[int]], i: int) -> Optional[Dict[str, int]]:
-    """網卡計數 total 依連線資料的比例分到 lan / wan / tun（加起來 = total）；tunw 是 tun 的一部分。"""
-    s = parts["lan"][i] + parts["wan"][i] + parts["tun"][i]
-    if s <= 0 or total <= 0:
-        return None
-    f = total / s
-    lan, wan = int(parts["lan"][i] * f), int(parts["wan"][i] * f)
-    tun = total - lan - wan
-    return {"lan": lan, "wan": wan, "tun": tun, "tunw": min(tun, int(parts["tunw"][i] * f))}
-
-
 def today_str(t: Optional[float] = None) -> str:
     return dt.datetime.fromtimestamp(t if t is not None else time.time()).strftime("%Y-%m-%d")
 
@@ -125,6 +115,7 @@ class Meter:
         self.ips = [ip for n in self.on_ifaces for ip in (s["ifaces"][n].get("ips") or []) if on_net([ip], self.nets)]
         up = down = vup = vdown = 0
         fl = None
+        lab_on = False
         if self.flows is not None and getattr(self.flows, "ok", False):
             try:
                 fl = self.flows.drain()
@@ -153,16 +144,16 @@ class Meter:
             el = 0.0
             self.rate = {"up": 0.0, "down": 0.0}
         sp: Dict[str, Dict[str, int]] = {}
-        if fl is not None and (up or down):
+        if fl is not None and lab_on:
             local = {ip.split("%", 1)[0] for n in self.on_ifaces for ip in (s["ifaces"][n].get("ips") or [])}
             parts = split_flows(fl, local, self.nets)
             for i, dname in ((0, "up"), (1, "down")):
-                x = scale_split(up if i == 0 else down, parts, i)
-                if x:
+                x = {c: parts[c][i] for c in CATS}
+                if any(x.values()):
                     sp[dname] = x
         self.rate_split = ({c: {dn: (sp.get(dn, {}).get(c, 0) / el) for dn in ("up", "down")} for c in CATS}
-                           if sp and el > 0 else {})
-        if up or down or vup or vdown:
+                           if fl is not None and el > 0 else {})
+        if up or down or vup or vdown or sp:
             d = self.days.setdefault(today_str(t), {"up": 0, "down": 0})
             d["up"] += up
             d["down"] += down
