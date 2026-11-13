@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import re
 import struct
 import subprocess
 import sys
@@ -340,27 +341,30 @@ def _endpoint(s: str) -> Optional[str]:
         return None
 
 
+_TIME = re.compile(r"^\d{1,2}:\d{2}:\d{2}")
+
+
 def parse_nettop(text: str) -> Dict[Tuple[str, str], Tuple[str, str, int, int]]:
-    """nettop -L 1 -n -x -J bytes_in,bytes_out 的輸出 → {(程式, 連線): (本機, 對方, 收, 送)}（累計）。"""
+    """nettop -L 1 -n -x -J bytes_in,bytes_out 的輸出 → {(程式, 連線): (本機, 對方, 收, 送)}（累計）。
+    表頭那一行有 bytes_in、bytes_out；程式那一行後面接著它的連線（名稱欄有「<->」）。"""
     out: Dict[Tuple[str, str], Tuple[str, str, int, int]] = {}
-    cols: List[str] = []
+    ii = io = -1
     proc = ""
     for line in text.splitlines():
-        f = line.split(",")
-        if len(f) < 3:
+        f = [x.strip() for x in line.split(",")]
+        if "bytes_in" in f and "bytes_out" in f:
+            ii, io = f.index("bytes_in"), f.index("bytes_out")
             continue
-        if f[0].strip() == "time":
-            cols = [c.strip() for c in f]
+        if ii < 0 or len(f) <= max(ii, io):
             continue
-        if not cols or "bytes_in" not in cols or "bytes_out" not in cols:
-            continue
-        name = f[1].strip()
         try:
-            bi, bo = int(f[cols.index("bytes_in")] or 0), int(f[cols.index("bytes_out")] or 0)
-        except (ValueError, IndexError):
+            bi, bo = int(f[ii] or 0), int(f[io] or 0)
+        except ValueError:
             continue
-        if "<->" not in name:
-            proc = name.rsplit(".", 1)[0] if "." in name else name
+        name = next((x for x in f if "<->" in x), "")
+        if not name:
+            proc = next((x for x in f if x and not _TIME.match(x)), "")
+            proc = proc.rsplit(".", 1)[0] if re.search(r"\.\d+$", proc) else proc
             continue
         parts = name.split(" ", 1)
         if len(parts) != 2:

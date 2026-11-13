@@ -152,6 +152,12 @@ def self_test(out: Optional[str] = None) -> int:
             else:
                 lines.append(("✖ " if req else "⚠ ") + msg)
                 ok = ok and not req
+                if f.kind == "nettop":                         # 看 nettop 實際印了什麼
+                    try:
+                        raw = flows.NettopFlows._run().splitlines()
+                        lines += ["  nettop: " + x for x in raw[:12]]
+                    except Exception as e:  # noqa: BLE001
+                        lines.append(f"  nettop：{e}")
         else:
             lines.append(f"{'✖' if req else '⚠'} 分內網 / 外網（{f.kind}）沒有啟動：{f.error or '這個系統不支援'}")
             ok = ok and not req
