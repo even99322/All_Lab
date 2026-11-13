@@ -122,6 +122,42 @@ def self_test(out: Optional[str] = None) -> int:
     except Exception as e:  # noqa: BLE001
         ok = False
         lines.append(f"✖ 控制埠：{e}")
+    # 1.0.4：分內網 / 外網 / VPN（Windows 要管理員；NETMETER_SELFTEST_FLOWS=1 → 一定要成功）
+    req = os.environ.get("NETMETER_SELFTEST_FLOWS") == "1"
+    try:
+        import http.client
+        import ipaddress
+
+        from . import flows
+
+        f = flows.make(test=True)
+        if f.start():
+            pub = n = 0
+            try:
+                c = http.client.HTTPSConnection("api.github.com", timeout=20)
+                c.request("GET", "/zen", headers={"User-Agent": "QELNetMeter-selftest"})
+                c.getresponse().read()
+                time.sleep(3)                                  # ETW 每秒送一次；nettop 要連線還開著
+                d = f.drain()
+                c.close()
+                n = len(d)
+                pub = sum(v[0] + v[1] for (a, b, _t), v in d.items()
+                          if any(ipaddress.ip_address(x.split("%", 1)[0]).is_global for x in (a, b)))
+            except Exception as e:  # noqa: BLE001
+                lines.append(f"  （連 api.github.com 失敗：{e}）")
+            f.stop()
+            msg = f"分內網 / 外網（{f.kind}）：{n} 條連線，對外 {pub} bytes"
+            if pub > 0:
+                lines.append("✔ " + msg)
+            else:
+                lines.append(("✖ " if req else "⚠ ") + msg)
+                ok = ok and not req
+        else:
+            lines.append(f"{'✖' if req else '⚠'} 分內網 / 外網（{f.kind}）沒有啟動：{f.error or '這個系統不支援'}")
+            ok = ok and not req
+    except Exception as e:  # noqa: BLE001
+        lines.append(f"{'✖' if req else '⚠'} 分內網 / 外網：{e}")
+        ok = ok and not req
     if os.environ.get("NETMETER_SELFTEST_GUI", "1") != "0":
         try:
             from .ui import StatusWindow

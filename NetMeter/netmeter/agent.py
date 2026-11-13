@@ -5,6 +5,7 @@
     {"cmd": "quit"}    → 存檔後結束（更新 / 解除安裝用）
     {"cmd": "reload"}  → 重新讀設定
 同一台電腦只會有一個背景程式（控制埠被占用 = 已經有一個在跑）。
+1.0.4：分內網 / 外網 / VPN（flows.py）；Windows 在實驗室網段時把 Hub 的 https 網址指到 NAS（hosts.py）。
 """
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ import time
 import urllib.request
 from typing import Any, Callable, Dict, Optional
 
-from . import __version__, config, hub
+from . import __version__, config, hosts, hub
 from .meter import Meter
 
 log = logging.getLogger("netmeter")
@@ -53,6 +54,8 @@ class Agent:
         self.update: Dict[str, Any] = {}
         self._last_save = 0.0
         self._was_on = False
+        self.lan_https: Dict[str, str] = dict(config.read_extra("lan_https.json"))     # Hub 給的 https 網域（上次的）
+        self.hosts_state = ""
 
     # ---- 一輪 ----
     def tick(self) -> Dict[str, Any]:
@@ -76,12 +79,46 @@ class Agent:
             used, resp = self.reporter(self.cfg["hubs"], self.payload())
             self.last_report = {"time": time.time(), "hub": used, "ok": True}
             self.last_error = ""
+            self._learn_https(used, resp)
             return True
         except Exception as e:  # noqa: BLE001
             self.last_error = str(e)
             self.last_report = {"time": time.time(), "ok": False}
             log.info("回報失敗：%s", e)
             return False
+
+    # ---- 1.0.4：內網開 Hub 的 https 網址 ----
+    def _learn_https(self, used: str, resp: Any) -> None:
+        import urllib.parse
+
+        x = resp.get("lan_https") if isinstance(resp, dict) else None
+        dom = str((x or {}).get("domain") or "").lower()
+        ip = urllib.parse.urlsplit(used or "").hostname or ""
+        if not dom or not hosts.valid(ip, dom, self.meter.nets):
+            return
+        url = str((x or {}).get("url") or "")
+        new = {"domain": dom, "ip": ip, "url": url if url.startswith(f"https://{dom}") else ""}
+        if new != self.lan_https:
+            self.lan_https = new
+            config.write_extra("lan_https.json", new)
+        self.sync_hosts()
+
+    def sync_hosts(self, force_off: bool = False) -> None:
+        """在實驗室網段 → hosts 有「網域 → NAS」；不在 / 結束 → 拿掉。只有 Windows、設定 lan_hosts 沒關掉時。"""
+        if sys.platform != "win32" or not self.cfg.get("lan_hosts", True):
+            return
+        d = self.lan_https
+        on = (not force_off and bool(self.meter.on_ifaces) and bool(d.get("domain"))
+              and hosts.valid(d.get("ip", ""), d.get("domain", ""), self.meter.nets))
+        want = f"{d.get('ip')} {d.get('domain')}" if on else "-"
+        if want == self.hosts_state:
+            return
+        try:
+            hosts.apply([(d["ip"], d["domain"])] if on else [])
+            self.hosts_state = want
+        except OSError as e:
+            log.info("沒辦法改 hosts（%s）：要系統排程的背景程式（SYSTEM）才有權限", e)
+            self.hosts_state = want                      # 不要每 30 秒重試、洗紀錄
 
     def status(self) -> Dict[str, Any]:
         with self.lock:
@@ -92,6 +129,9 @@ class Agent:
                     "ifaces": m.on_ifaces, "ips": m.ips, "rate": dict(m.rate),
                     "today": dict(m.days.get(today_str(m.now()), {"up": 0, "down": 0})), "month": m.month(),
                     "days": m.recent(14), "hubs": self.cfg["hubs"], "subnets": self.cfg["subnets"],
+                    "split": {"kind": getattr(m.flows, "kind", ""), "ok": bool(getattr(m.flows, "ok", False)),
+                              "error": getattr(m.flows, "error", ""), "rate": m.rate_split},
+                    "lan_https": dict(self.lan_https, hosts=self.hosts_state not in ("", "-")),
                     "last_report": dict(self.last_report), "error": self.last_error, "update": dict(self.update)}
 
     # ---- 主迴圈 ----
@@ -100,6 +140,13 @@ class Agent:
         threading.Thread(target=srv.serve_forever, kwargs={"poll_interval": 0.5}, daemon=True).start()
         threading.Thread(target=self._update_loop, daemon=True).start()
         log.info("流量監看 %s 啟動（網段 %s；Hub %s）", __version__, self.cfg["subnets"], self.cfg["hubs"])
+        if self.meter.flows is None and self.cfg.get("split", True):          # 1.0.4：分內網 / 外網 / VPN
+            from . import flows
+
+            f = flows.make()
+            if f.start():
+                log.info("分內網 / 外網 / VPN：%s", f.kind)
+            self.meter.flows = f
         next_report = 0.0
         try:
             while not self.stop.is_set():
@@ -113,8 +160,18 @@ class Agent:
                     self.send()
                     next_report = now + float(self.cfg.get("report_s") or 60)
                 self._was_on = bool(r.get("on"))
+                try:
+                    self.sync_hosts()
+                except Exception:  # noqa: BLE001
+                    log.exception("hosts")
                 self.stop.wait(float(self.cfg.get("sample_s") or 30))
         finally:
+            try:
+                self.sync_hosts(force_off=True)
+            except Exception:  # noqa: BLE001
+                pass
+            if self.meter.flows is not None:
+                self.meter.flows.stop()
             with self.lock:
                 self.meter.save()
             srv.shutdown()

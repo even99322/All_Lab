@@ -61,6 +61,8 @@ TS_SOCKETS = ("/tailscale/tailscaled.sock", "/var/run/tailscale/tailscaled.sock"
 PC_OFFLINE_S = 180.0
 GAP_S = 7200.0                       # NAS 超過 2 小時沒讀到 → 那段時間的流量不算（不知道是哪天）
 MAX_DAY = 100 * 1024 ** 4            # 一台裝置一天超過 100 TB → 當成錯誤資料
+SPLIT_CATS = ("lan", "wan", "tun", "tunw")
+SPLIT_KEYS = tuple(f"{c}_{d}" for c in SPLIT_CATS for d in ("up", "down"))
 MAX_DEVICES = 500
 _ID = re.compile(r"^[A-Za-z0-9_.-]{6,64}$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -867,6 +869,13 @@ class NetUsage:
                     vu = vd = 0
                 if 0 < vu + vd and vu <= MAX_DAY and vd <= MAX_DAY:
                     clean[k].update(vpn_up=vu, vpn_down=vd)
+                for kk in SPLIT_KEYS:                    # 1.0.38（流量監看 1.0.4）：內網 / 外網 / VPN 通道（其中經外網）
+                    try:
+                        n = int(v.get(kk) or 0)
+                    except (TypeError, ValueError):
+                        continue
+                    if 0 < n <= MAX_DAY:
+                        clean[k][kk] = n
         rate = b.get("rate") if isinstance(b.get("rate"), dict) else {}
         now = self.now()
         with self.lock:
@@ -879,6 +888,11 @@ class NetUsage:
                 du, dd = int(new["up"]) - int(old["up"]), int(new["down"]) - int(old["down"])
                 if 0 <= du <= MAX_DELTA and 0 <= dd <= MAX_DELTA:
                     self.recent.add(f"pc:{did}", du, dd, now)
+                    for c in SPLIT_CATS:
+                        su = int(new.get(f"{c}_up", 0)) - int(old.get(f"{c}_up", 0))
+                        sd = int(new.get(f"{c}_down", 0)) - int(old.get(f"{c}_down", 0))
+                        if (su or sd) and 0 <= su <= MAX_DELTA and 0 <= sd <= MAX_DELTA:
+                            self.recent.add(f"pcx:{did}:{c}", su, sd, now)
             elif new and not old and dev.get("seen"):                           # 換日後第一次回報
                 self.recent.add(f"pc:{did}", min(int(new["up"]), MAX_DELTA), min(int(new["down"]), MAX_DELTA), now)
             dev["days"].update(clean)                  # 程式自己累計：同一天以最新的數字為準
@@ -914,6 +928,8 @@ class NetUsage:
         with self.lock:
             self.pcs.pop(host, None)
             self.recent.forget(f"pc:{host}")
+            for c in SPLIT_CATS:
+                self.recent.forget(f"pcx:{host}:{c}")
             self._dirty = True
         self.save(force=True)
 
@@ -943,6 +959,8 @@ class NetUsage:
                             "online": online, "rate": pc.get("rate") if online else None,
                             "days": pick(pc.get("days") or {}), "month": month_sum(pc.get("days") or {}),
                             "nas_days": pick(pc.get("nas_days") or {}), "nas_month": month_sum(pc.get("nas_days") or {}),
+                            "split_today": _split(pc.get("days") or {}, lambda k: k == dates[-1]),
+                            "split_month": _split(pc.get("days") or {}, lambda k: k.startswith(month)),
                             "vpn_month": {"up": sum(int(v.get("vpn_up", 0)) for k, v in (pc.get("days") or {}).items()
                                                     if k.startswith(month)),
                                           "down": sum(int(v.get("vpn_down", 0)) for k, v in (pc.get("days") or {}).items()
@@ -1029,6 +1047,9 @@ class NetUsage:
                 online = now - float(pc.get("seen") or 0) < PC_OFFLINE_S
                 src(f"pc:{did}", pc.get("label") or pc.get("host") or did, "pc", online=online,
                     sub=" ".join(x for x in (pc.get("ip", ""), pc.get("user", "")) if x))
+                if any(f"pcx:{did}:{c}" in rc.data for c in SPLIT_CATS):     # 1.0.38：內網 / 外網 / VPN 通道
+                    out[-1]["split"] = {c: {k: v for k, v in rc.window(f"pcx:{did}:{c}", window, now=now).items()
+                                            if k in ("up", "down")} for c in SPLIT_CATS}
                 if f"pcnas:{did}" in rc.data:                        # 1.0.37：其中跟 NAS 之間的、其餘（多半外網）
                     o = out[-1]
                     nw = rc.window(f"pcnas:{did}", window, now=now)
@@ -1096,6 +1117,27 @@ def start(hub) -> NetUsage:
     return st
 
 
+def _split(days: Dict[str, Any], want) -> Optional[Dict[str, Any]]:
+    """流量監看 1.0.4 起：內網 / 外網 / VPN 通道（其中經外網）＋ 分不出來的；沒有資料 → None。"""
+    tot = {c: {"up": 0, "down": 0} for c in SPLIT_CATS + ("all",)}
+    seen = False
+    for k, v in days.items():
+        if not want(k):
+            continue
+        has = any(kk in v for kk in SPLIT_KEYS)
+        seen = seen or has
+        if not has:
+            continue
+        for d in ("up", "down"):
+            tot["all"][d] += int(v.get(d, 0))
+            for c in SPLIT_CATS:
+                tot[c][d] += int(v.get(f"{c}_{d}", 0))
+    if not seen:
+        return None
+    tot["other"] = {d: max(0, tot["all"][d] - tot["lan"][d] - tot["wan"][d] - tot["tun"][d]) for d in ("up", "down")}
+    return tot
+
+
 @route("POST", r"/api/netusage/report", auth=False)
 def _report(h: Handler) -> None:
     """流量監看程式回報（不用登入；只收固定欄位、有長度上限）。"""
@@ -1106,7 +1148,11 @@ def _report(h: Handler) -> None:
     if not isinstance(b, dict):
         raise HubHTTPError(400, "格式錯誤")
     try:
-        h._json(store(h.hub).report_device(b, h.ip))
+        out = store(h.hub).report_device(b, h.ip)
+        tls = getattr(h.hub, "tls", None)          # 1.0.38：流量監看在內網把 https 網址指到 NAS（hosts）
+        if tls is not None and getattr(tls, "domain", "") and tls.url("hub"):
+            out["lan_https"] = {"domain": tls.domain, "url": tls.url("hub")}
+        h._json(out)
     except ValueError as e:
         raise HubHTTPError(400, str(e)) from None
 

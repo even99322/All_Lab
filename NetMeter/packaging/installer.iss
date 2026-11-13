@@ -58,8 +58,9 @@ Filename: "{app}\QELNetMeter.exe"; Parameters: "--install-service"; Flags: runhi
 Filename: "{app}\QELNetMeter.exe"; Description: "開啟狀態視窗"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallRun]
-Filename: "{app}\QELNetMeter.exe"; Parameters: "--uninstall-service"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveTask"
+; 1.0.4：先叫背景程式自己結束（會拿掉 hosts 裡 Hub 網址那一段），再刪系統排程
 Filename: "{app}\QELNetMeter.exe"; Parameters: "--quit"; Flags: runhidden waituntilterminated; RunOnceId: "QuitAgent"
+Filename: "{app}\QELNetMeter.exe"; Parameters: "--uninstall-service"; Flags: runhidden waituntilterminated; RunOnceId: "RemoveTask"
 
 [Code]
 { 安裝前叫舊的背景程式結束（存好今天的用量），還在就強制結束 }

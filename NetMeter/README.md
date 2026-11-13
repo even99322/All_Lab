@@ -20,6 +20,15 @@
 
 ## 版本
 
+### v1.0.4
+
+- **分內網 / 外網 / VPN**：每條連線的資料（Windows：ETW「Kernel-Network」，要系統排程的背景程式；macOS：nettop）
+  依比例把實驗室網卡的流量分成 內網（實驗室網段內）、外網（經路由器出去）、VPN（Tailscale 加密封包；另記其中經外網的），
+  回報給 Hub（1.0.38 起顯示）；狀態視窗的今天 / 本月也會寫。
+- **內網用 https 網址開 Hub**：Hub 回報時給它 https 網域（`*.ts.net`）；Windows 在實驗室網段時把這個網域寫進 hosts
+  指到 NAS（只加自己的一段 `# QEL NetMeter BEGIN … END`），離開實驗室網段、結束、解除安裝時拿掉——
+  沒開 VPN 也能用同一個 https 網址。設定 `lan_hosts: false` 關掉；`split: false` 不分內外網。
+
 ### v1.0.3
 
 Windows 改成**開機就在背景執行**：安裝程式（要管理員一次）建立系統排程「QEL\NetMeter」——開機 30 秒後以 SYSTEM 啟動，

@@ -1,6 +1,6 @@
 """設定與資料夾。
 
-Windows：%LOCALAPPDATA%\\QELNetMeter（程式、config.json、state.json、netmeter.log）
+Windows：%ProgramData%\\QELNetMeter（1.0.3 起；config.json、state.json、netmeter.log、lan_https.json）
 macOS  ：~/Library/Application Support/QELNetMeter
 其他    ：~/.qelnetmeter
 """
@@ -25,6 +25,8 @@ DEFAULTS: Dict[str, Any] = {
     "update_check_h": 6,     # 多久檢查一次新版（Windows 自動更新）
     "control_port": 47630,   # 本機控制埠（只聽 127.0.0.1；視窗用來查狀態 / 叫背景程式結束）
     "keep_days": 62,
+    "split": True,           # 1.0.4：分內網 / 外網 / VPN（Windows ETW、macOS nettop）
+    "lan_hosts": True,       # 1.0.4：Windows 在實驗室網段時把 Hub 的 https 網址指到 NAS（hosts 檔）
 }
 
 
@@ -99,6 +101,17 @@ def write_json(p: Path, obj: Dict[str, Any]) -> None:
     tmp = p.with_suffix(p.suffix + ".tmp")
     tmp.write_text(json.dumps(obj, ensure_ascii=False, indent=1), encoding="utf-8")
     os.replace(tmp, p)
+
+
+def read_extra(name: str) -> Dict[str, Any]:
+    return _read(data_dir() / name)
+
+
+def write_extra(name: str, obj: Dict[str, Any]) -> None:
+    try:
+        write_json(data_dir() / name, obj)
+    except OSError:
+        pass
 
 
 def load() -> Dict[str, Any]:

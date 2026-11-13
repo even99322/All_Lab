@@ -37,10 +37,10 @@ def test_on_net():
 def test_meter_counts_only_lab_interface(tmp_path):
     s = Seq()
     m = Meter(tmp_path / "state.json", NETS, s)
-    assert m.step() == {"up": 0, "down": 0, "vpn_up": 0, "vpn_down": 0, "on": True}          # 第一次：基準
+    assert m.step() == {"up": 0, "down": 0, "vpn_up": 0, "vpn_down": 0, "on": True, "split": {}}          # 第一次：基準
     s.add("Ethernet", 3000, 400)
     s.add("Wi-Fi", 9999, 999, dt=0)                              # 不在實驗室網段的網卡不算
-    assert m.step() == {"up": 400, "down": 3000, "vpn_up": 0, "vpn_down": 0, "on": True}
+    assert m.step() == {"up": 400, "down": 3000, "vpn_up": 0, "vpn_down": 0, "on": True, "split": {}}
     assert m.rate == {"up": 400 / 30, "down": 3000 / 30}
     assert m.days[today_str(s.t)] == {"up": 400, "down": 3000}
     # 離開實驗室網段 → 這段與回來的第一段都不算
@@ -258,3 +258,122 @@ def test_ensure_running_uses_boot_task(monkeypatch):
     monkeypatch.setattr(app.agent, "control", lambda *a, **k: {"version": __version__, "pid": 1})
     calls.clear()
     assert app.ensure_running() == "" and calls == []
+
+
+# ---- 1.0.4：內網 / 外網 / VPN；內網 https（hosts）----
+def test_split_flows_and_scale():
+    from netmeter.meter import scale_split, split_flows
+
+    local = {"192.168.50.11", "fe80::1"}
+    fl = {("192.168.50.11", "192.168.50.2", False): [100, 1000],      # NAS → 內網
+          ("140.123.1.1", "192.168.50.11", False): [50, 2000],        # 學校 / 網際網路（位址順序反過來也認得）→ 外網
+          ("192.168.50.11", "192.168.50.2", True): [10, 100],         # VPN 直連區網裡的 NAS
+          ("192.168.50.11", "203.0.113.9", True): [40, 400],          # VPN 經外網（DERP / 外面的裝置）
+          ("192.168.50.11", "224.0.0.251", False): [5, 0],            # 多點傳送 → 內網
+          ("100.67.66.99", "100.64.0.1", False): [999, 999],          # Tailscale 網卡上的（另外算 vpn_*）→ 不算
+          ("127.0.0.1", "127.0.0.1", False): [7, 7]}
+    p = split_flows(fl, local, NETS)
+    assert p == {"lan": [105, 1000], "wan": [50, 2000], "tun": [50, 500], "tunw": [40, 400]}
+    x = scale_split(4200, p, 1)                                 # 網卡計數（含標頭）依比例分
+    assert x["lan"] + x["wan"] + x["tun"] == 4200 and x["wan"] == 2400 and x["tunw"] == 480
+    assert scale_split(100, {"lan": [0, 0], "wan": [0, 0], "tun": [0, 0], "tunw": [0, 0]}, 0) is None
+
+
+def test_meter_records_split(tmp_path):
+    class F:
+        ok, kind = True, "test"
+
+        def __init__(self):
+            self.q = {}
+
+        def drain(self):
+            q, self.q = self.q, {}
+            return q
+
+    s, f = Seq(), F()
+    m = Meter(tmp_path / "state.json", NETS, s, flows=f)
+    m.step()
+    s.add("Ethernet", 3000, 400)
+    f.q = {("192.168.50.31", "192.168.50.2", False): [100, 1000], ("192.168.50.31", "8.8.8.8", False): [100, 2000]}
+    r = m.step()
+    assert r["split"]["down"] == {"lan": 1000, "wan": 2000, "tun": 0, "tunw": 0}
+    d = m.days[today_str(s.t)]
+    assert d["lan_down"] == 1000 and d["wan_down"] == 2000 and d["lan_up"] == 200 and "tun_up" not in d
+    assert m.month(s.t)["wan_down"] == 2000 and m.rate_split["wan"]["down"] == 2000 / 30
+    m.save()
+    assert Meter(tmp_path / "state.json", NETS, s).days[today_str(s.t)]["wan_up"] == 200
+
+
+def test_etw_event_parse_and_nettop():
+    import struct
+
+    from netmeter import flows
+
+    data = struct.pack("<II", 1234, 1500) + bytes([192, 168, 50, 2]) + bytes([192, 168, 50, 11]) + b"\x00" * 20
+    pid, size, a, b, send = flows._parse(11, data)
+    assert (pid, size, send) == (1234, 1500, False) and a == bytes([192, 168, 50, 2])
+    v6 = struct.pack("<II", 9, 60) + bytes(15) + b"\x01" + bytes(16) + b"\x00" * 12
+    assert flows._parse(58, v6)[4] is True and len(flows._parse(58, v6)[2]) == 16
+    assert flows._parse(12, data) is None and flows._parse(10, b"\x00" * 8) is None
+    assert flows.is_tunnel_name("tailscaled.exe") and not flows.is_tunnel_name("chrome.exe")
+    txt = ("time,,bytes_in,bytes_out,\n"
+           "10:00:00.1,Google Chrome H.512,,0,0,\n"
+           "10:00:00.1,tcp4 192.168.50.11:52429<->140.112.1.1:443,123456,789,\n"
+           "10:00:00.1,udp6 fe80::1%en0.5353<->ff02::fb.5353,10,20,\n"
+           "10:00:00.1,tailscaled.88,,0,0,\n"
+           "10:00:00.1,udp4 192.168.50.11:41641<->203.0.113.9:41641,500,600,\n"
+           "10:00:00.1,udp4 *:5353<->*:*,1,1,\n")
+    seq = [txt, txt.replace("123456,789", "123556,799").replace("500,600", "700,600")]
+    nf = flows.NettopFlows(runner=lambda: seq.pop(0))
+    assert nf.start()
+    out = nf.drain()
+    assert out == {("192.168.50.11", "140.112.1.1", False): [10, 100], ("192.168.50.11", "203.0.113.9", True): [0, 200]}
+
+
+def test_hosts_render_apply_and_validate(tmp_path):
+    from netmeter import hosts
+
+    assert hosts.valid("192.168.50.2", "ccu-nas.tailabc12.ts.net", NETS)
+    assert not hosts.valid("8.8.8.8", "ccu-nas.tailabc12.ts.net", NETS)            # 不在實驗室網段
+    assert not hosts.valid("192.168.50.2", "www.google.com", NETS)                 # 只接受 *.ts.net
+    assert not hosts.valid("192.168.50.2", "x.ts.net\n1.2.3.4 evil.com", NETS)
+    assert not hosts.valid("192.168.50.2", "ccu-nas.tailabc12.ts.net\n", NETS)
+    p = tmp_path / "hosts"
+    orig = "# Copyright\r\n127.0.0.1 localhost\r\n10.0.0.9 printer\r\n"
+    p.write_bytes(orig.encode())
+    assert hosts.apply([("192.168.50.2", "ccu-nas.tailabc12.ts.net")], p)
+    t = p.read_bytes().decode()
+    assert "\r\n192.168.50.2 ccu-nas.tailabc12.ts.net\r\n" in t and t.startswith(orig) and t.count(hosts.BEGIN) == 1
+    assert not hosts.apply([("192.168.50.2", "ccu-nas.tailabc12.ts.net")], p)         # 一樣就不寫
+    assert hosts.apply([("192.168.50.3", "ccu-nas.tailabc12.ts.net")], p) and p.read_bytes().decode().count(hosts.BEGIN) == 1
+    assert hosts.apply([], p) and p.read_bytes().decode() == orig                    # 拿掉後回到原狀
+    assert not hosts.apply([], p)
+
+
+def test_agent_learns_https_domain_and_syncs_hosts(tmp_path, monkeypatch):
+    from netmeter import hosts
+
+    monkeypatch.setenv("QELNETMETER_HOME", str(tmp_path / "home"))
+    hp = tmp_path / "hosts"
+    hp.write_text("127.0.0.1 localhost\n")
+    monkeypatch.setattr(hosts, "hosts_path", lambda: hp)
+    monkeypatch.setattr(agent.sys, "platform", "win32")
+    s = Seq()
+    cfg = dict(config.DEFAULTS, subnets=["192.168.50.0/24"], hubs=["http://192.168.50.2:8765"])
+    ag = agent.Agent(cfg=cfg, sampler=s,
+                     reporter=lambda hubs, p: (hubs[0], {"ok": True, "lan_https": {"domain": "ccu-nas.tailabc12.ts.net",
+                                                                                 "url": "https://ccu-nas.tailabc12.ts.net:8443"}}))
+    ag.tick()
+    assert ag.send() and "192.168.50.2 ccu-nas.tailabc12.ts.net" in hp.read_text()
+    assert ag.status()["lan_https"]["hosts"] is True
+    assert agent.Agent(cfg=cfg, sampler=s).lan_https["domain"] == "ccu-nas.tailabc12.ts.net"     # 記住了
+    s.ifs["Ethernet"]["ips"] = ["10.1.2.3"]                                                    # 離開實驗室
+    ag.tick()
+    ag.sync_hosts()
+    assert hosts.BEGIN not in hp.read_text()
+    s.ifs["Ethernet"]["ips"] = ["192.168.50.31"]
+    ag.tick()
+    ag.sync_hosts()
+    assert hosts.BEGIN in hp.read_text()
+    ag.sync_hosts(force_off=True)                                                              # 程式結束
+    assert hp.read_text() == "127.0.0.1 localhost\n"

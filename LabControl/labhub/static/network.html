@@ -200,7 +200,16 @@ function status(st, enabled) {
 function sumDays(days, from) { let s = {up: 0, down: 0}; for (const [k, v] of Object.entries(days)) if (!from || k >= from) { s.up += +v.up || 0; s.down += +v.down || 0; } return s; }
 
 // 1.0.37：電腦本月的流量分成 跟 NAS 之間／其中經 VPN／其餘（多半外網）
+// 1.0.38（流量監看 1.0.4）：電腦自己分的 內網／外網／VPN 通道（其中經外網）
 function split(p) {
+  const s = p.split_month, t = p.split_today;
+  if (s) {
+    const tip = (t ? `今天：內網 ${fmt(tot(t.lan))}、外網 ${fmt(tot(t.wan))}、VPN ${fmt(tot(t.tun))}（其中經外網 ${fmt(tot(t.tunw))}）\n` : "") +
+      `本月：內網 ${fmt(tot(s.lan))}、外網 ${fmt(tot(s.wan))}、VPN ${fmt(tot(s.tun))}（其中經外網 ${fmt(tot(s.tunw))}）` +
+      (tot(s.other) ? `、分不出來 ${fmt(tot(s.other))}` : "");
+    return `<span title="${esc(tip)}">${fmt(tot(s.lan))}／<b>${fmt(tot(s.wan))}</b>／${fmt(tot(s.tun))}` +
+      (tot(s.tunw) ? `<br><span class="muted">VPN 經外網 ${fmt(tot(s.tunw))}</span>` : "") + `</span>`;
+  }
   const all = tot(p.month), nas = tot(p.nas_month || {}), vpn = tot(p.vpn_month || {});
   if (!nas && !vpn) return `<span class="muted" title="要 Hub 的 NAS 分流記帳（控制代理自動建立）與流量監看 1.0.2">—</span>`;
   const other = Math.max(0, all - nas);
@@ -235,6 +244,8 @@ function render() {
     card("NAS 今天", fmt(tot(n.days[today])), ud(n.days[today])) +
     card("NAS 本月", fmt(tot(n.month)), ud(n.month)) +
     (d.tailscale ? card("VPN 經外網 今天", fmt(tot(d.tailscale.ext[today])), ud(d.tailscale.ext[today])) : "") +
+    (d.pcs.some(p => p.split_today) ? card("電腦經外網 今天", fmt(d.pcs.reduce((a, p) => a + (p.split_today ? tot(p.split_today.wan) + tot(p.split_today.tunw) : 0), 0)),
+      "外網＋VPN 經外網（流量監看 1.0.4）") : "") +
     (d.github ? card("Hub 從 GitHub 下載 今天", fmt(tot(d.github.days[today])), d.github.month ? "本月 " + fmt(tot(d.github.month)) : "") : "");
   renderTs(d);
   $("#rst").innerHTML = status(r.status, r.enabled);
@@ -250,7 +261,7 @@ function render() {
   if (!editing) {
     const w7 = d.dates[Math.max(0, d.dates.length - 7)];
     $("#pcs").innerHTML = !d.pcs.length ? `<div class="empty">還沒有裝置回報。在每台電腦裝「流量監看」程式（上面的下載按鈕；Windows 雙擊一次就在背景執行），連到實驗室網段後就會出現。</div>` :
-      `<div class="wrap"><table><thead><tr><th>裝置</th><th class="hide-sm">IP / 使用者</th><th class="n hide-sm">目前速率</th><th class="n">今天</th><th class="n">昨天</th><th class="n hide-sm">近 7 天</th><th class="n">本月</th><th class="n" title="本月：跟 NAS 之間（區網）／其中經 VPN／其餘（多半是外網）">本月：NAS／VPN／其餘</th><th class="hide-sm">近 14 天</th><th class="hide-sm">最後回報</th>${owner ? "<th></th>" : ""}</tr></thead><tbody>` +
+      `<div class="wrap"><table><thead><tr><th>裝置</th><th class="hide-sm">IP / 使用者</th><th class="n hide-sm">目前速率</th><th class="n">今天</th><th class="n">昨天</th><th class="n hide-sm">近 7 天</th><th class="n">本月</th><th class="n" title="流量監看 1.0.4 起：本月 內網（實驗室網段內）／外網（經路由器出去）／VPN（Tailscale 加密封包）；滑過看今天。&#10;舊版：跟 NAS 之間／其中經 VPN／其餘">本月：內網／<b>外網</b>／VPN</th><th class="hide-sm">近 14 天</th><th class="hide-sm">最後回報</th>${owner ? "<th></th>" : ""}</tr></thead><tbody>` +
       d.pcs.map(p => `<tr><td class="who"><span class="dot${p.online ? " on" : ""}"></span><input data-host="${esc(p.key)}" value="${esc(p.label)}" placeholder="${esc(p.host)}" maxlength="40" title="標註（Enter 存檔）">${p.label ? `<div class="small muted" style="padding-left:21px">${esc(p.host)}</div>` : ""}</td>
         <td class="small muted hide-sm">${esc(p.ip)}<br>${esc(p.user)}${p.os ? "　" + esc(p.os) : ""}</td>
         <td class="n small hide-sm">${p.rate ? `↓ ${fmt(p.rate.down)}/s<br>↑ ${fmt(p.rate.up)}/s` : `<span class="muted">—</span>`}</td>
@@ -497,7 +508,7 @@ function renderRt() {
         ${x.sub ? `<div class="small muted" style="padding-left:15px">${esc(x.sub)}</div>` : ""}</td>
         <td class="n"><b>${fmt(x.up + x.down)}</b></td><td class="n">${fmt(x.down)}</td><td class="n">${fmt(x.up)}</td>
         <td class="n">${x.rate ? bps(x.rate.down) : "—"}</td><td class="n">${x.rate ? bps(x.rate.up) : "—"}</td>
-        <td class="small muted hide-sm">${esc(KIND[x.kind] || "")}${x.path ? "　" + esc(P[x.path] || x.path) : ""}${x.nas ? `<br>跟 NAS ${fmt(tot(x.nas))}　其餘 <b>${fmt(tot(x.other))}</b>` : ""}</td></tr>`).join("") +
+        <td class="small muted hide-sm">${esc(KIND[x.kind] || "")}${x.path ? "　" + esc(P[x.path] || x.path) : ""}${x.split ? `<br>內網 ${fmt(tot(x.split.lan))}　外網 <b>${fmt(tot(x.split.wan))}</b>　VPN ${fmt(tot(x.split.tun))}${tot(x.split.tunw) ? `（經外網 ${fmt(tot(x.split.tunw))}）` : ""}` : x.nas ? `<br>跟 NAS ${fmt(tot(x.nas))}　其餘 <b>${fmt(tot(x.other))}</b>` : ""}</td></tr>`).join("") +
       `</tbody></table></div><div class="help">點一列看那個來源的每分鐘圖。「目前」是最近一次讀到的速率；電腦的數字是它自己的流量監看程式回報的（含區網內傳檔）。</div>`;
   });
   $("#rttab").querySelectorAll("tr.pick").forEach(tr => tr.onclick = () => { rtSrc = tr.dataset.key; try { localStorage.setItem("qel-net-src", rtSrc); } catch (e) {} loadRt(true); });

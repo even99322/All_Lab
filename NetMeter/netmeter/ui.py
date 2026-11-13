@@ -76,8 +76,8 @@ class StatusWindow:
             else:
                 self.v_state.set(f"○ 目前不在實驗室網段（{'、'.join(st.get('subnets') or [])}），這段時間不計算")
             t, m, r = st.get("today") or {}, st.get("month") or {}, st.get("rate") or {}
-            self.v_today.set(f"↓ {fmt(t.get('down'))}　↑ {fmt(t.get('up'))}")
-            self.v_month.set(f"↓ {fmt(m.get('down'))}　↑ {fmt(m.get('up'))}")
+            self.v_today.set(f"↓ {fmt(t.get('down'))}　↑ {fmt(t.get('up'))}" + _split_text(t))
+            self.v_month.set(f"↓ {fmt(m.get('down'))}　↑ {fmt(m.get('up'))}" + _split_text(m))
             self.v_rate.set(f"↓ {fmt(r.get('down'))}/s　↑ {fmt(r.get('up'))}/s")
             lr = st.get("last_report") or {}
             if lr.get("ok"):
@@ -86,6 +86,12 @@ class StatusWindow:
                 self.v_report.set(f"失敗：{st['error']}")
             else:
                 self.v_report.set("還沒送（連到實驗室網段後每分鐘送一次）")
+            sp = st.get("split") or {}
+            if not sp.get("ok") and sp.get("kind"):
+                self.v_today.set(self.v_today.get() + f"\n（分不出內網 / 外網：{sp.get('error') or '沒有啟動'}）")
+            lh = st.get("lan_https") or {}
+            if lh.get("hosts"):
+                self.v_report.set(self.v_report.get() + f"\n內網 https：{lh.get('domain')} → {lh.get('ip')}")
             if st.get("update"):
                 self.v_report.set(self.v_report.get() + f"\n有新版 {st['update'].get('version')}")
         a = self.autostart()
@@ -96,6 +102,9 @@ class StatusWindow:
         st = self.get_status() or {}
         lr = st.get("last_report") or {}
         hub = lr.get("hub") or (config.load()["hubs"] or [""])[0]
+        lh = st.get("lan_https") or {}
+        if lh.get("hosts") and lh.get("url"):                 # 1.0.4：內網也用 https 網址
+            hub = lh["url"]
         webbrowser.open(hub + "/network")
 
     def settings(self) -> None:
@@ -139,3 +148,12 @@ class StatusWindow:
 
     def run(self) -> None:
         self.root.mainloop()
+
+
+def _split_text(d: dict) -> str:
+    """1.0.4：內網 / 外網 / VPN（有資料才顯示）。"""
+    tot = {c: int(d.get(f"{c}_up") or 0) + int(d.get(f"{c}_down") or 0) for c in ("lan", "wan", "tun", "tunw")}
+    if not any(tot.values()):
+        return ""
+    s = f"\n內網 {fmt(tot['lan'])}　外網 {fmt(tot['wan'])}　VPN {fmt(tot['tun'])}"
+    return s + (f"（經外網 {fmt(tot['tunw'])}）" if tot["tunw"] else "")
