@@ -58,6 +58,9 @@
   .res { font-size:12px; margin-top:6px; white-space:pre-wrap; }
   .res.ok { color:var(--ok); } .res.bad { color:var(--err); }
   .help { font-size:12px; color:var(--muted); margin-top:6px; }
+  .warnbox { background:color-mix(in srgb, var(--warn) 15%, var(--card)); border:1px solid var(--warn); border-radius:10px; padding:8px 12px; margin-bottom:8px; font-size:13px; }
+  tr.unw td { background:color-mix(in srgb, var(--warn) 10%, transparent); }
+  .stat.warn { border-color:var(--warn); background:color-mix(in srgb, var(--warn) 12%, var(--card)); }
   .pill.warn { background:#fff4e6; color:#d9480f; }
   .empty { background:var(--card); border:1px dashed var(--line); border-radius:12px; padding:20px; text-align:center; color:var(--muted); }
   details summary { cursor:pointer; color:var(--muted); font-size:13px; margin-top:16px; }
@@ -120,6 +123,9 @@
   <h2>各台裝置 <span class="small muted">（流量監看程式：只算連到實驗室網段時那張網卡的流量；含區網內傳檔）</span>
     <a class="btn" href="/get" style="text-decoration:none;font-weight:400">⬇ 下載流量監看程式</a></h2>
   <div id="pcs"></div>
+
+  <h2>路由器上的裝置 <span class="small muted">（路由器「附加裝置」，每 2 分鐘讀一次；⚠ = 沒被監看：它的流量只算在「整個網段」裡）</span> <span id="rdst"></span></h2>
+  <div id="rdevs"></div>
 
   <div id="cfgbox"></div>
   <p class="help">日期以台北時間切。路由器的數字是路由器 Traffic Meter 自己算的（以 1 MB = 1024² byte 換算）；
@@ -284,7 +290,28 @@ function render() {
       await api("/api/netusage/pc/" + encodeURIComponent(b.dataset.del), {method: "DELETE"}); load();
     };
   }
+  renderRdevs(d.router_devices);
   if (owner && d.config && !$("#cfg")) renderConfig(d.config);
+}
+
+// 1.0.40：路由器上連著的裝置；沒被監看的標出來
+const CONN = t => { const s = String(t || "").toLowerCase(); return !s ? "" : s.includes("wired") ? "有線" : s.includes("2.4") ? "無線 2.4G" : s.includes("5") ? "無線 5G" : s.includes("6") ? "無線 6G" : t; };
+function renderRdevs(rd) {
+  if (!rd) { $("#rdevs").innerHTML = ""; return; }
+  const st = rd.status || {};
+  $("#rdst").innerHTML = st.ok === false ? `<span class="pill bad" title="${esc(st.error || "")}">讀不到</span>` : st.ok ? `<span class="pill ok">${st.n} 台在線</span>` : "";
+  const list = rd.devices || [];
+  if (!list.length) { $("#rdevs").innerHTML = `<div class="empty">${st.ok === false ? "讀不到路由器的附加裝置：" + esc(st.error || "") : "還沒讀到（要先在下面設定路由器）"}</div>`; return; }
+  const un = list.filter(x => x.online && !x.watched);
+  const fmtT = t => { if (!t) return ""; const d = new Date(t * 1000); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  $("#rdevs").innerHTML = (un.length ? `<div class="warnbox">⚠ 現在有 ${un.length} 台連在路由器上、沒有被監看：${un.map(x => esc(x.name || x.ip || x.mac)).join("、")}。它們的流量只會出現在「整個網段」與即時頁的「路由器有、監看不到的」。</div>` : "") +
+    `<div class="wrap"><table><thead><tr><th>裝置</th><th>IP / MAC</th><th>連線</th><th>監看</th><th class="hide-sm">第一次看到</th><th>最後看到</th></tr></thead><tbody>` +
+    list.map(x => `<tr${x.online && !x.watched ? ' class="unw"' : ""}><td class="who"><span class="dot${x.online ? " on" : ""}"></span><b>${esc(x.name || "（沒有名稱）")}</b></td>
+      <td class="small">${esc(x.ip)}<br><span class="muted">${esc(x.mac)}</span></td>
+      <td class="small">${esc(CONN(x.type))}${x.ssid ? `<br><span class="muted">${esc(x.ssid)}</span>` : ""}${x.link ? `<br><span class="muted">${esc(x.link)} Mbps${x.signal ? "　訊號 " + esc(x.signal) + "%" : ""}</span>` : ""}</td>
+      <td class="small">${x.watched ? `<span class="pill ok">✔</span> ${esc(x.watched)}` : `<span class="pill bad">⚠ 沒有</span>`}</td>
+      <td class="small muted hide-sm">${fmtT(x.first)}</td><td class="small muted">${x.online ? "現在" : fmtT(x.last)}</td></tr>`).join("") +
+    `</tbody></table></div><div class="help">「監看」靠 IP 或電腦名稱對到 NAS 與流量監看程式回報的電腦。沒被監看的裝置要知道它用多少，可以在那台裝流量監看，或暫時把它斷線，看即時頁「路由器有、監看不到的」有沒有跟著掉。</div>`;
 }
 
 const PATH = {lan: ["區網直連", "ok", "不經外網"], wan: ["外網直連", "warn", "經外網（不經中繼）"], relay: ["DERP 中繼", "bad", "經外網，繞到 Tailscale 的中繼伺服器"]};
@@ -438,7 +465,7 @@ async function loadHub() {
 let RT = null, rtWin = 600, rtSrc = "";
 try { rtWin = +(localStorage.getItem("qel-net-win") || 600); rtSrc = localStorage.getItem("qel-net-src") || ""; } catch (e) {}
 const WIN = [[60, "1 分"], [600, "10 分"], [1800, "30 分"], [3600, "1 小時"], [10800, "3 小時"], [21600, "6 小時"], [86400, "1 天"]];
-const KIND = {router: "路由器", nas: "NAS", nasdir: "NAS 分流", pc: "電腦", vpn: "VPN", hub: "Hub"};
+const KIND = {router: "路由器", nas: "NAS", nasdir: "NAS 分流", pc: "電腦", vpn: "VPN", hub: "Hub", unknown: "推算"};
 const DIR = {router: ["下載", "上傳"], pc: ["下載", "上傳"], nas: ["收到", "送出"], nasdir: ["NAS 收到", "NAS 送出"], vpn: ["NAS 收到", "NAS 送出"], hub: ["Hub 收到", "Hub 送出"]};
 const bps = v => v == null ? "—" : fmt(v) + "/s";
 function keepScroll(fn) {                                         // 重畫時保留表格 / 圖的左右捲動位置
@@ -493,9 +520,13 @@ function renderRt() {
   const vpnExt = S.filter(x => x.kind === "vpn" && x.path && x.path !== "lan");
   const ve = vpnExt.length ? {up: vpnExt.reduce((a, x) => a + x.up, 0), down: vpnExt.reduce((a, x) => a + x.down, 0),
     rate: {up: vpnExt.reduce((a, x) => a + ((x.rate || {}).up || 0), 0), down: vpnExt.reduce((a, x) => a + ((x.rate || {}).down || 0), 0)}} : null;
-  $("#rtsum").innerHTML = card("全網", get("router")) + card("NAS", get("nas")) + card("Hub ⇄ 區網以外", get("hub:remote")) + card("VPN 經外網", ve) + card("NAS ⇄ 外網（直接）", get("nasdir:wan"));
+  const unk = get("unknown"), rt = get("router");
+  const unkCard = !unk ? "" : `<div class="stat${rt && (unk.up + unk.down) > 0.3 * (rt.up + rt.down) && (unk.up + unk.down) > 50 * 1048576 ? " warn" : ""}" title="路由器的量 − 已知的（各電腦的外網部分＋NAS 直接外網＋VPN 中繼）：沒被監看的裝置、路由器自己、或外網口那一側。路由器每 2 分鐘才讀一次，時間短的區間不準。">
+    <div class="k">監看不到　${wn}</div><div class="v">${fmt(unk.up + unk.down)}</div>
+    <div class="ud">↓ ${fmt(unk.down)}　↑ ${fmt(unk.up)}<br><span class="rt-k">已知外網</span> ↓ ${fmt(unk.known.down)}　↑ ${fmt(unk.known.up)}</div></div>`;
+  $("#rtsum").innerHTML = card("全網", rt) + unkCard + card("NAS", get("nas")) + card("Hub ⇄ 區網以外", get("hub:remote")) + card("VPN 經外網", ve) + card("NAS ⇄ 外網（直接）", get("nasdir:wan"));
   const sel = $("#rtsrc");
-  sel.innerHTML = S.map(x => `<option value="${esc(x.key)}"${x.key === r.chart.key ? " selected" : ""}>${esc(KIND[x.kind] || "")}　${esc(x.name)}</option>`).join("");
+  sel.innerHTML = S.filter(x => !x.nochart).map(x => `<option value="${esc(x.key)}"${x.key === r.chart.key ? " selected" : ""}>${esc(KIND[x.kind] || "")}　${esc(x.name)}</option>`).join("");
   sel.onchange = () => { rtSrc = sel.value; try { localStorage.setItem("qel-net-src", rtSrc); } catch (e) {} loadRt(true); };
   const ch = S.find(x => x.key === r.chart.key) || {};
   $("#rtcnote").textContent = r.chart.series.length ? `${r.chart.series.length} 分鐘，合計 ${fmt(r.chart.series.reduce((a, p) => a + p[1] + p[2], 0))}` : "";
@@ -504,7 +535,7 @@ function renderRt() {
     const rows = [...S].sort((a, b) => (b.up + b.down) - (a.up + a.down));
     const P = {lan: "區網直連", wan: "外網直連", relay: "DERP 中繼"};
     $("#rttab").innerHTML = `<div class="wrap" data-k="rttab"><table><thead><tr><th>來源</th><th class="n">${esc(wn)}合計</th><th class="n">↓</th><th class="n">↑</th><th class="n">目前 ↓</th><th class="n">目前 ↑</th><th class="hide-sm">類型</th></tr></thead><tbody>` +
-      rows.map(x => `<tr class="pick${x.key === r.chart.key ? " sel" : ""}" data-key="${esc(x.key)}"><td class="who">${x.online === undefined ? "" : `<span class="dot${x.online ? " on" : ""}"></span>`}<b>${esc(x.name)}</b>
+      rows.map(x => `<tr class="${x.nochart ? "unw" : "pick"}${x.key === r.chart.key ? " sel" : ""}" data-key="${esc(x.key)}"><td class="who">${x.online === undefined ? "" : `<span class="dot${x.online ? " on" : ""}"></span>`}<b>${esc(x.name)}</b>
         ${x.sub ? `<div class="small muted" style="padding-left:15px">${esc(x.sub)}</div>` : ""}</td>
         <td class="n"><b>${fmt(x.up + x.down)}</b></td><td class="n">${fmt(x.down)}</td><td class="n">${fmt(x.up)}</td>
         <td class="n">${x.rate ? bps(x.rate.down) : "—"}</td><td class="n">${x.rate ? bps(x.rate.up) : "—"}</td>

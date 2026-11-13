@@ -59,6 +59,7 @@ TS_PATHS = ("lan", "wan", "relay")       # 區網直連 / 外網直連 / DERP �
 TS_SOCKETS = ("/tailscale/tailscaled.sock", "/var/run/tailscale/tailscaled.sock",
               "/var/packages/Tailscale/var/tailscaled.sock")
 PC_OFFLINE_S = 180.0
+RDEV_KEEP_S = 30 * 86400.0               # 1.0.40：路由器上的裝置留 30 天
 GAP_S = 7200.0                       # NAS 超過 2 小時沒讀到 → 那段時間的流量不算（不知道是哪天）
 MAX_DAY = 100 * 1024 ** 4            # 一台裝置一天超過 100 TB → 當成錯誤資料
 SPLIT_CATS = ("lan", "wan", "tun", "tunw")
@@ -131,6 +132,52 @@ def parse_soap(text: str) -> Tuple[str, Dict[str, str]]:
         elif len(el) == 0 and el.text is not None:
             out[tag] = el.text.strip()
     return code, out
+
+
+def _dev(ip: str, name: str, mac: str, ctype: str = "", link: str = "", signal: str = "", ssid: str = "") -> Dict[str, Any]:
+    name = (name or "").strip()
+    if name.lower() in ("<unknown>", "unknown", "&lt;unknown&gt;", "--"):
+        name = ""
+    return {"ip": _s(ip, 64), "name": _s(name, 80), "mac": _s((mac or "").upper(), 32), "type": _s(ctype, 32),
+            "link": _s(link, 16), "signal": _s(signal, 8), "ssid": _s(ssid, 64)}
+
+
+def parse_attached2(text: str) -> Optional[List[Dict[str, Any]]]:
+    """GetAttachDevice2 → [{ip, name, mac, type, link, signal, ssid}]；格式不對 → None（改用 GetAttachDevice）。"""
+    text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", "", text or "")
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError:
+        return None
+    holder = next((e for e in root.iter() if e.tag.split("}", 1)[-1] == "NewAttachDevice"), None)
+    if holder is None:
+        return None
+    out = []
+    for d in holder:
+        if d.tag.split("}", 1)[-1] != "Device":
+            continue
+        f = {c.tag.split("}", 1)[-1]: (c.text or "").strip() for c in d}
+        out.append(_dev(f.get("IP", ""), f.get("Name", ""), f.get("MAC", ""), f.get("ConnectionType", ""),
+                        f.get("Linkspeed", ""), f.get("SignalStrength", ""), f.get("SSID", "")))
+    return out
+
+
+def parse_attached1(s: str) -> List[Dict[str, Any]]:
+    """GetAttachDevice：「數量@1;IP;名稱;MAC;wired;速度;訊號;Allow@2;…」。"""
+    s = (s or "").replace("&lt;unknown&gt;", "<unknown>").strip()
+    if not s or s == "0":
+        return []
+    parts = s.split("@")
+    if len(parts) > 1:
+        parts = parts[1:]
+    out = []
+    for e in parts:
+        f = e.split(";")
+        if len(f) < 4:
+            continue
+        out.append(_dev(f[1], f[2], f[3], f[4] if len(f) > 4 else "", f[5] if len(f) > 5 else "",
+                        f[6] if len(f) > 6 else ""))
+    return out
 
 
 def meter_value(text: str) -> Optional[float]:
@@ -215,6 +262,9 @@ class NetgearClient:
         raise NetgearError("連不到路由器的管理介面（" + "；".join(errors) + "）")
 
     def call(self, service: str, method: str, params: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+        return self._call(service, method, params)[0]
+
+    def _call(self, service: str, method: str, params: Optional[Dict[str, str]] = None) -> Tuple[Dict[str, str], str]:
         if not self.cookie:
             self.login()
         for attempt in (0, 1):
@@ -228,8 +278,20 @@ class NetgearClient:
                 raise NetgearError("路由器登入逾期，重新登入也失敗")
             if st != 200 or code not in ("0", "000", "0000", "1", "001"):
                 raise NetgearError(f"{method} 失敗（HTTP {st}，代碼 {code or '—'}）")
-            return fields
-        return {}
+            return fields, text
+        return {}, ""
+
+    def attached_devices(self) -> List[Dict[str, Any]]:
+        """1.0.40：路由器上連著的裝置（有線 / 無線 / 訪客）——跟路由器管理頁「附加裝置」同一份。"""
+        try:
+            _f, text = self._call("DeviceInfo:1", "GetAttachDevice2")
+            devs = parse_attached2(text)
+            if devs is not None:
+                return devs
+        except NetgearError:
+            pass
+        f, _text = self._call("DeviceInfo:1", "GetAttachDevice")
+        return parse_attached1(f.get("NewAttachDevice", ""))
 
     def traffic_meter(self) -> Dict[str, Optional[float]]:
         f = self.call("DeviceConfig:1", "GetTrafficMeterStatistics")
@@ -490,6 +552,10 @@ class NetUsage:
         # 1.0.37：NAS 分流（days[日期] = {"lan": {up, down}, "vpn": {...}, "wan": {...}}；up = NAS 送出）
         self.nasdir: Dict[str, Any] = dict(d.get("nasdir") or {})
         self.nasdir.setdefault("days", {})
+        # 1.0.40：路由器上連過的裝置（key = MAC 或 IP）：{ip, name, mac, type, link, signal, ssid, first, last}
+        self.rdev: Dict[str, Dict[str, Any]] = {k: v for k, v in (d.get("router_devices") or {}).items()
+                                                if isinstance(v, dict)}
+        self._rdev_online: set = set()
         self._acct_last: Optional[Dict[str, Any]] = None
         self._hosts_written: Optional[List[str]] = None
         self.status: Dict[str, Dict[str, Any]] = {"router": {}, "nas": {}, "tailscale": {}, "netacct": {}}
@@ -530,7 +596,8 @@ class NetUsage:
                 return
             try:
                 self._write(self.file, {"cfg": self.cfg, "router": self.router, "nas": self.nas, "devices": self.pcs,
-                                        "tailscale": self.ts, "github": self.github, "nasdir": self.nasdir})
+                                        "tailscale": self.ts, "github": self.github, "nasdir": self.nasdir,
+                                        "router_devices": self.rdev})
                 self._dirty = False
                 self._last_save = self.now()
             except OSError as e:
@@ -589,6 +656,60 @@ class NetUsage:
         return c
 
     # ---- 路由器 ----
+    def _poll_router_devices(self, cl: Any) -> None:
+        """1.0.40：順便讀路由器的「附加裝置」（讀不到不影響流量）。"""
+        fn = getattr(cl, "attached_devices", None)
+        if fn is None:
+            return
+        try:
+            devs = fn()
+        except Exception as e:  # noqa: BLE001
+            self.status["router_devices"] = {"ok": False, "error": str(e), "time": self.now()}
+            return
+        now = self.now()
+        with self.lock:
+            online = set()
+            for x in devs:
+                key = x.get("mac") or x.get("ip")
+                if not key:
+                    continue
+                r = self.rdev.setdefault(key, {"first": now})
+                r.update({k: v for k, v in x.items() if v or k not in r}, last=now)
+                online.add(key)
+            self._rdev_online = online
+            for k in [k for k, r in self.rdev.items() if now - float(r.get("last") or 0) > RDEV_KEEP_S]:
+                del self.rdev[k]
+            if len(self.rdev) > 500:
+                for k in sorted(self.rdev, key=lambda k: float(self.rdev[k].get("last") or 0))[:len(self.rdev) - 500]:
+                    del self.rdev[k]
+            self._dirty = True
+        self.status["router_devices"] = {"ok": True, "time": now, "n": len(online)}
+
+    def _rdev_view(self, now: float) -> Dict[str, Any]:
+        """路由器上的裝置＋哪些有被監看（NAS、流量監看程式）。"""
+        nas_ip = str(self.cfg["nas"].get("host") or "")
+        pc_ip: Dict[str, str] = {}
+        pc_name: Dict[str, str] = {}
+        for pc in self.pcs.values():
+            label = pc.get("label") or pc.get("host") or ""
+            for ip in re.split(r"[,\s]+", str(pc.get("ip") or "")):
+                if ip:
+                    pc_ip[ip] = label
+            if pc.get("host"):
+                pc_name[str(pc["host"]).lower().rstrip("$")] = label
+        out = []
+        for key, r in self.rdev.items():
+            watched = ""
+            if r.get("ip") and r["ip"] == nas_ip:
+                watched = "NAS"
+            elif r.get("ip") in pc_ip:
+                watched = f"流量監看：{pc_ip[r['ip']]}"
+            elif (r.get("name") or "").lower() in pc_name:
+                watched = f"流量監看：{pc_name[r['name'].lower()]}"
+            out.append(dict(r, key=key, online=key in self._rdev_online, watched=watched))
+        out.sort(key=lambda r: (not r["online"], bool(r["watched"]), -(float(r.get("last") or 0))))
+        return {"devices": out, "status": self.status.get("router_devices") or {}}
+
     def poll_router(self, client: Optional[NetgearClient] = None) -> Dict[str, Any]:
         rc = self.cfg["router"]
         st: Dict[str, Any] = {"time": self.now()}
@@ -632,6 +753,7 @@ class NetUsage:
                 _trim(days, today)
                 self._dirty = True
             st.update(ok=True, info=info, port=cl.port, ssl=cl.ssl)
+            self._poll_router_devices(cl)
         except Exception as e:  # noqa: BLE001
             st.update(ok=False, error=str(e))
         self.status["router"] = st
@@ -975,7 +1097,7 @@ class NetUsage:
                             "host": self.cfg["nas"].get("host", "")},
                     "pcs": pcs, "tailscale": self._ts_view(pick, month_sum, now),
                     "github": {"days": pick(self.github["days"]), "month": month_sum(self.github["days"])},
-                    "nasdir": self._nasdir_view(pick, month)}
+                    "nasdir": self._nasdir_view(pick, month), "router_devices": self._rdev_view(now)}
 
     def _nasdir_view(self, pick, month: str) -> Dict[str, Any]:
         """NAS 分流每日：DERP 中繼（TCP 443，記帳時算在外網）從外網移到 VPN。"""
@@ -1060,12 +1182,43 @@ class NetUsage:
                     continue
                 src(f"ts:{pid}", r.get("name", pid), "vpn", online=bool(r.get("online")), path=r.get("path", ""),
                     sub=" ".join(x for x in (r.get("os", ""), r.get("ip", "")) if x))
+            # 1.0.40：路由器算到、但各裝置（電腦的外網部分、NAS 直接外網）加起來沒有的 → 沒被監看的裝置 / 路由器自己 / 外網口那一側
+            r = next((o for o in out if o["key"] == "router"), None)
+            if r is not None:
+                ku = kd = 0
+                for o in out:
+                    if o["kind"] == "pc":
+                        if o.get("split"):
+                            x = o["split"]
+                            ku += x["wan"]["up"] + x["tunw"]["up"]
+                            kd += x["wan"]["down"] + x["tunw"]["down"]
+                        elif o.get("other"):
+                            ku += o["other"]["up"]
+                            kd += o["other"]["down"]
+                        else:
+                            ku += o["up"]
+                            kd += o["down"]
+                    elif o["key"] == "nasdir:wan":
+                        ku += o["up"]
+                        kd += o["down"]
+                    elif o["key"] == "nasdir:vpn":                    # 經 DERP 中繼的 VPN（已從外網移過來）
+                        rl = rc.window("tspath:relay", window, now=now)
+                        ku += min(rl["up"], o["up"])
+                        kd += min(rl["down"], o["down"])
+                if "nasdir:wan" not in {o["key"] for o in out} and self.cfg["nas"].get("enabled"):
+                    n = next((o for o in out if o["key"] == "nas"), None)     # 沒有 NAS 分流：整個 NAS 都當可能外網
+                    if n:
+                        ku += n["up"]
+                        kd += n["down"]
+                out.append({"key": "unknown", "name": "路由器有、監看不到的", "kind": "unknown", "nochart": True,
+                            "up": max(0, r["up"] - ku), "down": max(0, r["down"] - kd), "rate": None,
+                            "known": {"up": ku, "down": kd}})
         src("hub:remote", "Hub ⇄ 區網以外", "hub")
         src("hub:lan", "Hub ⇄ 區網", "hub")
         out = [o for o in out if o["up"] or o["down"] or o.get("online")
                or (o.get("rate") and (o["rate"]["up"] or o["rate"]["down"]))
-               or o["kind"] in ("router", "nas")]
-        keys = {o["key"] for o in out}
+               or o["kind"] in ("router", "nas", "unknown")]
+        keys = {o["key"] for o in out if not o.get("nochart")}
         if chart not in keys:
             chart = "router" if "router" in keys else "nas" if "nas" in keys else (out[0]["key"] if out else "")
         ch = rc.window(chart, window, series=True, now=now) if chart else {"series": [], "step": 60}

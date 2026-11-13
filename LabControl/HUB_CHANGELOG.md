@@ -3,6 +3,10 @@
 1.0.36 起 Hub 跟 Lab Control 分開發佈（GitHub 發佈 `hub-v<版本>`）；1.0.35 以前的紀錄在 [CHANGELOG.md](CHANGELOG.md)。
 每一版的說明在 [docs/releases/hub/](docs/releases/hub/)。
 
+## 1.0.40 — 2026-11-13
+
+網路用量：列出路由器上連著的每個裝置（有線 / 無線 / 訪客）並標出沒被監看的；即時頁新增「監看不到」＝路由器 − 已知各裝置的外網量。詳見 [docs/releases/hub/v1.0.40.md](docs/releases/hub/v1.0.40.md)。
+
 ## 1.0.39 — 2026-11-13
 
 新增「版本紀錄」頁（/versions）：各程式每一版的內容、發佈時間、上線到這台 Hub 的時間，可搜尋。詳見 [docs/releases/hub/v1.0.39.md](docs/releases/hub/v1.0.39.md)。
