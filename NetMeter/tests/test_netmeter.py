@@ -201,3 +201,60 @@ def test_meter_counts_tailscale_separately(tmp_path):
     assert day == {"up": 500, "down": 1000, "vpn_up": 200, "vpn_down": 300}
     m.save()
     assert Meter(tmp_path / "s.json", NETS, sampler).days == m.days
+
+
+def test_windows_boot_task_xml():
+    """1.0.3：開機（不用登入）以 SYSTEM 啟動、每 10 分鐘檢查、不限時間、不受電池限制。"""
+    import xml.etree.ElementTree as ET
+    from pathlib import PureWindowsPath
+
+    from netmeter import install
+
+    x = install.task_xml(PureWindowsPath(r"C:\Program Files\QELNetMeter\QELNetMeter.exe"))
+    ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+    root = ET.fromstring(x.split("?>", 1)[1])
+    assert root.find("t:Triggers/t:BootTrigger", ns) is not None
+    assert root.find("t:Triggers/t:CalendarTrigger/t:Repetition/t:Interval", ns).text == "PT10M"
+    assert root.find("t:Principals/t:Principal/t:UserId", ns).text == "S-1-5-18"
+    st = root.find("t:Settings", ns)
+    assert st.find("t:ExecutionTimeLimit", ns).text == "PT0S"
+    assert st.find("t:DisallowStartIfOnBatteries", ns).text == "false"
+    assert st.find("t:MultipleInstancesPolicy", ns).text == "IgnoreNew"
+    ex = root.find("t:Actions/t:Exec", ns)
+    assert ex.find("t:Command", ns).text.endswith("QELNetMeter.exe") and ex.find("t:Arguments", ns).text == "--agent"
+
+
+def test_migrate_old_state(tmp_path):
+    """1.0.3：舊版（使用者底下）的紀錄搬到 ProgramData；新的已經有就不動。"""
+    import os
+    import time
+
+    a, b, dst = tmp_path / "a", tmp_path / "b", tmp_path / "new"
+    for d in (a, b, dst):
+        d.mkdir()
+    (a / "state.json").write_text('{"id": "nm-old"}')
+    (b / "state.json").write_text('{"id": "nm-newer"}')
+    (b / "config.json").write_text('{"hubs": ["http://h"]}')
+    os.utime(a / "state.json", (time.time() - 100, time.time() - 100))
+    assert config.migrate_old(dst, [a, b, tmp_path / "none"]) == b
+    assert "nm-newer" in (dst / "state.json").read_text() and (dst / "config.json").exists()
+    (b / "state.json").write_text('{"id": "nm-other"}')
+    assert config.migrate_old(dst, [a, b]) is None and "nm-newer" in (dst / "state.json").read_text()
+
+
+def test_ensure_running_uses_boot_task(monkeypatch):
+    """1.0.3：裝了系統排程 → 叫排程啟動，不再登記「登入時啟動」。"""
+    from netmeter import app, install
+
+    calls = []
+    monkeypatch.setattr(app.sys, "platform", "win32")
+    monkeypatch.setattr(install, "service_installed", lambda *a, **k: True)
+    monkeypatch.setattr(install, "run_service", lambda: calls.append("run") or True)
+    monkeypatch.setattr(install, "enable_autostart", lambda *a, **k: calls.append("runkey"))
+    monkeypatch.setattr(install, "start_agent", lambda *a, **k: calls.append("start"))
+    monkeypatch.setattr(app, "_wait_agent", lambda *a, **k: True)
+    monkeypatch.setattr(app.agent, "control", lambda *a, **k: None)
+    assert "開機" in app.ensure_running() and calls == ["run"]
+    monkeypatch.setattr(app.agent, "control", lambda *a, **k: {"version": __version__, "pid": 1})
+    calls.clear()
+    assert app.ensure_running() == "" and calls == []

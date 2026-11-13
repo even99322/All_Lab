@@ -177,8 +177,12 @@ class Agent:
         log.info("更新到 %s", info["version"])
         with self.lock:
             self.meter.save()
-        subprocess.Popen([tmp, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"], creationflags=0x00000008 | 0x00000200,
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        args = [tmp, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"]
+        kw = dict(stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+        try:            # 1.0.3：從系統排程的工作裡「脫離」（不然工作結束時安裝程式會被一起關掉）
+            subprocess.Popen(args, creationflags=0x00000008 | 0x00000200 | 0x01000000, **kw)
+        except OSError:
+            subprocess.Popen(args, creationflags=0x00000008 | 0x00000200, **kw)
 
 
 # ---------------------------------------------------------------------------

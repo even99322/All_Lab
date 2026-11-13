@@ -11,7 +11,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from . import APP_ID
 
@@ -33,13 +33,58 @@ def data_dir() -> Path:
     if env:
         p = Path(env)
     elif sys.platform == "win32":
-        p = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / APP_ID
+        # 1.0.3：整台電腦共用（開機時由系統排程以 SYSTEM 啟動背景程式；狀態視窗以使用者身分開也讀同一份）
+        p = Path(os.environ.get("PROGRAMDATA") or r"C:\ProgramData") / APP_ID
     elif sys.platform == "darwin":
         p = Path.home() / "Library" / "Application Support" / APP_ID
     else:
         p = Path.home() / ".qelnetmeter"
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def old_dirs() -> List[Path]:
+    """1.0.2 以前（裝在使用者底下）的資料夾：%LOCALAPPDATA%\\QELNetMeter（以 SYSTEM 執行時找每個使用者的）。"""
+    out: List[Path] = []
+    if sys.platform != "win32":
+        return out
+    la = os.environ.get("LOCALAPPDATA")
+    if la:
+        out.append(Path(la) / APP_ID)
+    users = Path(os.environ.get("SystemDrive", "C:") + "\\") / "Users"
+    try:
+        for u in users.iterdir():
+            out.append(u / "AppData" / "Local" / APP_ID)
+    except OSError:
+        pass
+    return [p for p in dict.fromkeys(out)]
+
+
+def migrate_old(dst: Optional[Path] = None, candidates: Optional[List[Path]] = None) -> Optional[Path]:
+    """新的資料夾還沒有紀錄 → 把舊版（使用者底下）最新的 state.json / config.json 搬過來（同一台電腦、id 不變）。"""
+    import shutil
+
+    dst = dst or data_dir()
+    if (dst / "state.json").exists():
+        return None
+    best = None
+    for d in candidates if candidates is not None else old_dirs():
+        f = d / "state.json"
+        try:
+            if d.resolve() != dst.resolve() and f.is_file() and (best is None or f.stat().st_mtime > best.stat().st_mtime):
+                best = f
+        except OSError:
+            continue
+    if best is None:
+        return None
+    for name in ("state.json", "config.json"):
+        src = best.parent / name
+        if src.is_file() and not (dst / name).exists():
+            try:
+                shutil.copy2(src, dst / name)
+            except OSError:
+                pass
+    return best.parent
 
 
 def _read(p: Path) -> Dict[str, Any]:

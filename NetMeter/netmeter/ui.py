@@ -88,7 +88,8 @@ class StatusWindow:
                 self.v_report.set("還沒送（連到實驗室網段後每分鐘送一次）")
             if st.get("update"):
                 self.v_report.set(self.v_report.get() + f"\n有新版 {st['update'].get('version')}")
-        self.v_auto.set("已設定（登入時自動在背景執行）" if self.autostart() else "沒有設定")
+        a = self.autostart()
+        self.v_auto.set(a if isinstance(a, str) else ("已設定（登入時自動在背景執行）" if a else "沒有設定"))
         self.root.after(2000, self.refresh)
 
     def open_web(self) -> None:
