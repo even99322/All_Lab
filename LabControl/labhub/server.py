@@ -1324,6 +1324,7 @@ from . import netusage  # noqa: E402,F401  （1.0.29 網路用量：/network、/
 from . import traffic  # noqa: E402,F401  （1.0.33 各埠流量與限流：/api/traffic）
 from . import notebook  # noqa: E402,F401  （1.0.31 電子實驗記錄：/notebook、/api/notebook）
 from . import versions  # noqa: E402,F401  （1.0.39 版本紀錄：/versions、/api/versions）
+from . import gptexport  # noqa: E402,F401  （1.0.42 論文庫匯出給 GPT：/gptexport、/api/gptexport）
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>論文匯出</title>
+<style>
+  :root { --bg:#f3f4f6; --card:#fff; --text:#1c1f24; --muted:#6b7280; --line:#e2e5e9; --soft:#eef0f3;
+          --accent:#1971c2; --accent-soft:#e7f1fb; --ok:#2b8a3e; --warn:#e67700; --err:#e03131; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1116; --card:#151a21; --text:#e9ecef; --muted:#8b939d; --line:#2a313b; --soft:#1c222b;
+            --accent:#4dabf7; --accent-soft:#16283a; --ok:#40c057; --warn:#ffa94d; --err:#ff6b6b; }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--bg); color:var(--text); }
+  body { font:14px/1.5 -apple-system,"Segoe UI","PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,sans-serif; }
+  main { max-width:1180px; margin:0 auto; padding:12px 16px 60px; }
+  h1 { font-size:20px; margin:4px 0 4px; } h2 { font-size:16px; margin:20px 0 8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .muted { color:var(--muted); } .small { font-size:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px 14px; margin-bottom:10px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  label.opt { display:inline-flex; gap:5px; align-items:center; cursor:pointer; }
+  select, input[type=search] { font:inherit; padding:5px 8px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); max-width:100%; }
+  .btn { border:1px solid var(--line); background:var(--soft); color:var(--text); border-radius:8px; padding:6px 12px; font:inherit; cursor:pointer; }
+  .btn.pri { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:700; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .pill { display:inline-block; padding:0 7px; border-radius:999px; font-size:12px; font-weight:700; background:var(--soft); color:var(--muted); white-space:nowrap; }
+  .pill.ok { background:color-mix(in srgb, var(--ok) 18%, transparent); color:var(--ok); }
+  .pill.warn { background:color-mix(in srgb, var(--warn) 18%, transparent); color:var(--warn); }
+  .pill.err { background:color-mix(in srgb, var(--err) 18%, transparent); color:var(--err); }
+  .pill.g { background:var(--accent-soft); color:var(--accent); }
+  .bar { height:8px; background:var(--soft); border-radius:99px; overflow:hidden; margin:6px 0; }
+  .bar > div { height:100%; background:var(--accent); width:0; transition:width .3s; }
+  .wrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; }
+  th, td { padding:6px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+  th { font-size:12px; color:var(--muted); font-weight:600; white-space:nowrap; position:sticky; top:0; background:var(--card); }
+  td.t { min-width:240px; max-width:420px; }
+  td.t a { color:var(--text); text-decoration:none; font-weight:600; } td.t a:hover { text-decoration:underline; }
+  .chips { display:flex; gap:4px; flex-wrap:wrap; }
+  .chip { font-size:12px; padding:1px 7px; border-radius:999px; background:var(--accent-soft); color:var(--accent); white-space:nowrap; }
+  .chip.auto { background:var(--soft); color:var(--muted); border:1px dashed var(--line); }
+  details.tagpick { position:relative; }
+  details.tagpick summary { list-style:none; cursor:pointer; color:var(--accent); font-size:12px; margin-top:3px; }
+  details.tagpick summary::-webkit-details-marker { display:none; }
+  .tagbox { position:absolute; z-index:5; right:0; top:22px; width:min(560px, 86vw); background:var(--card); border:1px solid var(--line);
+            border-radius:10px; padding:10px; box-shadow:0 8px 24px rgba(0,0,0,.18); max-height:60vh; overflow:auto; }
+  .tagbox .g { font-size:12px; color:var(--muted); margin:6px 0 2px; font-weight:700; }
+  .tagbox label { display:inline-flex; gap:4px; align-items:center; margin:2px 10px 2px 0; font-size:13px; cursor:pointer; }
+  .saved { font-size:11px; color:var(--muted); }
+  tr.dirty td { background:color-mix(in srgb, var(--accent) 6%, transparent); }
+  .help { font-size:12px; color:var(--muted); margin-top:6px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:6px; margin-top:6px; }
+  .grid div { background:var(--soft); border-radius:8px; padding:4px 8px; font-size:12px; }
+  @media (max-width:700px) { .hide-sm { display:none; } td.t { min-width:180px; } }
+</style>
+</head>
+<body>
+<!--QEL-NAV-->
+<main>
+  <h1>論文匯出（GPT）</h1>
+  <div class="muted small">依「CCU Magnonics 論文庫分類與匯出規範」（1.1）把論文庫整理成 <code>CCU_Magnonics_Library_Export/</code>，給 ChatGPT 匯入、檢索與引用。論文庫本身不會被改動。</div>
+
+  <h2>匯出</h2>
+  <div class="card">
+    <div class="row">
+      <span>範圍</span><select id="scope"><option value="all">整個論文庫</option></select>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span>PDF</span>
+      <label class="opt"><input type="radio" name="pdf" value="all" checked>全部附上</label>
+      <label class="opt"><input type="radio" name="pdf" value="grades">只附這些等級：</label>
+      <span id="grades"></span>
+      <label class="opt"><input type="radio" name="pdf" value="none">不附（只匯出書目與筆記）</label>
+    </div>
+    <div class="row" style="margin-top:10px"><button class="btn pri" id="go">匯出</button><span id="jobmsg" class="small muted"></span></div>
+    <div class="bar" id="jobbar" hidden><div></div></div>
+    <div class="help">ChatGPT 專案的檔案數有限：書目與筆記一定全部匯出，PDF 可以只附 A 級或需要的等級。優先 A-D = 論文庫「關聯性」；閱讀狀態一律「未讀」；主要主題與次級標籤用下面的分類。</div>
+  </div>
+  <div id="exports"></div>
+
+  <h2>分類 <span class="small muted" id="cnt"></span></h2>
+  <div class="card">
+    <div class="row">
+      <input type="search" id="q" placeholder="搜尋標題、作者、Paper ID…" style="flex:1 1 220px">
+      <select id="f">
+        <option value="todo">還沒分類</option><option value="all">全部</option><option value="done">已分類</option>
+      </select>
+      <select id="fg"><option value="">全部等級</option><option>A</option><option>B</option><option>C</option><option>D</option><option value="-">未評級</option></select>
+    </div>
+    <div class="help">每篇選 1 個主要主題（主要研究問題與核心創新）、勾受控次級標籤（只標論文明確討論的）、論文類型；改了就自動存在 Hub（記下誰改的）。
+      灰色虛線的是從論文庫標籤／分類自動對照出來的建議，按「採用」才會存。</div>
+  </div>
+  <div class="card" style="padding:0"><div class="wrap"><table>
+    <thead><tr><th>Paper ID</th><th>論文</th><th>論文庫</th><th>主要主題</th><th>次級標籤</th><th>論文類型</th><th class="hide-sm"></th></tr></thead>
+    <tbody id="rows"><tr><td colspan="7" class="muted">讀取中…</td></tr></tbody>
+  </table></div></div>
+  <div class="row" style="justify-content:center"><button class="btn" id="more" hidden>顯示更多</button></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = n => n >= 1073741824 ? (n / 1073741824).toFixed(2) + " GB" : n >= 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
+async function api(path, opt = {}) {
+  const r = await fetch(path, {credentials: "same-origin", headers: {"Content-Type": "application/json"}, ...opt});
+  if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent(location.pathname); throw new Error("請先登入"); }
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || d.detail || `錯誤 ${r.status}`);
+  return d;
+}
+let V = null, P = [], shown = 50;
+
+// ---------------- 匯出
+$("#grades").innerHTML = ["A", "B", "C", "D"].map(g => `<label class="opt"><input type="checkbox" value="${g}"${g === "A" ? " checked" : ""}>${g}</label>`).join(" ");
+async function loadScopes() {
+  try {
+    const s = await api("/api/gptexport/scopes");
+    $("#scope").innerHTML = `<option value="all">整個論文庫</option>` +
+      (s.categories.length ? `<optgroup label="論文庫分類">${s.categories.map(c => `<option value="cat:${c.id}">${esc(c.name)}</option>`).join("")}</optgroup>` : "") +
+      (s.projects.length ? `<optgroup label="專案">${s.projects.map(p => `<option value="project:${esc(p.id)}">${esc(p.name)}</option>`).join("")}</optgroup>` : "");
+  } catch (e) { /* 只有整個論文庫 */ }
+}
+function summaryHtml(s) {
+  if (!s) return "";
+  const v = s.validation || {};
+  const kv = o => Object.entries(o || {}).filter(([, n]) => n).map(([k, n]) => `<div>${esc(k)}：<b>${n}</b></div>`).join("");
+  return `<div class="row small" style="margin-top:4px"><span>${s.papers} 篇、${s.pdfs} 個 PDF</span>
+      ${v.ok ? '<span class="pill ok">驗收通過</span>' : `<span class="pill err" title="${esc((v.errors || []).join("\n"))}">驗收有 ${(v.errors || []).length} 個問題</span>`}</div>
+    <details class="small"><summary class="muted" style="cursor:pointer">分類統計與警告</summary>
+      <div class="grid">${kv(s.grades)}</div><div class="grid">${kv(s.topics)}</div><div class="grid">${kv(s.warnings)}</div>
+      ${(v.errors || []).length ? `<ul>${v.errors.map(e => `<li>${esc(e)}</li>`).join("")}</ul>` : ""}</details>`;
+}
+async function loadExports() {
+  try {
+    const d = await api("/api/gptexport/exports");
+    $("#exports").innerHTML = d.exports.map(x => `<div class="card">
+      <div class="row"><b>${esc(x.name)}</b><span class="small muted">${new Date(x.time * 1000).toLocaleString()}　${fmt(x.size)}　${esc(x.by || "")}</span>
+      <a class="btn pri" style="margin-left:auto;text-decoration:none" href="/api/gptexport/exports/${encodeURIComponent(x.name)}">下載</a></div>
+      ${summaryHtml(x.summary)}</div>`).join("");
+  } catch (e) { $("#exports").innerHTML = ""; }
+}
+async function poll() {
+  const j = (await api("/api/gptexport/status")).job || {};
+  const bar = $("#jobbar");
+  if (j.running) {
+    $("#go").disabled = true; bar.hidden = false;
+    bar.firstElementChild.style.width = j.n ? `${Math.round(100 * j.i / j.n)}%` : "5%";
+    $("#jobmsg").textContent = `${j.msg || ""}${j.n ? `（${j.i} / ${j.n}）` : ""}`;
+    setTimeout(poll, 1000);
+  } else {
+    $("#go").disabled = false; bar.hidden = true;
+    $("#jobmsg").innerHTML = j.error ? `<span style="color:var(--err)">匯出失敗：${esc(j.error)}</span>` : j.done ? "完成，可以下載了" : "";
+    if (j.done) { loadExports(); loadPapers(); }
+  }
+}
+$("#go").onclick = async () => {
+  const pdf = document.querySelector("input[name=pdf]:checked").value;
+  const grades = [...document.querySelectorAll("#grades input:checked")].map(x => x.value);
+  try {
+    await api("/api/gptexport/export", {method: "POST", body: JSON.stringify({scope: $("#scope").value, pdf, grades})});
+    poll();
+  } catch (e) { $("#jobmsg").textContent = e.message; }
+};
+
+// ---------------- 分類
+const cls = p => p.saved || {topic: "", tags: [], type: ""};
+const classified = p => !!(p.saved && p.saved.topic);
+function tagPicker(p) {
+  const cur = new Set(cls(p).tags);
+  return `<details class="tagpick"><summary>＋ 標籤</summary><div class="tagbox">${V.tag_groups.map(g =>
+    `<div class="g">${esc(g.group)}</div>${g.tags.map(t => `<label><input type="checkbox" data-tag="${esc(t)}"${cur.has(t) ? " checked" : ""}>${esc(t)}</label>`).join("")}`).join("")}</div></details>`;
+}
+function rowHtml(p) {
+  const c = cls(p), a = p.auto || {};
+  const hasAuto = !p.saved && (a.topic || (a.tags || []).length);
+  return `<tr data-id="${p.id}">
+    <td class="small">${p.mag ? `<b>${esc(p.mag)}</b>` : '<span class="muted">匯出時分配</span>'}</td>
+    <td class="t"><a href="${esc(p.url || "#")}" target="_blank" rel="noopener">${esc(p.title)}</a>
+      <div class="small muted">${esc([p.first_author, p.year, p.venue].filter(Boolean).join(" · "))}</div>
+      ${(p.tags || []).length ? `<div class="small muted">論文庫標籤：${esc(p.tags.join("、"))}</div>` : ""}</td>
+    <td class="small">${p.grade ? `<span class="pill g" title="${p.grade_ai ? "AI 評級" : "人工"}">${esc(p.grade)}${p.grade_ai ? " AI" : ""}</span>` : '<span class="pill">未評級</span>'}
+      ${p.has_pdf ? "" : '<div class="muted">沒有 PDF</div>'}</td>
+    <td><select data-k="topic"><option value="">（未選）</option>${V.topics.map(t => `<option value="${esc(t.value)}"${c.topic === t.value ? " selected" : ""}>${esc(t.code)} ${esc(t.value)}</option>`).join("")}</select>
+      ${hasAuto && a.topic ? `<div class="chips" style="margin-top:3px"><span class="chip auto">${esc(a.topic)}</span></div>` : ""}</td>
+    <td><div class="chips">${c.tags.map(t => `<span class="chip">${esc(t)}</span>`).join("")}${hasAuto ? (a.tags || []).map(t => `<span class="chip auto">${esc(t)}</span>`).join("") : ""}</div>
+      ${tagPicker(p)}${hasAuto ? `<button class="btn small" data-adopt style="margin-top:4px;padding:2px 8px;font-size:12px">採用建議</button>` : ""}</td>
+    <td><select data-k="type"><option value="">（未選）</option>${V.types.map(t => `<option${c.type === t ? " selected" : ""}>${esc(t)}</option>`).join("")}</select></td>
+    <td class="hide-sm saved">${p.saved ? `${esc(p.saved.by || "")}<br>${new Date(p.saved.updated * 1000).toLocaleDateString()}` : ""}</td></tr>`;
+}
+function filtered() {
+  const q = $("#q").value.trim().toLowerCase(), f = $("#f").value, fg = $("#fg").value;
+  return P.filter(p => (f === "all" || (f === "done") === classified(p)) &&
+    (!fg || (fg === "-" ? !p.grade : p.grade === fg)) &&
+    (!q || `${p.mag} ${p.title} ${p.first_author} ${p.year} ${p.venue} ${(p.tags || []).join(" ")}`.toLowerCase().includes(q)));
+}
+function render() {
+  const list = filtered();
+  $("#cnt").textContent = `已分類 ${P.filter(classified).length} / ${P.length} 篇`;
+  $("#rows").innerHTML = list.slice(0, shown).map(rowHtml).join("") || `<tr><td colspan="7" class="muted">沒有符合的論文</td></tr>`;
+  $("#more").hidden = list.length <= shown;
+}
+async function save(p, patch) {
+  const c = Object.assign({topic: "", tags: [], type: ""}, cls(p), patch);
+  const tr = document.querySelector(`tr[data-id="${p.id}"]`);
+  try {
+    const r = await api(`/api/gptexport/class/${p.id}`, {method: "PUT", body: JSON.stringify({topic: c.topic, tags: c.tags, type: c.type})});
+    p.saved = r.saved;
+  } catch (e) { alert(e.message); }
+  const open = tr && tr.querySelector("details[open]");
+  if (tr) { const n = document.createElement("tbody"); n.innerHTML = rowHtml(p); const nr = n.firstElementChild; tr.replaceWith(nr); if (open) nr.querySelector("details").open = true; }
+  $("#cnt").textContent = `已分類 ${P.filter(classified).length} / ${P.length} 篇`;
+}
+$("#rows").addEventListener("change", e => {
+  const tr = e.target.closest("tr[data-id]"); if (!tr) return;
+  const p = P.find(x => String(x.id) === tr.dataset.id);
+  if (e.target.dataset.k) save(p, {[e.target.dataset.k]: e.target.value});
+  else if (e.target.dataset.tag) {
+    const tags = [...tr.querySelectorAll("input[data-tag]:checked")].map(x => x.dataset.tag);
+    save(p, {tags});
+  }
+});
+$("#rows").addEventListener("click", e => {
+  if (!e.target.matches("[data-adopt]")) return;
+  const tr = e.target.closest("tr[data-id]"), p = P.find(x => String(x.id) === tr.dataset.id);
+  save(p, {topic: p.auto.topic || "", tags: p.auto.tags || []});
+});
+document.addEventListener("click", e => { document.querySelectorAll("details.tagpick[open]").forEach(d => { if (!d.contains(e.target)) d.open = false; }); });
+["#q", "#f", "#fg"].forEach(s => $(s).addEventListener("input", () => { shown = 50; render(); }));
+$("#more").onclick = () => { shown += 50; render(); };
+async function loadPapers() {
+  try { P = (await api("/api/gptexport/papers")).papers; render(); }
+  catch (e) { $("#rows").innerHTML = `<tr><td colspan="7" style="color:var(--err)">${esc(e.message)}</td></tr>`; }
+}
+(async () => {
+  V = await api("/api/gptexport/vocab");
+  loadScopes(); loadExports(); poll(); loadPapers();
+})();
+</script>
+</body>
+</html>

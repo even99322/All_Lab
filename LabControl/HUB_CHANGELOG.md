@@ -3,6 +3,10 @@
 1.0.36 起 Hub 跟 Lab Control 分開發佈（GitHub 發佈 `hub-v<版本>`）；1.0.35 以前的紀錄在 [CHANGELOG.md](CHANGELOG.md)。
 每一版的說明在 [docs/releases/hub/](docs/releases/hub/)。
 
+## 1.0.42 — 2026-11-14
+
+新增「論文匯出」頁（/gptexport）：依 CCU Magnonics 規範 1.1 把論文庫匯出成 GPT 用的資料夾（CSV、manifest、PDF、筆記），並可逐篇設定主要主題與受控標籤。詳見 [docs/releases/hub/v1.0.42.md](docs/releases/hub/v1.0.42.md)。
+
 ## 1.0.41 — 2026-11-13
 
 網路用量新增「NAS 上誰在用網路」：NAS 每張網卡、每個容器、每個程式與連線對方的收送量（記帳容器讀 /proc 與連線追蹤）。詳見 [docs/releases/hub/v1.0.41.md](docs/releases/hub/v1.0.41.md)。

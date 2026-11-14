@@ -44,7 +44,7 @@ jobs:
         run: >
           python -m pytest -q -p no:cacheprovider --timeout=120
           tests/test_netusage.py tests/test_113.py tests/test_122.py tests/test_131_notebook.py
-          tests/test_132.py tests/test_133_traffic.py tests/test_134.py tests/test_137_netacct.py tests/test_138_pcsplit.py tests/test_139_versions.py tests/test_140_rdevs.py tests/test_141_nastop.py tests/test_settings.py
+          tests/test_132.py tests/test_133_traffic.py tests/test_134.py tests/test_137_netacct.py tests/test_138_pcsplit.py tests/test_139_versions.py tests/test_140_rdevs.py tests/test_141_nastop.py tests/test_142_gptexport.py tests/test_settings.py
       - name: Version and release notes
         id: v
         run: |

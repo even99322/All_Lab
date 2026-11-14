@@ -52,6 +52,26 @@ class FakePaperlib:
                           "paper_ids": [12]},
                          {"id": 2, "name": "JPA readout", "short_name": "", "description": "", "goal": "",
                           "next_step": "", "status": "active", "color": "#e67700", "sort": 2, "paper_ids": [13]}]
+        # 1.0.42 論文匯出用：分類、關聯性、重點、檔案、標註
+        self.categories = [{"id": 1, "name": "Cavity Magnonics"}, {"id": 2, "name": "量子位元"}]
+        self.extra = {
+            11: {"categories": [2], "relevance_grade": "C", "relevance_ai": 1, "relevance_confidence": "高",
+                 "relevance_reason": "transmon 理論可移植", "keyinfo": {"重點": "提出 transmon", "架設／平台": "CPB"},
+                 "ai_keys": ["重點"], "abstract": "We introduce the transmon.", "arxiv": "",
+                 "files": [{"id": 101, "role": "main", "original_name": "koch.pdf", "filename": "koch.pdf"}],
+                 "updated_at": "2026-10-01T10:00:00"},
+            12: {"categories": [1], "relevance_grade": "", "keyinfo": {}, "ai_keys": [], "arxiv": "2101.00001v2",
+                 "files": [], "updated_at": "2026-09-01T10:00:00"},
+            13: {"categories": [], "relevance_grade": "A", "relevance_ai": 0, "keyinfo": {"與我們實驗的關係": "讀出"},
+                 "ai_keys": [], "doi": "10.1103/PhysRevA.76.042319", "arxiv": "",
+                 "files": [{"id": 103, "role": "main", "original_name": "jpa.pdf", "filename": "jpa.pdf"}],
+                 "updated_at": "2026-11-01T10:00:00"},
+        }
+        self.annotations = {11: [{"id": 501, "page": 3, "file_id": 101, "kind": "highlight", "private": 0,
+                                  "quote": "E_J/E_C ≫ 1", "body": "transmon 條件", "updated_at": "2026-10-02T00:00:00"},
+                                 {"id": 502, "page": 4, "file_id": 101, "kind": "highlight", "private": 1,
+                                  "quote": "私人", "body": "", "updated_at": "2026-10-02T00:00:00"}]}
+        self.files = {101: b"%PDF-1.4 koch", 103: b"%PDF-1.4 jpa"}
         self.calls = []                                  # (method, path, headers) 方便測試檢查
         self.fail_x_pl = 0
 
@@ -67,9 +87,10 @@ def make_handler(state: FakePaperlib):
             pass
 
         def _send(self, code: int, obj: Any, headers: Optional[Dict[str, str]] = None) -> None:
-            body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
+            body = obj if isinstance(obj, bytes) else json.dumps(obj, ensure_ascii=False).encode("utf-8")
             self.send_response(code)
-            self.send_header("Content-Type", "application/json")
+            if not isinstance(obj, bytes):
+                self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             for k, v in (headers or {}).items():
                 self.send_header(k, v)
@@ -180,8 +201,33 @@ def make_handler(state: FakePaperlib):
                 papers = [dict(p, role="核心") for p in state.papers if p["id"] in pr["paper_ids"]]
                 return 200, {**{k: v for k, v in pr.items() if k != "paper_ids"}, "papers": papers}, {}
             if path == "/api/papers":
-                items = [p for p in state.papers if not q.get("tag") or q["tag"] in p["tags"]]
-                return 200, {"total": len(items), "items": items[: int(q.get("limit", 60))]}, {}
+                items = [dict(p, **{k: v for k, v in state.extra.get(p["id"], {}).items()
+                                    if k in ("categories", "relevance_grade", "relevance_ai", "arxiv", "doi")},
+                              file_ids=[f["id"] for f in state.extra.get(p["id"], {}).get("files", [])])
+                         for p in state.papers if not q.get("tag") or q["tag"] in p["tags"]]
+                if q.get("cat"):
+                    items = [p for p in items if int(q["cat"]) in (p.get("categories") or [])]
+                off = int(q.get("offset", 0))
+                return 200, {"total": len(items), "items": items[off: off + int(q.get("limit", 60))]}, {}
+            if path == "/api/categories":
+                return 200, state.categories, {}
+            m = re.fullmatch(r"/api/papers/(\d+)", path)
+            if m and method == "GET":
+                pp = next((x for x in state.papers if x["id"] == int(m.group(1))), None)
+                if pp is None:
+                    return 404, {"detail": "找不到這篇論文"}, {}
+                ex = state.extra.get(pp["id"], {})
+                return 200, dict(pp, **ex, n_ann=len(state.annotations.get(pp["id"], []))), {}
+            m = re.fullmatch(r"/api/papers/(\d+)/annotations", path)
+            if m and method == "GET":
+                return 200, [a for a in state.annotations.get(int(m.group(1)), [])
+                             if not a["private"]], {}
+            m = re.fullmatch(r"/api/files/(\d+)/content", path)
+            if m and method == "GET":
+                b = state.files.get(int(m.group(1)))
+                if b is None:
+                    return 404, {"detail": "沒有檔案"}, {}
+                return 200, b, {"Content-Type": "application/pdf"}
             return 404, {"detail": "Not Found"}, {}
 
         def _do(self, method: str) -> None:
