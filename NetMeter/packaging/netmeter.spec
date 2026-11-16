@@ -7,7 +7,9 @@ from pathlib import Path
 root = Path(SPECPATH).parent
 ver = re.search(r'__version__ = "([^"]+)"', (root / "netmeter" / "__init__.py").read_text(encoding="utf-8")).group(1)
 
+assets = root / "packaging" / "assets"          # 1.0.6：紅眼睛圖示
 a = Analysis([str(root / "packaging" / "netmeter_main.py")], pathex=[str(root)], hiddenimports=["psutil"],
+             datas=[(str(assets / "icon.png"), "netmeter_assets")],
              excludes=["numpy", "PyQt5", "PyQt6", "PySide6", "matplotlib", "pandas", "scipy", "PIL", "pytest"])
 pyz = PYZ(a.pure)
 if sys.platform == "win32":
@@ -24,11 +26,13 @@ if sys.platform == "win32":
             StringStruct("ProductVersion", ver),
             StringStruct("LegalCopyright", "CCU Quantum Engineering Lab")])]),
             VarFileInfo([VarStruct("Translation", [0x0404, 1200])])])
-    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="QELNetMeter", console=False, upx=False, version=vinfo)
+    exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="QELNetMeter", console=False, upx=False, version=vinfo,
+              icon=str(assets / "icon.ico"))
     coll = COLLECT(exe, a.binaries, a.datas, name="QELNetMeter", upx=False)
 else:
     exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="QELNetMeter", console=False, upx=False)
     coll = COLLECT(exe, a.binaries, a.datas, name="QELNetMeter", upx=False)
     app = BUNDLE(coll, name="QELNetMeter.app", bundle_identifier="tw.qel.netmeter", version=ver,
+                 icon=str(assets / "icon.icns"),
                  info_plist={"CFBundleDisplayName": "QEL 流量監看", "CFBundleShortVersionString": ver,
                              "LSUIElement": True, "NSHighResolutionCapable": True})

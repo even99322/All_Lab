@@ -6,6 +6,8 @@
     {"cmd": "reload"}  → 重新讀設定
 同一台電腦只會有一個背景程式（控制埠被占用 = 已經有一個在跑）。
 1.0.4：分內網 / 外網 / VPN（flows.py）；Windows 在實驗室網段時把 Hub 的 https 網址指到 NAS（hosts.py）。
+1.0.6：回報預設閘道（gateway.py）讓 Hub 分辨在哪一間實驗室；不在實驗室網段時每 10 分鐘回報一次（拿 Hub 的網段設定）；
+       Hub 指定這台當另一間實驗室的代讀電腦 → 每次回報前讀那邊的華碩路由器（asus.py）。
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ import time
 import urllib.request
 from typing import Any, Callable, Dict, Optional
 
-from . import __version__, config, hosts, hub
+from . import __version__, config, gateway, hosts, hub
 from .meter import Meter
 
 log = logging.getLogger("netmeter")
@@ -56,9 +58,35 @@ class Agent:
         self._was_on = False
         self.lan_https: Dict[str, str] = dict(config.read_extra("lan_https.json"))     # Hub 給的 https 網域（上次的）
         self.hosts_state = ""
+        # 1.0.6：Hub 給的網段（各實驗室）與各實驗室路由器的 MAC；代讀路由器
+        hc = config.read_extra("hub_cfg.json")
+        self.hub_subnets = [str(x) for x in hc.get("subnets") or []]
+        self.meter.allowed_gw = set(hc.get("gateways") or [])
+        self._apply_nets()
+        self.collect: Dict[str, Any] = {}
+        self.site_router: Optional[Dict[str, Any]] = None
+        self.gw: Dict[str, str] = {}
 
     # ---- 一輪 ----
+    def _apply_nets(self) -> None:
+        import ipaddress
+
+        nets = config.networks(self.cfg)
+        for x in self.hub_subnets:
+            try:
+                n = ipaddress.ip_network(x, strict=False)
+            except ValueError:
+                continue
+            if n not in nets:
+                nets.append(n)
+        self.meter.nets = nets
+
     def tick(self) -> Dict[str, Any]:
+        try:
+            self.gw = gateway.detect(self.meter.ips)
+            self.meter.gw_mac = self.gw.get("mac", "")
+        except Exception:  # noqa: BLE001
+            pass
         with self.lock:
             r = self.meter.step()
             if self.meter.dirty and time.time() - self._last_save > 120:
@@ -69,16 +97,59 @@ class Agent:
     def payload(self) -> Dict[str, Any]:
         with self.lock:
             m = self.meter
-            return {"id": m.id, **self.info, "ip": ", ".join(m.ips), "subnet": ", ".join(self.cfg["subnets"]),
-                    "ifaces": m.on_ifaces, "on_net": bool(m.on_ifaces), "rate": dict(m.rate), "days": m.recent(8)}
+            p = {"id": m.id, **self.info, "ip": ", ".join(m.ips), "subnet": ", ".join(self.cfg["subnets"]),
+                 "ifaces": m.on_ifaces, "on_net": bool(m.on_ifaces), "rate": dict(m.rate), "days": m.recent(8)}
+        if self.gw:
+            p["gw"] = dict(self.gw)
+        if self.site_router:
+            p["site_router"] = self.site_router
+        return p
 
-    def send(self) -> bool:
-        if not self.meter.on_ifaces:
-            return False                                   # 不在實驗室網段：不送（也送不到）
+    def _read_site_router(self) -> None:
+        """1.0.6：Hub 指定這台代讀另一間實驗室的路由器。"""
+        c = self.collect
+        if not c:
+            self.site_router = None
+            return
+        from . import asus
+
         try:
+            r = asus.Asus(c["host"], c.get("user") or "admin", c.get("password") or "", int(c.get("port") or 0),
+                          bool(c.get("ssl"))).read()
+            self.site_router = dict(r, site=c.get("site"), t=time.time())
+        except Exception as e:  # noqa: BLE001
+            self.site_router = {"site": c.get("site"), "ok": False, "error": str(e)[:300], "t": time.time()}
+
+    def _apply_hub(self, resp: Any) -> None:
+        if not isinstance(resp, dict):
+            return
+        changed = False
+        if isinstance(resp.get("subnets"), list):
+            subs = [str(x)[:43] for x in resp["subnets"]][:16]
+            if subs != self.hub_subnets:
+                self.hub_subnets = subs
+                self._apply_nets()
+                changed = True
+        if isinstance(resp.get("gateways"), list):
+            gws = {gateway.norm_mac(str(x)) for x in resp["gateways"]} - {""}
+            if gws != self.meter.allowed_gw:
+                self.meter.allowed_gw = gws
+                changed = True
+        if changed:
+            config.write_extra("hub_cfg.json", {"subnets": self.hub_subnets, "gateways": sorted(self.meter.allowed_gw)})
+        c = resp.get("collect")
+        self.collect = dict(c) if isinstance(c, dict) and c.get("host") else {}
+
+    def send(self, heartbeat: bool = False) -> bool:
+        if not self.meter.on_ifaces and not heartbeat:
+            return False                                   # 不在實驗室網段：只有每 10 分鐘的 heartbeat
+        try:
+            if self.collect:
+                self._read_site_router()
             used, resp = self.reporter(self.cfg["hubs"], self.payload())
             self.last_report = {"time": time.time(), "hub": used, "ok": True}
             self.last_error = ""
+            self._apply_hub(resp)
             self._learn_https(used, resp)
             return True
         except Exception as e:  # noqa: BLE001
@@ -108,7 +179,13 @@ class Agent:
         if sys.platform != "win32" or not self.cfg.get("lan_hosts", True):
             return
         d = self.lan_https
-        on = (not force_off and bool(self.meter.on_ifaces) and bool(d.get("domain"))
+        # 1.0.6：還要「最近一次是用內網位址回報成功的」——另一間實驗室的內網也可能是 192.168.50.x，不能把網址指過去
+        import urllib.parse
+
+        lr = self.last_report or {}
+        via_lan = (bool(lr.get("ok")) and time.time() - float(lr.get("time") or 0) < 900
+                   and (urllib.parse.urlsplit(lr.get("hub") or "").hostname or "") == d.get("ip"))
+        on = (not force_off and bool(self.meter.on_ifaces) and bool(d.get("domain")) and via_lan
               and hosts.valid(d.get("ip", ""), d.get("domain", ""), self.meter.nets))
         want = f"{d.get('ip')} {d.get('domain')}" if on else "-"
         if want == self.hosts_state:
@@ -129,6 +206,10 @@ class Agent:
                     "ifaces": m.on_ifaces, "ips": m.ips, "rate": dict(m.rate),
                     "today": dict(m.days.get(today_str(m.now()), {"up": 0, "down": 0})), "month": m.month(),
                     "days": m.recent(14), "hubs": self.cfg["hubs"], "subnets": self.cfg["subnets"],
+                    "gw": dict(self.gw), "collect": ({"site": self.collect.get("site"), "host": self.collect.get("host"),
+                                                     "ok": (self.site_router or {}).get("ok"),
+                                                     "error": (self.site_router or {}).get("error", "")}
+                                                    if self.collect else None),
                     "split": {"kind": getattr(m.flows, "kind", ""), "ok": bool(getattr(m.flows, "ok", False)),
                               "error": getattr(m.flows, "error", ""), "rate": m.rate_split},
                     "lan_https": dict(self.lan_https, hosts=self.hosts_state not in ("", "-")),
@@ -148,6 +229,7 @@ class Agent:
                 log.info("分內網 / 外網 / VPN：%s", f.kind)
             self.meter.flows = f
         next_report = 0.0
+        next_hb = 0.0
         try:
             while not self.stop.is_set():
                 try:
@@ -159,6 +241,9 @@ class Agent:
                 if r.get("on") and (now >= next_report or not self._was_on):
                     self.send()
                     next_report = now + float(self.cfg.get("report_s") or 60)
+                elif not r.get("on") and now >= next_hb:           # 1.0.6：不在實驗室網段 → 每 10 分鐘問一次 Hub
+                    self.send(heartbeat=True)
+                    next_hb = now + 600
                 self._was_on = bool(r.get("on"))
                 try:
                     self.sync_hosts()

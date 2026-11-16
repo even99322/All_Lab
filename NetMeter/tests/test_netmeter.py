@@ -382,3 +382,129 @@ def test_agent_learns_https_domain_and_syncs_hosts(tmp_path, monkeypatch):
     assert hosts.BEGIN in hp.read_text()
     ag.sync_hosts(force_off=True)                                                              # 程式結束
     assert hp.read_text() == "127.0.0.1 localhost\n"
+
+
+# ---- 1.0.6：閘道、另一間實驗室、華碩代讀 ----
+def test_gateway_parsers():
+    from netmeter import gateway
+
+    rp = """===========================================================================
+IPv4 Route Table
+===========================================================================
+Active Routes:
+Network Destination        Netmask          Gateway       Interface  Metric
+          0.0.0.0          0.0.0.0      10.0.0.1        10.0.0.5     50
+          0.0.0.0          0.0.0.0     192.168.50.1   192.168.50.31     25
+"""
+    assert gateway.parse_route_print(rp, ["192.168.50.31"]) == "192.168.50.1"
+    assert gateway.parse_route_print(rp, []) == "192.168.50.1"            # metric 小的
+    arp = "Interface: 192.168.50.31 --- 0x5\n  Internet Address      Physical Address      Type\n  192.168.50.1          a0-36-bc-1a-2b-3c     dynamic\n"
+    assert gateway.parse_arp(arp, "192.168.50.1") == "A0:36:BC:1A:2B:3C"
+    assert gateway.parse_arp("? (192.168.50.1) at a0:36:bc:1a:2b:3c on en0 ifscope [ethernet]", "192.168.50.1") == "A0:36:BC:1A:2B:3C"
+    assert gateway.parse_arp("? (192.168.50.10) at 0:1:2:3:4:5 on en0", "192.168.50.1") == ""
+
+
+def test_meter_ignores_unknown_gateway(tmp_path):
+    s = Seq()
+    m = Meter(tmp_path / "state.json", NETS, s)
+    m.allowed_gw = {"AA:AA:AA:AA:AA:AA"}
+    m.gw_mac = "BB:BB:BB:BB:BB:BB"                       # 家裡也是 192.168.50.x，但路由器不是實驗室的
+    m.step()
+    s.add("Ethernet", 1000, 1000)
+    assert m.step()["on"] is False and m.on_ifaces == []
+    m.gw_mac = "AA:AA:AA:AA:AA:AA"
+    m.step()
+    s.add("Ethernet", 1000, 1000)
+    assert m.step()["down"] == 1000
+
+
+def test_asus_parsers_and_login():
+    from netmeter import asus
+
+    assert asus.parse_netdev({"netdev": {"INTERNET_rx": "0x00000000ab", "INTERNET_tx": "0x10"}}) == {"rx": 171, "tx": 16}
+    assert asus.parse_netdev({"netdev": {"WAN_rx": "100", "WAN_tx": "5"}}) == {"rx": 100, "tx": 5}
+    cl = asus.parse_clients({"get_clientlist": {"maclist": ["aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66"],
+                                                "aa:bb:cc:dd:ee:ff": {"ip": "192.168.50.20", "nickName": "PC", "isWL": "2", "isOnline": "1"},
+                                                "11:22:33:44:55:66": {"ip": "192.168.50.30", "isOnline": "0"}}})
+    assert cl == [{"mac": "AA:BB:CC:DD:EE:FF", "ip": "192.168.50.20", "name": "PC", "type": "5GHz"}]
+    assert asus._loose_json('{"a": 1,}') == {"a": 1}
+
+    class Resp:
+        def __init__(self, b):
+            self.b = b
+
+        def read(self):
+            return self.b.encode()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    calls = []
+
+    class Op:
+        def open(self, req, timeout=0):
+            calls.append((req.full_url, req.headers.get("Cookie"), req.data))
+            if req.full_url.endswith("/login.cgi"):
+                return Resp('{"asus_token": "TOK"}')
+            if "netdev" in req.full_url:
+                return Resp('{"netdev": {"INTERNET_rx": "0x400", "INTERNET_tx": "0x200",}}')
+            if "clientlist" in req.full_url:
+                return Resp('{"get_clientlist": {"maclist": []}}')
+            return Resp('{"productid": "RT-AX88U"}')
+    r = asus.Asus("192.168.1.1", "admin", "pw", opener=Op()).read()
+    assert r == {"ok": True, "rx": 1024, "tx": 512, "clients": [], "model": "RT-AX88U"}
+    assert b"login_authorization=YWRtaW46cHc%3D" == calls[0][2] and calls[1][1] == "asus_token=TOK"
+    with pytest.raises(asus.AsusError):
+        asus.Asus("bad host!", "a", "b")
+
+
+def test_agent_hub_cfg_collector_and_hosts_only_via_lan(tmp_path, monkeypatch):
+    from netmeter import asus, hosts
+
+    monkeypatch.setenv("QELNETMETER_HOME", str(tmp_path / "home"))
+    hp = tmp_path / "hosts"
+    hp.write_text("127.0.0.1 localhost\n")
+    monkeypatch.setattr(hosts, "hosts_path", lambda: hp)
+    monkeypatch.setattr(agent.sys, "platform", "win32")
+    monkeypatch.setattr(agent.gateway, "detect", lambda prefer=None: {"ip": "192.168.50.1", "mac": "AA:AA:AA:AA:AA:AA"})
+    class FakeAsus:                                       # 真的 Asus 在假裝成 Windows 時建不出 opener
+        def __init__(self, host, user, password, port=0, use_ssl=False):
+            assert (host, user, password) == ("10.20.0.1", "admin", "pw")
+
+        def read(self):
+            return {"ok": True, "rx": 5, "tx": 6, "clients": [], "model": "X"}
+    monkeypatch.setattr(asus, "Asus", FakeAsus)
+    sent = []
+    used = ["http://192.168.50.2:8765"]
+    resp = {"ok": True, "subnets": ["192.168.50.0/24", "10.20.0.0/16"], "gateways": ["aa:aa:aa:aa:aa:aa"],
+            "lan_https": {"domain": "ccu-nas.tailabc12.ts.net", "url": "https://ccu-nas.tailabc12.ts.net:8443"},
+            "collect": {"site": "lab2", "kind": "asus", "host": "10.20.0.1", "user": "admin", "password": "pw"}}
+
+    def rep(hubs, p):
+        sent.append(p)
+        return used[0], resp
+    s = Seq()
+    cfg = dict(config.DEFAULTS, subnets=["192.168.50.0/24"], hubs=["http://192.168.50.2:8765", "http://100.64.0.2:8765"])
+    ag = agent.Agent(cfg=cfg, sampler=s, reporter=rep)
+    ag.tick()
+    assert ag.send() and sent[0]["gw"]["mac"] == "AA:AA:AA:AA:AA:AA"
+    assert any(str(n) == "10.20.0.0/16" for n in ag.meter.nets) and ag.meter.allowed_gw == {"AA:AA:AA:AA:AA:AA"}
+    assert ag.collect["host"] == "10.20.0.1"
+    assert "ccu-nas.tailabc12.ts.net" in hp.read_text()
+    ag.send()
+    assert sent[1]["site_router"]["rx"] == 5 and sent[1]["site_router"]["site"] == "lab2"
+    assert ag.status()["collect"]["ok"] is True
+    assert agent.Agent(cfg=cfg, sampler=s).meter.allowed_gw == {"AA:AA:AA:AA:AA:AA"}         # 記住了
+    # 改經 VPN 回報（另一間實驗室也是 192.168.50.x）→ 不把 Hub 網址指到 192.168.50.2
+    used[0] = "http://100.64.0.2:8765"
+    ag.send()
+    ag.sync_hosts()
+    assert hosts.BEGIN not in hp.read_text()
+    # 不在實驗室網段：只有 heartbeat 才送
+    s.ifs["Ethernet"]["ips"] = ["172.16.0.9"]
+    ag.tick()
+    n = len(sent)
+    assert not ag.send() and ag.send(heartbeat=True) and len(sent) == n + 1 and sent[-1]["on_net"] is False

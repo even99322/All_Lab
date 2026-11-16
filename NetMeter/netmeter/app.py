@@ -1,4 +1,4 @@
-"""程式入口。
+r"""程式入口。
 
 1.0.3 起 Windows 安裝程式要管理員（裝在 Program Files），建立系統排程：開機就在背景執行（SYSTEM，不用登入）、
 當掉自動重新啟動；紀錄放 %ProgramData%\QELNetMeter（舊版在使用者底下的紀錄會自動搬過來）。

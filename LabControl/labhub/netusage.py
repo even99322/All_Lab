@@ -102,7 +102,7 @@ SOAP = """<?xml version="1.0" encoding="utf-8" standalone="no"?>
   xmlns:SOAPSDK3="http://schemas.xmlsoap.org/soap/encoding/"
   xmlns:SOAP-ENV="http://schemas.xmlsoap.org/soap/envelope/">
 <SOAP-ENV:Header>
-<SessionID>A7D88AE69687E58D9A00</SessionID>
+<SessionID>{session}</SessionID>
 </SOAP-ENV:Header>
 <SOAP-ENV:Body>
 <M1:{method} xmlns:M1="urn:NETGEAR-ROUTER:service:{service}">
@@ -135,12 +135,14 @@ def parse_soap(text: str) -> Tuple[str, Dict[str, str]]:
     return code, out
 
 
-def _dev(ip: str, name: str, mac: str, ctype: str = "", link: str = "", signal: str = "", ssid: str = "") -> Dict[str, Any]:
+def _dev(ip: str, name: str, mac: str, ctype: str = "", link: str = "", signal: str = "", ssid: str = "",
+         allow: str = "") -> Dict[str, Any]:
     name = (name or "").strip()
     if name.lower() in ("<unknown>", "unknown", "&lt;unknown&gt;", "--"):
         name = ""
     return {"ip": _s(ip, 64), "name": _s(name, 80), "mac": _s((mac or "").upper(), 32), "type": _s(ctype, 32),
-            "link": _s(link, 16), "signal": _s(signal, 8), "ssid": _s(ssid, 64)}
+            "link": _s(link, 16), "signal": _s(signal, 8), "ssid": _s(ssid, 64),
+            "allow": "Block" if str(allow).strip().lower() == "block" else ("Allow" if allow else "")}
 
 
 def parse_attached2(text: str) -> Optional[List[Dict[str, Any]]]:
@@ -159,7 +161,8 @@ def parse_attached2(text: str) -> Optional[List[Dict[str, Any]]]:
             continue
         f = {c.tag.split("}", 1)[-1]: (c.text or "").strip() for c in d}
         out.append(_dev(f.get("IP", ""), f.get("Name", ""), f.get("MAC", ""), f.get("ConnectionType", ""),
-                        f.get("Linkspeed", ""), f.get("SignalStrength", ""), f.get("SSID", "")))
+                        f.get("Linkspeed", ""), f.get("SignalStrength", ""), f.get("SSID", ""),
+                        f.get("AllowOrBlock", "")))
     return out
 
 
@@ -177,7 +180,7 @@ def parse_attached1(s: str) -> List[Dict[str, Any]]:
         if len(f) < 4:
             continue
         out.append(_dev(f[1], f[2], f[3], f[4] if len(f) > 4 else "", f[5] if len(f) > 5 else "",
-                        f[6] if len(f) > 6 else ""))
+                        f[6] if len(f) > 6 else "", "", f[7] if len(f) > 7 else ""))
     return out
 
 
@@ -192,6 +195,9 @@ def meter_value(text: str) -> Optional[float]:
         return float(t)
     except ValueError:
         return None
+
+
+SESSION_ID = "A7D88AE69687E58D9A00"
 
 
 class NetgearError(RuntimeError):
@@ -231,7 +237,7 @@ class NetgearClient:
     def _post(self, port: int, use_ssl: bool, service: str, method: str, params: Dict[str, str],
               auth: bool = True) -> Tuple[int, Dict[str, str], str]:
         body = "".join(f"<{k}>{_xml_escape(v)}</{k}>\n" for k, v in params.items())
-        msg = SOAP.format(method=method, service=service, params=body).encode("utf-8")
+        msg = SOAP.format(method=method, service=service, params=body, session=SESSION_ID).encode("utf-8")
         headers = {"SOAPAction": f"urn:NETGEAR-ROUTER:service:{service}#{method}", "Cache-Control": "no-cache",
                    "User-Agent": "QEL-Hub", "Content-Type": "multipart/form-data"}
         if auth and self.cookie:
@@ -281,6 +287,24 @@ class NetgearClient:
                 raise NetgearError(f"{method} 失敗（HTTP {st}，代碼 {code or '—'}）")
             return fields, text
         return {}, ""
+
+    # ---- 1.0.43：封鎖 / 解除封鎖（路由器的「存取控制」）----
+    def block_enabled(self) -> bool:
+        f = self.call("DeviceConfig:1", "GetBlockDeviceEnableStatus")
+        return str(f.get("NewBlockDeviceEnable") or "0").strip() == "1"
+
+    def _config(self, method: str, params: Dict[str, str]) -> None:
+        self.call("DeviceConfig:1", "ConfigurationStarted", {"NewSessionID": SESSION_ID})
+        try:
+            self.call("DeviceConfig:1", method, params)
+        finally:
+            self.call("DeviceConfig:1", "ConfigurationFinished", {"NewStatus": "ChangesApplied"})
+
+    def set_block_enabled(self, on: bool) -> None:
+        self._config("SetBlockDeviceEnable", {"NewBlockDeviceEnable": "1" if on else "0"})
+
+    def set_block(self, mac: str, block: bool) -> None:
+        self._config("SetBlockDeviceByMAC", {"NewAllowOrBlock": "Block" if block else "Allow", "NewMACAddress": mac.upper()})
 
     def attached_devices(self) -> List[Dict[str, Any]]:
         """1.0.40：路由器上連著的裝置（有線 / 無線 / 訪客）——跟路由器管理頁「附加裝置」同一份。"""
@@ -557,6 +581,11 @@ class NetUsage:
         self.rdev: Dict[str, Dict[str, Any]] = {k: v for k, v in (d.get("router_devices") or {}).items()
                                                 if isinstance(v, dict)}
         self._rdev_online: set = set()
+        # 1.0.43：改名（aliases：mac:<MAC> / ts:<id> → 名稱）、另一間實驗室（sites）、各實驗室路由器的 MAC（gateways）
+        self.extra: Dict[str, Any] = dict(d.get("extra") or {})
+        for k in ("aliases", "sites", "gateways"):
+            if not isinstance(self.extra.get(k), dict):
+                self.extra[k] = {}
         self._acct_last: Optional[Dict[str, Any]] = None
         # 1.0.41：NAS 上誰在用網路（記憶體裡留 1 小時）
         import collections
@@ -607,7 +636,7 @@ class NetUsage:
             try:
                 self._write(self.file, {"cfg": self.cfg, "router": self.router, "nas": self.nas, "devices": self.pcs,
                                         "tailscale": self.ts, "github": self.github, "nasdir": self.nasdir,
-                                        "router_devices": self.rdev})
+                                        "router_devices": self.rdev, "extra": self.extra})
                 self._dirty = False
                 self._last_save = self.now()
             except OSError as e:
@@ -615,6 +644,21 @@ class NetUsage:
 
     def _password(self) -> str:
         return str(self._load(self.secret_file).get("router_password") or "")
+
+    def secret_set(self, key: str, value: Any) -> None:
+        """密碼類只存在 data/netusage_secret.json（合併，不會蓋掉別的）。"""
+        d = self._load(self.secret_file)
+        if value in (None, ""):
+            d.pop(key, None)
+        else:
+            d[key] = value
+        self._write(self.secret_file, d, private=True)
+
+    def secret_get(self, key: str) -> str:
+        return str(self._load(self.secret_file).get(key) or "")
+
+    def alias(self, key: str, default: str = "") -> str:
+        return str(self.extra["aliases"].get(key) or default)
 
     @property
     def tz(self):
@@ -637,7 +681,7 @@ class NetUsage:
                 except (TypeError, ValueError):
                     rc["port"] = 0
                 if r.get("password"):
-                    self._write(self.secret_file, {"router_password": _s(r["password"], 200)}, private=True)
+                    self.secret_set("router_password", _s(r["password"], 200))
                 self.status["router"] = {}
             n = body.get("nas") if isinstance(body.get("nas"), dict) else None
             if n is not None:
@@ -716,7 +760,9 @@ class NetUsage:
                 watched = f"流量監看：{pc_ip[r['ip']]}"
             elif (r.get("name") or "").lower() in pc_name:
                 watched = f"流量監看：{pc_name[r['name'].lower()]}"
-            out.append(dict(r, key=key, online=key in self._rdev_online, watched=watched))
+            ak = f"mac:{r.get('mac')}" if r.get("mac") else f"ip:{r.get('ip')}"
+            out.append(dict(r, key=key, online=key in self._rdev_online, watched=watched, alias_key=ak,
+                            router_name=r.get("name") or "", name=self.alias(ak, r.get("name") or "")))
         out.sort(key=lambda r: (not r["online"], bool(r["watched"]), -(float(r.get("last") or 0))))
         return {"devices": out, "status": self.status.get("router_devices") or {}}
 
@@ -1202,8 +1248,11 @@ class NetUsage:
                 dev["ifaces"] = [_s(x, 40) for x in ifs][:8]
             _trim(dev["days"], today.isoformat())
             self._dirty = True
+        from . import netsites                          # 1.0.43：所在實驗室、另一間實驗室的路由器代讀
+
+        extra = netsites.on_report(self, did, b, ip)
         self.save()
-        return {"ok": True, "time": now, "today": today.isoformat()}
+        return {"ok": True, "time": now, "today": today.isoformat(), **extra}
 
     def set_label(self, host: str, label: str) -> None:
         with self.lock:
@@ -1297,7 +1346,8 @@ class NetUsage:
             if not (r.get("online") or m["up"] or m["down"]):
                 continue
             pext = {k: int(v.get("wan", 0)) + int(v.get("relay", 0)) for k, v in (r.get("paths") or {}).items()}
-            peers.append({"id": pid, "name": r.get("name", pid), "os": r.get("os", ""), "ip": r.get("ip", ""),
+            peers.append({"id": pid, "name": self.alias(f"ts:{pid}", r.get("name", pid)), "os": r.get("os", ""),
+                          "ip": r.get("ip", ""), "alias_key": f"ts:{pid}",
                           "path": r.get("path", ""), "relay": r.get("relay", ""), "cur": r.get("cur", ""),
                           "online": bool(r.get("online")), "seen": r.get("seen"), "exit_node_user": bool(r.get("exit_node_user")),
                           "days": pick(r.get("days") or {}), "month": m, "ext": pick(pext)})
@@ -1306,8 +1356,13 @@ class NetUsage:
                 "month_ext": month_sum(ext), "peers": peers, "status": self.status.get("tailscale") or {}}
 
     # ---- 1.0.34：即時（每分鐘一格）----
-    def recent_view(self, window: int, chart: str = "") -> Dict[str, Any]:
+    def recent_view(self, window: int, chart: str = "", site: str = "") -> Dict[str, Any]:
         from .netrecent import WINDOWS
+
+        if site and site != "main":                                   # 1.0.43：另一間實驗室
+            from . import netsites
+
+            return netsites.site_recent(self, site, window, chart)
 
         window = min(WINDOWS, key=lambda w: abs(w - int(window or 600)))
         now = self.now()
@@ -1334,9 +1389,11 @@ class NetUsage:
                     out.append({"key": f"nasdir:{k}", "name": name, "kind": "nasdir", "up": w[k]["up"] + adj[k][0],
                                 "down": w[k]["down"] + adj[k][1], "rate": r})
             for did, pc in self.pcs.items():
+                if pc.get("site") and pc.get("site") != "main":           # 1.0.43：在另一間實驗室的電腦
+                    continue
                 online = now - float(pc.get("seen") or 0) < PC_OFFLINE_S
                 src(f"pc:{did}", pc.get("label") or pc.get("host") or did, "pc", online=online,
-                    sub=" ".join(x for x in (pc.get("ip", ""), pc.get("user", "")) if x))
+                    sub=" ".join(x for x in (pc.get("ip", ""), pc.get("user", "")) if x), id=did, ip=pc.get("ip", ""))
                 if any(f"pcx:{did}:{c}" in rc.data for c in SPLIT_CATS):     # 1.0.38：內網 / 外網 / VPN 通道
                     out[-1]["split"] = {c: {k: v for k, v in rc.window(f"pcx:{did}:{c}", window, now=now).items()
                                             if k in ("up", "down")} for c in SPLIT_CATS}
@@ -1348,8 +1405,9 @@ class NetUsage:
             for pid, r in self.ts["peers"].items():
                 if not r.get("online") and f"ts:{pid}" not in rc.data:
                     continue
-                src(f"ts:{pid}", r.get("name", pid), "vpn", online=bool(r.get("online")), path=r.get("path", ""),
-                    sub=" ".join(x for x in (r.get("os", ""), r.get("ip", "")) if x))
+                src(f"ts:{pid}", self.alias(f"ts:{pid}", r.get("name", pid)), "vpn", online=bool(r.get("online")),
+                    path=r.get("path", ""), sub=" ".join(x for x in (r.get("os", ""), r.get("ip", "")) if x),
+                    alias_key=f"ts:{pid}", relay=r.get("relay", ""), os=r.get("os", ""), ip=r.get("ip", ""))
             # 1.0.40：路由器算到、但各裝置（電腦的外網部分、NAS 直接外網）加起來沒有的 → 沒被監看的裝置 / 路由器自己 / 外網口那一側
             r = next((o for o in out if o["key"] == "router"), None)
             if r is not None:
@@ -1393,7 +1451,10 @@ class NetUsage:
         if chart not in keys:
             chart = "router" if "router" in keys else "nas" if "nas" in keys else (out[0]["key"] if out else "")
         ch = rc.window(chart, window, series=True, now=now) if chart else {"series": [], "step": 60}
-        return {"now": now, "window": window, "windows": list(WINDOWS), "sources": out,
+        from . import netsites
+
+        return {"now": now, "window": window, "windows": list(WINDOWS), "sources": out, "site": "main",
+                "sites": netsites.site_list(self), "devices": netsites.lan_devices(self, out, window, now),
                 "chart": {"key": chart, "series": ch.get("series", []), "step": ch.get("step", 60)},
                 "every": {"router": ROUTER_EVERY, "nas": NAS_EVERY, "tailscale": TS_EVERY}}
 
@@ -1472,7 +1533,9 @@ def _report(h: Handler) -> None:
     if not isinstance(b, dict):
         raise HubHTTPError(400, "格式錯誤")
     try:
-        out = store(h.hub).report_device(b, h.ip)
+        from . import netsites
+
+        out = store(h.hub).report_device(b, netsites.real_ip(h))
         tls = getattr(h.hub, "tls", None)          # 1.0.38：流量監看在內網把 https 網址指到 NAS（hosts）
         if tls is not None and getattr(tls, "domain", "") and tls.url("hub"):
             out["lan_https"] = {"domain": tls.domain, "url": tls.url("hub")}
@@ -1490,7 +1553,7 @@ def _recent(h: Handler) -> None:
         window = int(q.get("window") or 600)
     except (TypeError, ValueError):
         window = 600
-    h._json({"ok": True, **store(h.hub).recent_view(window, str(q.get("chart") or ""))})
+    h._json({"ok": True, **store(h.hub).recent_view(window, str(q.get("chart") or ""), str(q.get("site") or ""))})
 
 
 @route("GET", r"/api/netusage", auth="any")
@@ -1566,7 +1629,15 @@ def _nastop(h: Handler) -> None:
         w = int(q.get("window") or 600)
     except ValueError:
         w = 600
-    h._json(store(h.hub).nastop_view(w))
+    v = store(h.hub).nastop_view(w)
+    if v["status"].get("error"):                       # 1.0.43：沒資料 → 問控制代理記帳容器的狀態
+        try:
+            a = h.hub.console.agent.status(timeout=4)
+            v["container"] = a.get("netacct") or {"status": "unknown"}
+            v["agent_version"] = a.get("agent_version")
+        except Exception as e:  # noqa: BLE001
+            v["container"] = {"status": "unknown", "error": f"問不到控制代理：{e}"}
+    h._json(v)
 
 
 @route("GET", r"/network/?", auth="any")

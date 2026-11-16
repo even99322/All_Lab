@@ -37,6 +37,8 @@ log = logging.getLogger(__name__)
 CATS = {
     "measure": {"label": "量測結束", "desc": "量測完成、停止或失敗（Lab Control）"},
     "hfss": {"label": "模擬結束", "desc": "HFSS 自動化工具的 S 參數 / 場型 / GIF / 一鍵全流程做完或失敗"},
+    # 1.0.43：預設開（舊的訂閱沒有這一類也算開）；只送給「那台電腦沒裝流量監看」的那個人，每天最多一次
+    "netmeter": {"label": "流量監看提醒", "desc": "你用來開 Hub 的電腦還沒裝流量監看（每天最多一次）", "default": True},
 }
 MAX_SUBS = 500
 MAX_FAILS = 30                     # 連續失敗這麼多次（例如很久沒開的裝置）→ 自動停用
@@ -204,11 +206,24 @@ class Notifier:
             self.q.put({"sid": sid, "msg": msg})
         return len(targets)
 
+    def notify_user(self, user: str, cat: str, title: str, body: str, url: str = "/", tag: str = "") -> int:
+        """1.0.43：只送給這個帳號自己的裝置。"""
+        now = time.time()
+        with self.lock:
+            targets = [sid for sid, s in self.subs.items() if s.get("user") == user and self._wants(s, cat, "")]
+            self.history.append({"time": now, "cat": cat, "source": user, "title": title, "body": body,
+                                 "to": len(targets)})
+            del self.history[:-50]
+        msg = {"title": title, "body": body, "url": url, "tag": tag or f"{cat}|{user}", "cat": cat, "time": now}
+        for sid in targets:
+            self.q.put({"sid": sid, "msg": msg})
+        return len(targets)
+
     @staticmethod
     def _wants(s: Dict[str, Any], cat: str, source: str) -> bool:
         if not s.get("enabled") or cat in (s.get("denied") or []):
             return False
-        if not (s.get("cats") or {}).get(cat, False):
+        if not (s.get("cats") or {}).get(cat, (CATS.get(cat) or {}).get("default", False)):
             return False
         srcs = [x for x in (s.get("sources") or []) if x.startswith(cat + ":")]
         return not srcs or source in srcs
@@ -304,7 +319,7 @@ _CREATE = threading.Lock()
 
 
 def _allowed(h: Handler) -> Dict[str, bool]:
-    return {"measure": h.check(True) is None, "hfss": True}
+    return {"measure": h.check(True) is None, "hfss": True, "netmeter": True}
 
 
 def _user(h: Handler) -> str:

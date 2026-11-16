@@ -116,7 +116,21 @@ def nav_html(h: Handler, active: str) -> str:
     owner = '<span class="own">站長</span>' if u.get("owner") else ""
     return (STYLE + '<div class="qel-nav" id="nav"><a class="b" href="/portal#/"><img src="/icon.svg" alt="">量子工程平台</a>'
             + "".join(links) + f'<span class="sp"></span><span class="u">{html.escape(str(name))}{owner}'
-            + '<a href="/logout">登出</a></span></div>')
+            + '<a href="/logout">登出</a></span></div>' + (NETMETER_BANNER if u.get("username") else ""))
+
+
+# 1.0.43：用電腦開 Hub、而這台電腦沒有流量監看在回報 → 上方提醒（關掉後 3 天內不再出現）
+NETMETER_BANNER = """<div id="qel-nm" style="display:none;background:#fff4e6;color:#7a3e00;border-bottom:1px solid #ffc078;
+ padding:8px 16px;font:13px/1.5 -apple-system,'Segoe UI','Noto Sans TC','Microsoft JhengHei',sans-serif">
+ <b style="color:#d9480f">👁 這台電腦還沒裝流量監看</b>　實驗室對外網路每天有 100 GB 上限，每台電腦都要裝，才看得到誰在用網路。
+ <a id="qel-nm-a" href="/get" style="font-weight:700;color:#d9480f;margin:0 8px">⬇ 下載安裝</a>
+ <a href="#" id="qel-nm-x" style="color:#7a3e00">稍後再說</a></div>
+<script>(function(){try{var t=+localStorage.getItem('qel.nm.later')||0;if(Date.now()-t<3*864e5)return;}catch(e){}
+fetch('/api/netusage/selfcheck',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(d){
+ if(!d||!d.show)return;var b=document.getElementById('qel-nm');if(!b)return;b.style.display='block';
+ var a=document.getElementById('qel-nm-a');a.textContent='⬇ 下載安裝（'+(d.os==='mac'?'macOS':'Windows，要系統管理員')+'）';
+ document.getElementById('qel-nm-x').onclick=function(e){e.preventDefault();b.style.display='none';
+  try{localStorage.setItem('qel.nm.later',String(Date.now()));}catch(x){}};}).catch(function(){});})();</script>"""
 
 
 def page(h: Handler, file: str, active: str) -> None:

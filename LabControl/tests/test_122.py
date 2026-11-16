@@ -135,7 +135,7 @@ def test_notifier_filters_and_cleanup(tmp_path):
     _, _, _, b2 = _browser_sub()
     s1 = n.subscribe({"subscription": b1}, "alice", "Android Chrome", {"measure": True, "hfss": True})
     s2 = n.subscribe({"subscription": b2, "cats": {"measure": False}}, "bob", "iPhone", {"measure": False, "hfss": True})
-    assert s1["cats"] == {"measure": True, "hfss": True} and s2["denied"] == ["measure"]
+    assert s1["cats"] == {"measure": True, "hfss": True, "netmeter": True} and s2["denied"] == ["measure"]
     assert n.lookup(b1["endpoint"])["id"] == s1["id"]
     # 只收某台電腦的模擬
     n.update(s1["id"], {"sources": ["hfss:lab-pc-a@ming", "bogus"]}, {"measure": True, "hfss": True})
@@ -232,7 +232,7 @@ def test_http_flow(tmp_path, monkeypatch):
         code, page = _call(url + "/notify", cookie=oc)
         assert code == 200 and "這台裝置的通知" in page and "🔔 通知" in page
         info = _call(url + "/api/notify", cookie=oc)[1]
-        assert len(wp.unb64u(info["key"])) == 65 and {c["id"] for c in info["cats"]} == {"measure", "hfss"}
+        assert len(wp.unb64u(info["key"])) == 65 and {c["id"] for c in info["cats"]} == {"measure", "hfss", "netmeter"}
         _, _, _, b = _browser_sub()
         code, r = _call(url + "/api/notify/subscribe", "POST",
                         {"subscription": b, "origin": "https://hub.example:8443", "device": "Android Chrome"}, oc)

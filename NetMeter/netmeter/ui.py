@@ -33,6 +33,16 @@ class StatusWindow:
         self.tk, self.get_status, self.on_uninstall, self.on_reload = tk, get_status, on_uninstall, on_reload
         self.autostart = autostart
         self.root = tk.Tk()
+        try:                                                  # 1.0.6：紅眼睛圖示
+            import sys as _sys
+            from pathlib import Path as _P
+
+            base = _P(getattr(_sys, "_MEIPASS", "")) / "netmeter_assets" if getattr(_sys, "_MEIPASS", None) else \
+                _P(__file__).resolve().parents[1] / "packaging" / "assets"
+            self._icon = tk.PhotoImage(file=str(base / "icon.png")).subsample(8, 8)
+            self.root.iconphoto(True, self._icon)
+        except Exception:  # noqa: BLE001
+            pass
         self.root.title(f"{APP_NAME} {__version__}")
         self.root.resizable(False, False)
         f = ttk.Frame(self.root, padding=14)
@@ -89,6 +99,10 @@ class StatusWindow:
             sp = st.get("split") or {}
             if not sp.get("ok") and sp.get("kind"):
                 self.v_today.set(self.v_today.get() + f"\n（分不出內網 / 外網：{sp.get('error') or '沒有啟動'}）")
+            co = st.get("collect")
+            if co:
+                self.v_report.set(self.v_report.get() + f"\n代讀路由器 {co.get('host')}："
+                                  + ("✔ 正常" if co.get("ok") else f"✖ {co.get('error') or '還沒讀'}"))
             lh = st.get("lan_https") or {}
             if lh.get("hosts"):
                 self.v_report.set(self.v_report.get() + f"\n內網 https：{lh.get('domain')} → {lh.get('ip')}")

@@ -94,6 +94,8 @@ class Meter:
         st = _read(self.file)
         self.id: str = str(st.get("id") or f"nm-{uuid.uuid4().hex[:16]}")
         self.flows = flows
+        self.allowed_gw: set = set()                      # 1.0.6：Hub 給的各實驗室路由器 MAC
+        self.gw_mac = ""
         self.days: Dict[str, Dict[str, int]] = {k: {kk: int(v.get(kk, 0)) for kk in DAY_KEYS
                                                     if kk in ("up", "down") or v.get(kk)}
                                                 for k, v in (st.get("days") or {}).items() if isinstance(v, dict)}
@@ -111,6 +113,10 @@ class Meter:
         cur = {n: {"rx": int(v["rx"]), "tx": int(v["tx"]), "on": on_net(v.get("ips") or [], self.nets),
                    "vpn": on_net(v.get("ips") or [], VPN_NETS)}
                for n, v in (s.get("ifaces") or {}).items()}
+        # 1.0.6：Hub 認得各實驗室路由器的 MAC → 閘道不是其中之一（例如家裡也是 192.168.50.x）就不算在實驗室
+        if self.allowed_gw and self.gw_mac and self.gw_mac not in self.allowed_gw:
+            for v in cur.values():
+                v["on"] = False
         self.on_ifaces = sorted(n for n, v in cur.items() if v["on"])
         self.ips = [ip for n in self.on_ifaces for ip in (s["ifaces"][n].get("ips") or []) if on_net([ip], self.nets)]
         up = down = vup = vdown = 0

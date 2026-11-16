@@ -28,6 +28,7 @@ VersionInfoDescription=QEL 流量監看 安裝程式
 VersionInfoProductName=QEL 流量監看
 VersionInfoProductTextVersion={#AppVersion}
 UninstallDisplayIcon={app}\QELNetMeter.exe
+SetupIconFile=assets\icon.ico
 UninstallDisplayName=QEL 流量監看
 Compression=lzma2/max
 SolidCompression=yes

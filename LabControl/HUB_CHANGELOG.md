@@ -3,6 +3,10 @@
 1.0.36 起 Hub 跟 Lab Control 分開發佈（GitHub 發佈 `hub-v<版本>`）；1.0.35 以前的紀錄在 [CHANGELOG.md](CHANGELOG.md)。
 每一版的說明在 [docs/releases/hub/](docs/releases/hub/)。
 
+## 1.0.43 — 2026-11-16
+
+網路用量改版：上方切換內網連線／VPN 連接、各設備一張表（使用類型、改名、站長可封鎖上網）、其他頁收進分頁；可監看另一間實驗室（華碩路由器，經 VPN 代讀）；提醒沒裝流量監看的電腦。詳見 [docs/releases/hub/v1.0.43.md](docs/releases/hub/v1.0.43.md)。
+
 ## 1.0.42 — 2026-11-14
 
 新增「論文匯出」頁（/gptexport）：依 CCU Magnonics 規範 1.1 把論文庫匯出成 GPT 用的資料夾（CSV、manifest、PDF、筆記），並可逐篇設定主要主題與受控標籤。詳見 [docs/releases/hub/v1.0.42.md](docs/releases/hub/v1.0.42.md)。

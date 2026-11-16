@@ -71,8 +71,8 @@ DEFAULT_MODULES: Dict[str, Dict[str, Any]] = {
     # 1.0.30：流量監看（QELNetMeter_v<版本>_windows.exe / _macos-<晶片>.dmg）：每台裝置開機在背景記錄連到實驗室網段時的流量
     "netmeter": {"name": "流量監看", "kind": "app", "app": "QEL 流量監看", "order": 7,
                  "description": "裝在每台電腦：連到實驗室網段（192.168.50.x）時記錄這台的網路用量，在 Hub「網路用量」頁看",
-                 "note": "Windows：下載 .exe 雙擊一次就裝好並在背景執行（開機自動啟動、不用管理員密碼）；"
-                         "macOS：打開 .dmg，把 App 拖到「應用程式」後打開一次。之後程式會自己更新。"},
+                 "note": "Windows：下載安裝程式執行（要管理員同意一次，才能分內網 / 外網 / VPN），裝好在背景執行、開機自動啟動；"
+                         "macOS：打開 .dmg，把 App 拖到「應用程式」後打開一次。之後程式會自己更新。圖示是紅色眼睛。"},
 }
 #: 下載頁 /get 列出、不用登入就能下載的獨立程式
 APPS = ("labcontrol", "lablogviewer", "hfss", "netmeter")     # 1.0.18：模擬工具；1.0.30：流量監看

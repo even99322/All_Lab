@@ -297,7 +297,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     from . import nastop                          # 1.0.41：NAS 上誰在用網路（網卡、容器、每條連線 → 程式）
 
     top = nastop.Top()
+    # 1.0.43：Hub 更新後（labhub 程式資料夾換了）自己結束，Docker 依 restart 政策用新程式重開
+    code = Path(__file__).resolve().parent / "__init__.py"
+    try:
+        code_mtime = code.stat().st_mtime
+    except OSError:
+        code_mtime = 0.0
     while True:
+        try:
+            if code_mtime and code.stat().st_mtime != code_mtime:
+                log.info("labhub 程式換了：結束，讓 Docker 用新程式重開")
+                return 3
+        except OSError:
+            pass
         try:
             write_status(data, once(acc, data, mode))
         except Exception as e:  # noqa: BLE001

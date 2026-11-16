@@ -169,7 +169,7 @@ function render(unsupported) {
     const list = srcs.filter(s => s.cat === c.id);
     const picked = (sub.sources || []).filter(s => s.startsWith(c.id + ":"));
     const denied = !c.allowed || (sub.denied || []).includes(c.id);
-    const checked = sub.cats && sub.cats[c.id] && !denied;
+    const checked = sub.cats && (c.id in sub.cats ? sub.cats[c.id] : !!c.default) && !denied;
     const pick = list.length ? `<details ${picked.length ? "open" : ""}><summary class="small">${picked.length ?
         `只收 ${picked.length} 台電腦` : "所有電腦"}（點這裡選）</summary><div class="src">` +
       list.map(s => `<label><input type="checkbox" data-src="${esc(s.id)}" ${picked.includes(s.id) ? "checked" : ""}>` +
