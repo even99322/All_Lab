@@ -433,7 +433,7 @@ def test_asus_parsers_and_login():
     cl = asus.parse_clients({"get_clientlist": {"maclist": ["aa:bb:cc:dd:ee:ff", "11:22:33:44:55:66"],
                                                 "aa:bb:cc:dd:ee:ff": {"ip": "192.168.50.20", "nickName": "PC", "isWL": "2", "isOnline": "1"},
                                                 "11:22:33:44:55:66": {"ip": "192.168.50.30", "isOnline": "0"}}})
-    assert cl == [{"mac": "AA:BB:CC:DD:EE:FF", "ip": "192.168.50.20", "name": "PC", "type": "5GHz"}]
+    assert cl == [{"mac": "AA:BB:CC:DD:EE:FF", "ip": "192.168.50.20", "name": "PC", "type": "5GHz", "dtype": "", "vendor": ""}]
     assert asus._loose_json('{"a": 1,}') == {"a": 1}
 
     class Resp:
@@ -494,7 +494,8 @@ def test_agent_hub_cfg_collector_and_hosts_only_via_lan(tmp_path, monkeypatch):
         sent.append(p)
         return used[0], resp
     s = Seq()
-    cfg = dict(config.DEFAULTS, subnets=["192.168.50.0/24"], hubs=["http://192.168.50.2:8765", "http://100.64.0.2:8765"])
+    cfg = dict(config.DEFAULTS, subnets=["192.168.50.0/24"], hubs=["http://192.168.50.2:8765", "http://100.64.0.2:8765"],
+               reg_port=0)
     ag = agent.Agent(cfg=cfg, sampler=s, reporter=rep)
     ag.tick()
     assert ag.send() and sent[0]["gw"]["mac"] == "AA:AA:AA:AA:AA:AA"
@@ -605,3 +606,103 @@ def test_hub_latest_triggers_update_offnet(tmp_path, monkeypatch):
     ag.update_now.clear()
     ag.send(heartbeat=True)
     assert not ag.update_now.is_set()                                    # 已經知道這一版 → 不重複叫
+
+
+# ---- 1.0.9：Traffic Analyzer、家長電腦控制停網、設備登記頁 ----
+def test_parse_js_array_and_plan_block():
+    from netmeter import asus
+
+    js = "var array_statistics = new Array();\narray_statistics = [['AA:BB:CC:DD:EE:01', 10, 20],['YouTube',3,4],];"
+    assert asus.parse_js_array(js) == [["AA:BB:CC:DD:EE:01", 10, 20], ["YouTube", 3, 4]]
+    assert asus.parse_js_array("var array_statistics = new Array();\narray_statistics = new Array();") == []
+    nv = {"MULTIFILTER_ALL": "0", "MULTIFILTER_ENABLE": "1", "MULTIFILTER_MAC": "11:11:11:11:11:11",
+          "MULTIFILTER_DEVICENAME": "kid", "MULTIFILTER_MACFILTER_DAYTIME_V2": "W03E21000700"}
+    p = asus.plan_block(nv, ["aa:aa:aa:aa:aa:aa"])
+    assert p["MULTIFILTER_MAC"] == "11:11:11:11:11:11>AA:AA:AA:AA:AA:AA" and p["MULTIFILTER_ENABLE"] == "1>2"
+    assert p["MULTIFILTER_DEVICENAME"] == "kid>" + asus.TAG and p["MULTIFILTER_MACFILTER_DAYTIME_V2"] == "W03E21000700>"
+    assert p["MULTIFILTER_ALL"] == "1"
+    nv2 = {k: v for k, v in p.items()}
+    assert asus.plan_block(nv2, ["AA:AA:AA:AA:AA:AA"]) is None                         # 已經是這樣
+    q = asus.plan_block(nv2, [])                                                       # 登記了 → 拿掉我們的那條
+    assert q["MULTIFILTER_MAC"] == "11:11:11:11:11:11" and q["MULTIFILTER_ENABLE"] == "1" and "MULTIFILTER_ALL" not in q
+    assert asus.plan_block({"MULTIFILTER_MAC": ""}, []) is None
+
+
+def test_traffic_analyzer_reads():
+    from netmeter import asus
+
+    seen = []
+
+    class A(asus.Asus):
+        def __init__(self):
+            self.token = "x"
+
+        def _req(self, path, data=None):
+            seen.append(path)
+            if "mode=hour" in path:
+                return "array_statistics = [[100, 1000],[50, 500]];"
+            if path.startswith("/getAppTraffic.asp?client=all"):
+                return "array_statistics = [['aa:aa:aa:aa:aa:01', 5, 50],['aa:aa:aa:aa:aa:02', 1, 900]];"
+            if "client=all&mode=detail" in path:
+                return "array_statistics = [['YouTube', 3, 600],['General', 3, 350]];"
+            return "array_statistics = [['Garena', 1, 800],['QUIC', 0, 100]];"
+    ta = A().traffic_analyzer(1_800_000_000.0)
+    assert ta["hourly"] == [[100, 1000], [50, 500]]
+    assert ta["clients"][0][0] == "aa:aa:aa:aa:aa:02"                                 # 用量大的在前
+    assert ta["apps_all"][0][0] == "YouTube" and ta["apps"]["AA:AA:AA:AA:AA:02"][0] == ["Garena", 1, 800]
+    assert any("client=aa%3Aaa%3Aaa%3Aaa%3Aaa%3A01" in p for p in seen)
+
+
+def test_collector_block_and_registration_page():
+    import json as _json
+    import urllib.request
+
+    from netmeter.collector import Collector
+
+    calls = []
+
+    class R:
+        def __init__(self, *a):
+            pass
+
+        def read(self):
+            return {"ok": True, "rx": 1, "tx": 2, "model": "RT", "clients": [{"mac": "AA:AA:AA:AA:AA:09", "ip": "127.0.0.1"}]}
+
+        def traffic_analyzer(self, now):
+            return {"t": now, "hourly": [[1, 2]], "clients": [], "apps_all": [], "apps": {}}
+
+        def set_blocked(self, macs):
+            calls.append(list(macs))
+            return {"ok": True, "changed": True}
+    kicks = []
+    c = Collector(kick=lambda: kicks.append(1), port=0, asus_factory=R)
+    c.configure({"site": "lab328", "host": "192.168.10.1", "user": "u", "password": "p"})
+    try:
+        sr = c.read(1000.0)
+        assert sr["site"] == "lab328" and sr["ta"]["hourly"] == [[1, 2]]
+        assert "ta" not in c.read(1060.0)                                                # 10 分鐘讀一次
+        c.on_hub({"site_block": ["aa:aa:aa:aa:aa:01"], "reg_status": {"AA:AA:AA:AA:AA:09": {"state": "pending", "left": 300}},
+                  "enforce": True})
+        assert calls == [["AA:AA:AA:AA:AA:01"]] and c.payload()["block_state"]["macs"] == ["AA:AA:AA:AA:AA:01"]
+        c.on_hub({"site_block": ["AA:AA:AA:AA:AA:01"]})
+        assert len(calls) == 1                                                           # 沒變 → 不重設
+        port = c.srv.server_address[1]
+        op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        html = op.open(f"http://127.0.0.1:{port}/", timeout=5).read().decode("utf-8")
+        assert "設備登記" in html
+        v = _json.loads(op.open(f"http://127.0.0.1:{port}/api/self", timeout=5).read())
+        assert v["mac"] == "AA:AA:AA:AA:AA:09" and v["reg"]["state"] == "pending"
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/self", method="POST",
+                                     data=_json.dumps({"name": "小明的手機", "role": "guest", "until": "2026-12-31"}).encode())
+        r = _json.loads(op.open(req, timeout=5).read())
+        assert r["ok"] and kicks
+        regs = c.payload()["regs"]
+        assert regs[0]["mac"] == "AA:AA:AA:AA:AA:09" and regs[0]["role"] == "guest"
+        c.on_hub({"regs_ack": [{"id": regs[0]["id"], "ok": True}], "site_block": []})
+        assert "regs" not in c.payload() and calls[-1] == []
+        bad = urllib.request.Request(f"http://127.0.0.1:{port}/api/self", method="POST", data=b'{"name": "", "role": "student"}')
+        with pytest.raises(urllib.error.HTTPError):
+            op.open(bad, timeout=5)
+    finally:
+        c.configure({})
+    assert c.srv is None

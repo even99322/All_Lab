@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>設備登記</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --text:#1d2330; --muted:#6b7385; --line:#dfe3ea; --accent:#2f6fe4; --ok:#1f8f4e; --warn:#c77700; --err:#d23b3b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14171d; --card:#1d2129; --text:#e7eaf0; --muted:#98a1b3; --line:#2e3440; --accent:#5b8ff0; --ok:#3fb871; --warn:#e2a13b; --err:#ef6464; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif; }
+  main { max-width:460px; margin:0 auto; padding:28px 16px 40px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .muted { color:var(--muted); font-size:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-top:16px; }
+  label { display:block; font-weight:600; margin:14px 0 6px; }
+  input[type=text], input[type=date] { width:100%; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); }
+  .roles { display:flex; gap:8px; }
+  .roles label { flex:1; margin:0; font-weight:500; border:1px solid var(--line); border-radius:10px; padding:10px; text-align:center; cursor:pointer; }
+  .roles input { display:none; }
+  .roles label.on { border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, transparent); font-weight:700; }
+  button { width:100%; margin-top:20px; font:inherit; font-weight:700; padding:12px; border:0; border-radius:10px; background:var(--accent); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.5; }
+  .st { font-weight:700; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .err { color:var(--err); }
+  .mac { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>實驗室網路 · 設備登記</h1>
+  <div class="muted">手機、平板、電腦連上實驗室網路後要登記，沒登記的會在寬限時間後被暫停上網。</div>
+  <div class="card" id="box">讀取中…</div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let V = null;
+function stateText(r) {
+  if (!r) return "";
+  if (r.state === "ok") return `<span class="st ok">✔ 已登記</span>${r.role_text ? "（" + esc(r.role_text) + (r.until ? "，到 " + esc(r.until) : "") + "）" : ""}`;
+  if (r.state === "pending") return `<span class="st warn">尚未登記：還有 ${Math.ceil(r.left / 60)} 分鐘</span>`;
+  if (r.state === "due" || r.state === "blocked") return `<span class="st err">尚未登記：已暫停上網</span>`;
+  return `<span class="st warn">尚未登記</span>`;
+}
+function render() {
+  const v = V;
+  if (!v.ok) {
+    $("#box").innerHTML = v.why === "not-lan"
+      ? `<b>請先連上實驗室的 Wi-Fi / 網路</b>，再打開這一頁。<div class="muted" style="margin-top:6px">（目前的位址 ${esc(v.ip)} 不在實驗室網段）</div>`
+      : `<b>路由器上還看不到這台設備</b>：剛連上的話等 2 分鐘再重新整理。<div class="muted" style="margin-top:6px">位址 ${esc(v.ip)}</div>`;
+    return;
+  }
+  const r = v.reg || {};
+  const roles = Object.entries(v.roles || {});
+  $("#box").innerHTML = `<div>${stateText(r)}</div><div class="mac">這台設備：${esc(v.mac)}　${esc(v.ip)}</div>
+    <form id="f">
+      <label for="nm">設備名稱</label><input type="text" id="nm" maxlength="40" placeholder="例：王小明的 iPhone" value="${esc(r.state === "ok" ? v.name : "")}" required>
+      <label>身分</label><div class="roles">${roles.map(([k, t], i) => `<label class="${(r.role || "student") === k ? "on" : ""}"><input type="radio" name="role" value="${k}" ${(r.role || "student") === k ? "checked" : ""}>${esc(t)}</label>`).join("")}</div>
+      <div id="gu" style="display:none"><label for="un">使用到哪一天</label><input type="date" id="un"></div>
+      <button type="submit" id="go">${r.state === "ok" ? "更新登記" : "登記"}</button>
+      <div id="msg" class="muted" style="margin-top:10px"></div>
+    </form>`;
+  const sync = () => { const v2 = document.querySelector("input[name=role]:checked").value;
+    document.querySelectorAll(".roles label").forEach(l => l.classList.toggle("on", l.querySelector("input").checked));
+    $("#gu").style.display = v2 === "guest" ? "" : "none"; };
+  document.querySelectorAll("input[name=role]").forEach(i => i.onchange = sync); sync();
+  const d = new Date(Date.now() + 7 * 864e5); $("#un").value = r.until || d.toISOString().slice(0, 10);
+  $("#f").onsubmit = async e => {
+    e.preventDefault();
+    const role = document.querySelector("input[name=role]:checked").value;
+    $("#go").disabled = true; $("#msg").textContent = "送出中…";
+    try {
+      const res = await fetch("/api/netreg/self", {method: "POST", headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({name: $("#nm").value.trim(), role, until: role === "guest" ? $("#un").value : ""})});
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j.ok === false) throw new Error(j.error || res.statusText);
+      $("#msg").innerHTML = `<span class="ok">✔ 登記好了，謝謝！</span>`; setTimeout(load, 800);
+    } catch (err) { $("#msg").innerHTML = `<span class="err">✖ ${esc(err.message)}</span>`; $("#go").disabled = false; }
+  };
+}
+async function load() {
+  try { V = await (await fetch("/api/netreg/self", {cache: "no-store"})).json(); render(); }
+  catch (e) { $("#box").textContent = "連不到伺服器：" + e.message; }
+}
+load();
+</script>
+</body>
+</html>

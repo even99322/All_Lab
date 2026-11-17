@@ -96,6 +96,28 @@
   .btn.sm { padding:2px 8px; font-size:12px; white-space:nowrap; }
   .btn.blk { color:var(--err); border-color:color-mix(in srgb, var(--err) 40%, var(--line)); background:transparent; }
   tr.blocked td { opacity:.6; }
+  /* 1.0.46：流量分析、設備登記 */
+  .anagrid { display:grid; grid-template-columns:minmax(220px,300px) minmax(180px,1fr) minmax(240px,1.2fr); gap:12px; margin-top:12px; align-items:start; }
+  @media (max-width:900px) { .anagrid { grid-template-columns:1fr; } }
+  #pie { width:100%; max-width:280px; display:block; margin:0 auto; }
+  #pie path { cursor:pointer; stroke:var(--card); stroke-width:1.5; }
+  #pie path.sel { stroke:var(--text); stroke-width:2.5; }
+  .alist { list-style:none; margin:0; padding:0; }
+  .alist li { display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:9px; cursor:pointer; font-size:14px; }
+  .alist li:hover { background:var(--soft); } .alist li.sel { background:var(--accent-soft); font-weight:700; }
+  .alist i { width:12px; height:12px; border-radius:3px; flex:none; }
+  .alist .n { margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums; font-size:13px; }
+  .appbar { display:grid; grid-template-columns:minmax(80px,1fr) 2fr auto; gap:8px; align-items:center; font-size:13px; margin:5px 0; }
+  .appbar .b { height:10px; border-radius:5px; background:var(--soft); overflow:hidden; } .appbar .b i { display:block; height:100%; background:var(--accent); }
+  .rg { display:inline-block; padding:0 7px; border-radius:6px; font-size:11px; font-weight:700; white-space:nowrap; }
+  .rg.ok { color:var(--ok); background:color-mix(in srgb, var(--ok) 14%, transparent); }
+  .rg.wait { color:var(--warn); background:color-mix(in srgb, var(--warn) 18%, transparent); }
+  .rg.bad { color:var(--err); background:color-mix(in srgb, var(--err) 14%, transparent); }
+  .rg.off { color:var(--muted); background:var(--soft); }
+  dialog#regdlg { border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--text); padding:18px; width:min(380px, 92vw); }
+  dialog#regdlg::backdrop { background:rgba(0,0,0,.35); }
+  dialog#regdlg label { display:block; font-size:13px; font-weight:600; margin:10px 0 4px; }
+  dialog#regdlg input[type=text], dialog#regdlg input[type=date] { width:100%; font:inherit; padding:6px 9px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); }
   .sitecard { border:1px solid var(--line); border-radius:12px; padding:10px 12px; background:var(--card); margin-bottom:10px; }
 </style>
 </head>
@@ -119,7 +141,18 @@
     <div id="devs"></div>
   </section>
 
-  <nav class="tabs" id="tabs"><button data-t="daily">📅 每日紀錄</button><button data-t="nas">🗄 NAS 分析</button><button data-t="hub">🚦 Hub 流量與限流</button><button data-t="cfg" class="own">⚙ 設定</button></nav>
+  <nav class="tabs" id="tabs"><button data-t="ana">📊 流量分析</button><button data-t="daily">📅 每日紀錄</button><button data-t="nas">🗄 NAS 分析</button><button data-t="hub">🚦 Hub 流量與限流</button><button data-t="cfg" class="own">⚙ 設定</button></nav>
+
+  <section class="tab" data-tab="ana">
+    <div class="rowsel"><b id="anaName"></b><span>統計類別：</span><span class="seg" id="anaKind" style="margin:0"><button data-k="dev">裝置</button><button data-k="app">Apps</button></span><span class="small muted" id="anaNote"></span></div>
+    <div class="sum" id="anaSum"></div>
+    <div class="card">
+      <div class="rowsel"><span id="anaTitle">最近 24 小時，每小時</span><select id="anaDev"></select></div>
+      <svg class="chart" id="ch-ana" style="height:220px"></svg>
+      <div class="legend"><span><i style="background:var(--down)"></i>下載</span><span><i style="background:var(--up)"></i>上傳</span><span class="muted">滑過看每小時的量</span></div>
+    </div>
+    <div class="anagrid"><div class="card"><svg id="pie" viewBox="-110 -110 220 220"></svg></div><div class="card"><ul class="alist" id="anaList"></ul></div><div class="card" id="anaDetail"></div></div>
+  </section>
 
   <section class="tab" data-tab="daily">
     <div class="rowsel"><select id="range"><option value="14">最近 14 天</option><option value="31" selected>最近 31 天</option><option value="92">最近 3 個月</option><option value="366">最近一年</option></select></div>
@@ -160,8 +193,17 @@
   <section class="tab" data-tab="cfg">
     <div id="cfgbox"></div>
     <div id="sitecfg"></div>
+    <div id="regcfg"></div>
   </section>
 </main>
+<dialog id="regdlg"><form method="dialog" id="regform">
+  <b>登記設備</b><div class="small muted" id="rg-mac"></div>
+  <label for="rg-name">設備名稱</label><input type="text" id="rg-name" maxlength="40" placeholder="例：王小明的 iPhone" required>
+  <label>身分</label><div class="seg" id="rg-role" style="margin:0"></div>
+  <div id="rg-gu" style="display:none"><label for="rg-until">使用到哪一天（訪客）</label><input type="date" id="rg-until"></div>
+  <div class="row" style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end"><button class="btn" value="cancel" formnovalidate>取消</button><button class="btn pri" id="rg-go" value="ok">登記</button></div>
+  <div class="small" id="rg-msg" style="margin-top:6px"></div>
+</form></dialog>
 <script>
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -523,7 +565,7 @@ function minuteChart(series, step, kind) {
 // ---- 1.0.43：上方切換「內網連線 / VPN 連接」，各設備一張表（改名、封鎖）----
 let MODE = "lan", SITE = "main", TAB = "daily", devF = "all", devEditing = false;
 try { MODE = localStorage.getItem("qel-net-mode") || "lan"; SITE = localStorage.getItem("qel-net-site") || "main";
-      TAB = localStorage.getItem("qel-net-tab") || "daily"; devF = localStorage.getItem("qel-net-devf") || "all"; } catch (e) {}
+      TAB = localStorage.getItem("qel-net-tab") || "ana"; devF = localStorage.getItem("qel-net-devf") || "all"; } catch (e) {}
 const owner = () => !!(ME && ME.user && ME.user.owner);
 const save = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
 const sumOf = xs => ({up: xs.reduce((a, x) => a + (x.up || 0), 0), down: xs.reduce((a, x) => a + (x.down || 0), 0),
@@ -534,7 +576,7 @@ function renderMode() {
   $("#mode").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.m === MODE));
   const sites = (RT && RT.sites) || [];
   $("#sitesel").innerHTML = sites.length > 1 && MODE === "lan" ? sites.map(x => `<button data-s="${esc(x.id)}" class="${x.id === SITE ? "on" : ""}">${esc(x.name)}</button>`).join("") : "";
-  $("#sitesel").querySelectorAll("button").forEach(b => b.onclick = () => { SITE = b.dataset.s; save("qel-net-site", SITE); rtSrc = ""; renderMode(); loadRt(true); });
+  $("#sitesel").querySelectorAll("button").forEach(b => b.onclick = () => { SITE = b.dataset.s; save("qel-net-site", SITE); rtSrc = ""; anaDev = ""; anaSel = ""; renderMode(); loadRt(true); if (TAB === "ana") loadAna(); });
 }
 $("#mode").querySelectorAll("button").forEach(b => b.onclick = () => { if (MODE === b.dataset.m) return;
   MODE = b.dataset.m; save("qel-net-mode", MODE); rtSrc = MODE === "vpn" ? "nasdir:vpn" : ""; renderMode(); loadRt(true); });
@@ -626,13 +668,14 @@ function renderDevs(wn) {
     const canBlock = owner() && r.site === "main";
     const kindPill = x => x.kind === "nas" ? `<span class="ty vpn">NAS</span>` : x.kind === "pc" ? `<span class="ty lan">監看中</span>` : `<span class="ty wan">⚠ 沒監看</span>`;
     box.innerHTML = !list.length ? `<div class="empty">${all.length ? "沒有符合的設備" : "還沒有設備：要先在「設定」填好路由器（讀「附加裝置」），或在電腦裝流量監看"}</div>` :
-      `<div class="wrap" data-k="devs"><table><thead><tr><th>設備</th><th class="hide-sm">連線</th><th>監看</th><th class="n">${esc(wn)}合計</th><th class="n hide-sm">↓</th><th class="n hide-sm">↑</th><th class="n">目前</th><th title="流量監看 1.0.4 起：內網（實驗室網段內）／外網（經路由器出去）／VPN（Tailscale 加密封包；其中經外網）">使用類型</th>${canBlock ? "<th></th>" : ""}</tr></thead><tbody>` +
+      `<div class="wrap" data-k="devs"><table><thead><tr><th>設備</th><th class="hide-sm">連線</th><th>監看</th><th class="n">${esc(wn)}合計</th><th class="n hide-sm">↓</th><th class="n hide-sm">↑</th><th class="n">目前</th><th title="流量監看 1.0.4 起：內網（實驗室網段內）／外網（經路由器出去）／VPN（Tailscale 加密封包；其中經外網）">使用類型</th><th>登記</th>${canBlock ? "<th></th>" : ""}</tr></thead><tbody>` +
       list.map(x => { const has = x.up != null;
         return `<tr class="${x.source ? "pick" : ""}${x.online && !x.watched ? " unw" : ""}${x.allow === "Block" ? " blocked" : ""}${x.source && x.source === r.chart.key ? " sel" : ""}" data-key="${esc(x.source || "")}">${nameCell(x)}
         <td class="small hide-sm">${esc(x.conn || "")}</td><td>${kindPill(x)}${x.allow === "Block" ? ` <span class="ty off" style="color:var(--err)">⛔ 已封鎖</span>` : ""}</td>
         <td class="n">${has ? `<b>${fmt(x.up + x.down)}</b>` : "—"}</td><td class="n hide-sm">${has ? fmt(x.down) : ""}</td><td class="n hide-sm">${has ? fmt(x.up) : ""}</td>
         <td class="n small">${x.rate ? `↓ ${bps(x.rate.down)}<br>↑ ${bps(x.rate.up)}` : "—"}</td>
         <td class="small">${typeCell(x.split, x.kind)}</td>
+        <td class="small">${regCell(x)}</td>
         ${canBlock ? `<td>${x.mac && x.kind !== "nas" ? `<button class="btn sm ${x.allow === "Block" ? "" : "blk"}" data-block="${esc(x.mac)}" data-on="${x.allow === "Block" ? 0 : 1}" data-name="${esc(x.name || x.ip || x.mac)}">${x.allow === "Block" ? "解除封鎖" : "封鎖"}</button>` : ""}</td>` : ""}</tr>`; }).join("") +
       `</tbody></table></div><div class="help">「監看中」= 那台裝了流量監看，數字是它自己回報的（含內網傳檔）；「沒監看」的流量只算在「全網」與「監看不到」。點名稱可以改名（大家都看得到）。
       ${canBlock ? "封鎖用路由器的「存取控制」：被封鎖的設備連不上網路（含內網）。" : ""}點一列看那台的每分鐘圖。</div>`;
@@ -649,6 +692,7 @@ function renderDevs(wn) {
     };
   });
   box.querySelectorAll("[data-block]").forEach(b => b.onclick = () => doBlock(b.dataset.block, b.dataset.on === "1", b.dataset.name));
+  box.querySelectorAll("[data-reg]").forEach(b => b.onclick = () => regDialog(b.dataset.reg, b.dataset.name, RT.site || "main"));
 }
 async function post(path, json) {
   const r = await fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"}, body: JSON.stringify(json)});
@@ -669,6 +713,173 @@ async function doBlock(mac, on, name) {
   }
 }
 
+
+// ---- 1.0.46：設備登記 ----
+const ROLE_T = {student: "學生", teacher: "老師", guest: "訪客"};
+function regCell(x) {
+  const r = x.reg;
+  if (!r) return "";
+  const btn = x.mac ? ` <button class="btn sm" data-reg="${esc(x.mac)}" data-name="${esc(x.name || "")}">${r.state === "ok" ? "改" : "登記"}</button>` : "";
+  if (r.state === "ok") return r.how === "watched" ? `<span class="rg ok">✔ 監看中</span>` :
+    `<span class="rg ok" title="${esc(r.until ? "到 " + r.until : "")}">✔ ${esc(r.role_text || "已備註")}</span>${r.how === "reg" ? btn : ""}`;
+  if (r.state === "pending") return `<span class="rg wait" title="${esc(r.kind_text || "")}">⏳ 未登記 · 剩 ${Math.ceil((r.left || 0) / 60)} 分</span>${btn}`;
+  if (r.state === "due" || r.state === "blocked") return `<span class="rg bad" title="${esc(r.why === "expired" ? "訪客到期" : "寬限時間過了還沒登記")}">⛔ ${r.why === "expired" ? "到期" : "未登記"} · 已停網</span>${btn}`;
+  if (r.state === "exempt") return `<span class="rg off" title="${esc(r.kind_text || "")}">免登記</span>`;
+  return `<span class="rg off" title="${esc((r.kind_text || "") + (r.old ? "（開啟強制登記前就在）" : ""))}">未登記</span>${btn}`;
+}
+function regDialog(mac, name, site) {
+  const dlg = $("#regdlg");
+  $("#rg-mac").textContent = mac + (site && site !== "main" ? `（${site}）` : "");
+  $("#rg-name").value = name && name !== mac && !/^\d+\.\d+\.\d+\.\d+$/.test(name) ? name : "";
+  let role = "student";
+  const paint = () => { $("#rg-role").innerHTML = Object.entries(ROLE_T).map(([k, t]) => `<button type="button" data-r="${k}" class="${k === role ? "on" : ""}">${t}</button>`).join("");
+    $("#rg-role").querySelectorAll("button").forEach(b => b.onclick = () => { role = b.dataset.r; paint(); });
+    $("#rg-gu").style.display = role === "guest" ? "" : "none"; };
+  paint();
+  $("#rg-until").value = new Date(Date.now() + 7 * 864e5).toISOString().slice(0, 10);
+  $("#rg-msg").textContent = "";
+  $("#rg-go").onclick = async e => {
+    e.preventDefault();
+    try { await api("/api/netreg", {method: "POST", json: {mac, site, name: $("#rg-name").value.trim(), role, until: role === "guest" ? $("#rg-until").value : ""}});
+          dlg.close(); loadRt(false); if (TAB === "ana") loadAna(); if (TAB === "cfg") loadReg(); }
+    catch (err) { $("#rg-msg").innerHTML = `<span style="color:var(--err)">✖ ${esc(err.message)}</span>`; }
+  };
+  dlg.showModal();
+}
+let REG = null;
+async function loadReg() {
+  if (!owner()) return;
+  try { REG = await api("/api/netreg"); renderReg(); } catch (e) { $("#regcfg").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+}
+function renderReg() {
+  const R = REG, names = {main: R.main_name || "本實驗室"};
+  for (const [sid, c] of Object.entries(R.collector_pages || {})) names[sid] = c.name;
+  const rows = Object.entries(R.enforce).map(([sid, e]) => { const st = (R.status || {})["netreg_" + sid] || {};
+    return `<tr><td><b>${esc(names[sid] || sid)}</b></td><td><label><input type="checkbox" data-en="${esc(sid)}"${e.on ? " checked" : ""}> 強制登記</label></td>
+      <td>寬限 <input type="number" min="1" max="1440" value="${e.grace}" data-gr="${esc(sid)}" style="width:64px"> 分鐘</td>
+      <td class="small">${e.on ? (e.since ? `${new Date(e.since * 1000).toLocaleString()} 開啟；之前就在的設備不受影響` : "") : "關閉"}
+        ${st.time ? (st.ok === false ? `<br><span style="color:var(--err)">✖ ${esc(st.error || "")}</span>` : `<br>目前停網 ${(st.blocked || []).length} 台`) : ""}</td></tr>`; }).join("");
+  $("#regcfg").innerHTML = `<details open style="margin-top:14px"><summary>設備登記（沒備註的手機 / 電腦）</summary><div style="margin-top:8px">
+    <div class="wrap"><table><tbody>${rows}</tbody></table></div>
+    <div class="row" style="display:flex;gap:8px;margin:8px 0"><button class="btn pri" id="en-save">儲存</button><a class="btn" href="/reg/poster" target="_blank" style="text-decoration:none">🖨 列印登記 QR 碼</a><span class="res" id="en-res"></span></div>
+    <div class="help">新連上的手機 / 平板 / 電腦（路由器回報的類型、名稱或隨機 MAC 判斷；儀器、印表機與認不出的不管）在寬限時間內沒登記就停網：
+      本實驗室用 Netgear 的「存取控制」（要先開），其他實驗室由代讀電腦用華碩的家長電腦控制（只擋上網）。
+      已經在網路用量改過名稱、裝了流量監看的都算已登記。登記頁：本實驗室 ${esc(R.main_url)}；其他實驗室開在代讀電腦（流量監看 1.0.9 以上）。</div>
+    <h3 style="margin:14px 0 6px;font-size:14px">已登記 ${R.regs.length} 台</h3>
+    ${R.regs.length ? `<div class="wrap"><table><thead><tr><th>設備名稱</th><th>MAC</th><th>身分</th><th>到期</th><th>登記</th><th></th></tr></thead><tbody>${R.regs.map(r => `<tr>
+      <td>${esc(r.name)}</td><td class="small">${esc(r.mac)}</td><td>${esc(r.role_text)}</td><td class="small">${esc(r.until || "")}</td>
+      <td class="small">${esc(r.by || "")}　${r.t ? new Date(r.t * 1000).toLocaleDateString() : ""}</td>
+      <td><button class="btn sm del" data-unreg="${esc(r.mac)}">刪除</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">還沒有登記的設備</div>`}
+  </div></details>`;
+  $("#en-save").onclick = async () => {
+    const el = $("#en-res"); el.className = "res"; el.textContent = "儲存中…";
+    try { for (const cb of document.querySelectorAll("[data-en]")) { const sid = cb.dataset.en;
+            const gr = +document.querySelector(`[data-gr="${sid}"]`).value || 15;
+            if (cb.checked && !R.enforce[sid].on && !confirm(`開啟「${names[sid] || sid}」的強制登記？\n從現在起新連上的手機 / 電腦 ${gr} 分鐘內沒登記就會被停網（現在已經在網路上的不受影響）。`)) continue;
+            await api("/api/netreg/enforce", {method: "PUT", json: {site: sid, on: cb.checked, grace: gr}}); }
+          await loadReg(); const e2 = $("#en-res"); e2.className = "res ok"; e2.textContent = "✔ 已儲存"; }
+    catch (e) { el.className = "res bad"; el.textContent = "✖ " + e.message; }
+  };
+  document.querySelectorAll("[data-unreg]").forEach(b => b.onclick = async () => {
+    if (!confirm(`刪除 ${b.dataset.unreg} 的登記？（強制登記開著時，這台之後會被要求重新登記）`)) return;
+    try { await api("/api/netreg/" + encodeURIComponent(b.dataset.unreg), {method: "DELETE"}); loadReg(); } catch (e) { alert(e.message); }
+  });
+}
+
+// ---- 1.0.46：流量分析（像華碩 Traffic Analyzer）----
+let ANA = null, anaKind = "dev", anaSel = "", anaDev = "", anaBusy = false;
+const PIE = ["#e8590c", "#f59f00", "#94d82d", "#20c997", "#339af0", "#845ef7", "#f06595", "#adb5bd"];
+async function loadAna() {
+  if (anaBusy) return; anaBusy = true;
+  try { ANA = await api(`/api/netusage/analysis?site=${encodeURIComponent(SITE)}&dev=${encodeURIComponent(anaDev)}`);
+        if (ANA.sites && !ANA.sites.some(x => x.id === SITE)) SITE = "main"; renderAna(); }
+  catch (e) { $("#anaSum").innerHTML = `<div class="empty">${esc(e.message)}</div>`; }
+  finally { anaBusy = false; }
+}
+function hourChart(svg, rows) {
+  const W = svg.clientWidth || 800, H = svg.clientHeight || 220, padL = 56, padB = 22, padT = 10;
+  const n = rows.length, max = Math.max(1, ...rows.map(r => r.up + r.down));
+  const x = i => padL + (W - padL - 10) * (n > 1 ? i / (n - 1) : 0), y = v => padT + (H - padT - padB) * (1 - v / max);
+  const cd = css("--down"), cu = css("--up"), cl = css("--line"), cm = css("--muted");
+  let g = "";
+  for (let k = 0; k <= 4; k++) { const v = max * k / 4, yy = y(v);
+    g += `<line x1="${padL}" x2="${W}" y1="${yy}" y2="${yy}" stroke="${cl}"/><text x="${padL - 6}" y="${yy + 4}" text-anchor="end" font-size="11" fill="${cm}">${fmt(v)}</text>`; }
+  const pts = (f) => rows.map((r, i) => `${x(i).toFixed(1)},${y(f(r)).toFixed(1)}`).join(" ");
+  g += `<polygon points="${x(0)},${y(0)} ${pts(r => r.up + r.down)} ${x(n - 1)},${y(0)}" fill="${cu}" fill-opacity=".55"/>`;
+  g += `<polygon points="${x(0)},${y(0)} ${pts(r => r.down)} ${x(n - 1)},${y(0)}" fill="${cd}" fill-opacity=".75"/>`;
+  g += `<polyline points="${pts(r => r.up + r.down)}" fill="none" stroke="${cu}" stroke-width="1.5"/>`;
+  rows.forEach((r, i) => { const h = new Date(r.t * 1000).getHours();
+    g += `<circle cx="${x(i)}" cy="${y(r.up + r.down)}" r="3" fill="${cd}"/>`;
+    const w = (W - padL - 10) / Math.max(1, n - 1);
+    g += `<rect x="${x(i) - w / 2}" y="${padT}" width="${w}" height="${H - padT - padB}" fill="transparent"><title>${h} 點　下載 ${fmt(r.down)}　上傳 ${fmt(r.up)}　合計 ${fmt(r.up + r.down)}</title></rect>`;
+    if (i % (W < 520 ? 3 : 1) === 0 || i === n - 1) g += `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="${cm}">${h}h</text>`; });
+  svg.innerHTML = g;
+}
+function pieChart(items, total) {
+  if (!total) { $("#pie").innerHTML = `<circle r="100" fill="${css("--soft")}"/><text text-anchor="middle" y="5" font-size="13" fill="${css("--muted")}">沒有資料</text>`; return; }
+  let a = -Math.PI / 2, g = "";
+  items.forEach((it, i) => { const frac = (it.up + it.down) / total; if (frac <= 0) return;
+    const a2 = a + frac * 2 * Math.PI, big = a2 - a > Math.PI ? 1 : 0;
+    const p = frac >= 0.9999 ? `M0,-100 A100,100 0 1 1 -0.01,-100 Z` :
+      `M0,0 L${(100 * Math.cos(a)).toFixed(2)},${(100 * Math.sin(a)).toFixed(2)} A100,100 0 ${big} 1 ${(100 * Math.cos(a2)).toFixed(2)},${(100 * Math.sin(a2)).toFixed(2)} Z`;
+    g += `<path d="${p}" fill="${PIE[i % PIE.length]}" data-i="${i}" class="${it.key === anaSel ? "sel" : ""}"><title>${esc(it.name)}　${fmt(it.up + it.down)}（${(frac * 100).toFixed(1)}%）</title></path>`;
+    a = a2; });
+  $("#pie").innerHTML = g;
+  $("#pie").querySelectorAll("path").forEach(p => p.onclick = () => { anaSel = items[+p.dataset.i].key; renderAna(); });
+}
+function renderAna() {
+  const A = ANA; if (!A) return;
+  const hasApps = !!A.has_apps;
+  if (!hasApps && anaKind === "app") anaKind = "dev";
+  $("#anaName").textContent = A.name || "";
+  $("#anaKind").querySelectorAll("button").forEach(b => { b.classList.toggle("on", b.dataset.k === anaKind); b.disabled = b.dataset.k === "app" && !hasApps;
+    b.title = b.disabled ? "這台路由器沒有 App 分析（Netgear）；華碩的 Traffic Analyzer 才有" : ""; b.onclick = () => { if (!b.disabled) { anaKind = b.dataset.k; anaSel = ""; renderAna(); } }; });
+  $("#anaNote").textContent = A.source === "ta" ? `華碩 Traffic Analyzer，${A.ta_time ? ago(A.ta_time) + "讀取" : ""}（每小時更新）`
+    : A.source === "router" && A.site !== "main" ? "還沒有 Traffic Analyzer 資料：代讀電腦要流量監看 1.0.9 以上，路由器要開 Traffic Analyzer"
+    : "每小時 = 路由器 Traffic Meter；設備 = 流量監看的電腦、NAS 與監看不到的";
+  const last = A.hourly[A.hourly.length - 1] || {up: 0, down: 0};
+  const items0 = anaKind === "app" ? A.apps.map(a => ({...a, key: "app:" + a.name})) : A.devices;
+  const total = items0.reduce((s, x) => s + (x.up || 0) + (x.down || 0), 0);
+  const peak = A.hourly.reduce((b, r) => (r.up + r.down) > (b.up + b.down) ? r : b, {up: 0, down: 0});
+  $("#anaSum").innerHTML = `<div class="stat"><div class="k">最近 24 小時</div><div class="v">${fmt(A.total.up + A.total.down)}</div><div class="ud">↓ ${fmt(A.total.down)}　↑ ${fmt(A.total.up)}</div></div>
+    <div class="stat"><div class="k">這個小時</div><div class="v">${fmt(last.up + last.down)}</div><div class="ud">↓ ${fmt(last.down)}　↑ ${fmt(last.up)}</div></div>
+    <div class="stat"><div class="k">最忙的小時</div><div class="v">${peak.t ? new Date(peak.t * 1000).getHours() + " 點" : "—"}</div><div class="ud">${fmt(peak.up + peak.down)}</div></div>
+    <div class="stat"><div class="k">${anaKind === "app" ? "App" : "有流量的設備"}</div><div class="v">${items0.length}</div><div class="ud">${anaKind === "app" ? "Traffic Analyzer 分類" : "點圓餅或清單看詳細"}</div></div>`;
+  // 每小時：整個網段，或選的那台電腦
+  const opts = [["", "所有用戶端"]].concat(A.site === "main" ? A.devices.filter(d => d.source).map(d => [d.key, d.name]) : []);
+  if (!opts.some(o => o[0] === anaDev)) anaDev = "";
+  $("#anaDev").innerHTML = opts.map(([k, n]) => `<option value="${esc(k)}"${k === anaDev ? " selected" : ""}>${esc(n)}</option>`).join("");
+  $("#anaDev").style.display = opts.length > 1 ? "" : "none";
+  $("#anaDev").onchange = () => { anaDev = $("#anaDev").value; loadAna(); };
+  const hr = anaDev && A.dev_hourly && A.dev_hourly.key === anaDev ? A.dev_hourly.hourly : A.hourly;
+  hourChart($("#ch-ana"), hr);
+  // 圓餅：前 7 名＋其他
+  const top = items0.slice(0, 7);
+  const rest = items0.slice(7);
+  const items = rest.length ? top.concat([{key: "_rest", name: `其他 ${rest.length} 個`, up: rest.reduce((s, x) => s + x.up, 0), down: rest.reduce((s, x) => s + x.down, 0)}]) : top;
+  if (!items.some(x => x.key === anaSel)) anaSel = items[0] ? items[0].key : "";
+  pieChart(items, total);
+  $("#anaList").innerHTML = items.length ? items.map((it, i) => `<li data-k="${esc(it.key)}" class="${it.key === anaSel ? "sel" : ""}"><i style="background:${PIE[i % PIE.length]}"></i>${esc(it.name)}<span class="n">${total ? ((it.up + it.down) / total * 100).toFixed(1) : 0}%</span></li>`).join("")
+    : `<li class="muted">最近 24 小時沒有資料</li>`;
+  $("#anaList").querySelectorAll("li[data-k]").forEach(li => li.onclick = () => { anaSel = li.dataset.k; renderAna(); });
+  const it = items.find(x => x.key === anaSel);
+  let det = "";
+  if (it && it.key === "_rest") det = `<b>其他</b><div class="small muted">${rest.map(x => esc(x.name)).join("、")}</div>`;
+  else if (it) {
+    det = `<div style="font-size:16px;font-weight:700">${esc(it.name)}</div>`;
+    if (it.mac) det += `<div class="small muted">MAC ${esc(it.mac)}${it.ip ? "　" + esc(it.ip) : ""}</div>`;
+    det += `<div style="margin:8px 0"><span class="muted small">使用量</span>　<b>${fmt(it.up + it.down)}</b>　<span class="small muted">↓ ${fmt(it.down)}　↑ ${fmt(it.up)}</span></div>`;
+    if (it.reg) det += `<div style="margin:6px 0">${regCell(it)}</div>`;
+    if (it.apps && it.apps.length) { const mx = Math.max(1, ...it.apps.map(a => a.up + a.down));
+      det += `<div class="small muted" style="margin-top:8px">前 ${it.apps.length} 名 App</div>` + it.apps.map(a => `<div class="appbar"><span>${esc(a.name)}</span><span class="b"><i style="width:${(a.up + a.down) / mx * 100}%"></i></span><span>${fmt(a.up + a.down)}</span></div>`).join(""); }
+    else if (it.split) det += `<div class="small muted" style="margin-top:8px">使用類型</div><div>${typeCell(it.split, it.kind)}</div>`;
+    else if (it.kind === "unknown") det += `<div class="help">路由器的總量 − 已知設備（流量監看的電腦外網部分、NAS 直接外網、VPN 中繼）：沒裝流量監看的手機、電腦、路由器自己。</div>`;
+    else if (anaKind === "dev" && A.has_apps) det += `<div class="help">這台沒有 App 明細（只讀用量前 10 名的設備）。</div>`;
+  }
+  $("#anaDetail").innerHTML = det || `<div class="muted">點圓餅或清單看詳細</div>`;
+  $("#anaDetail").querySelectorAll("[data-reg]").forEach(b => b.onclick = () => regDialog(b.dataset.reg, b.dataset.name, A.site));
+}
+
 // ---- 分頁 ----
 function showTab(t) {
   if (t === "cfg" && !owner()) t = "daily";
@@ -678,7 +889,8 @@ function showTab(t) {
   if (t === "daily" && D) keepScroll(render);
   if (t === "hub" && T) keepScroll(renderHub);
   if (t === "nas") loadTop();
-  if (t === "cfg") loadSites();
+  if (t === "cfg") { loadSites(); loadReg(); }
+  if (t === "ana") loadAna();
 }
 $("#tabs").querySelectorAll("button").forEach(b => b.onclick = () => showTab(b.dataset.t));
 
@@ -782,7 +994,7 @@ async function load() {
   loadHub();
 }
 $("#range").onchange = load;
-window.addEventListener("resize", () => { if (D && TAB === "daily") keepScroll(render); if (T && TAB === "hub") keepScroll(renderHub); if (RT) renderRt(); });
+window.addEventListener("resize", () => { if (ANA && TAB === "ana") renderAna(); if (D && TAB === "daily") keepScroll(render); if (T && TAB === "hub") keepScroll(renderHub); if (RT) renderRt(); });
 (async () => {
   try { ME = await api("/api/platform/me"); } catch (e) { ME = null; }
   if (!owner()) document.querySelectorAll(".tabs .own").forEach(b => b.remove());
@@ -793,6 +1005,7 @@ window.addEventListener("resize", () => { if (D && TAB === "daily") keepScroll(r
   await load();
   timer = setInterval(() => { if (!document.hidden) load(); }, 60000);
   setInterval(() => { if (!document.hidden) loadRt(false); }, 20000);
+  setInterval(() => { if (!document.hidden && TAB === "ana") loadAna(); }, 60000);
 })();
 </script>
 </body>

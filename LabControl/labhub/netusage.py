@@ -136,13 +136,18 @@ def parse_soap(text: str) -> Tuple[str, Dict[str, str]]:
 
 
 def _dev(ip: str, name: str, mac: str, ctype: str = "", link: str = "", signal: str = "", ssid: str = "",
-         allow: str = "") -> Dict[str, Any]:
+         allow: str = "", dtype: str = "", model: str = "") -> Dict[str, Any]:
     name = (name or "").strip()
     if name.lower() in ("<unknown>", "unknown", "&lt;unknown&gt;", "--"):
         name = ""
-    return {"ip": _s(ip, 64), "name": _s(name, 80), "mac": _s((mac or "").upper(), 32), "type": _s(ctype, 32),
-            "link": _s(link, 16), "signal": _s(signal, 8), "ssid": _s(ssid, 64),
-            "allow": "Block" if str(allow).strip().lower() == "block" else ("Allow" if allow else "")}
+    out = {"ip": _s(ip, 64), "name": _s(name, 80), "mac": _s((mac or "").upper(), 32), "type": _s(ctype, 32),
+           "link": _s(link, 16), "signal": _s(signal, 8), "ssid": _s(ssid, 64),
+           "allow": "Block" if str(allow).strip().lower() == "block" else ("Allow" if allow else "")}
+    if dtype:                                       # 1.0.46：裝置類型（設備登記只管手機 / 電腦）
+        out["dtype"] = _s(dtype, 40)
+    if model:
+        out["model"] = _s(model, 60)
+    return out
 
 
 def parse_attached2(text: str) -> Optional[List[Dict[str, Any]]]:
@@ -162,7 +167,9 @@ def parse_attached2(text: str) -> Optional[List[Dict[str, Any]]]:
         f = {c.tag.split("}", 1)[-1]: (c.text or "").strip() for c in d}
         out.append(_dev(f.get("IP", ""), f.get("Name", ""), f.get("MAC", ""), f.get("ConnectionType", ""),
                         f.get("Linkspeed", ""), f.get("SignalStrength", ""), f.get("SSID", ""),
-                        f.get("AllowOrBlock", "")))
+                        f.get("AllowOrBlock", ""),
+                        f.get("DeviceTypeNameV2") or f.get("DeviceTypeName") or "",
+                        " ".join(x for x in (f.get("DeviceBrand", ""), f.get("DeviceModel", "")) if x)))
     return out
 
 
@@ -810,6 +817,13 @@ class NetUsage:
                 self._dirty = True
             st.update(ok=True, info=info, port=cl.port, ssl=cl.ssl)
             self._poll_router_devices(cl)
+            if (self.status.get("router_devices") or {}).get("ok"):
+                try:                                  # 1.0.46：設備登記（沒登記的手機 / 電腦寬限期後封鎖）
+                    from . import netreg
+
+                    netreg.enforce_main(self, cl, netreg.main_devices(self))
+                except Exception as e:  # noqa: BLE001
+                    self.status["netreg_main"] = {"ok": False, "error": str(e)[:300], "time": self.now()}
         except Exception as e:  # noqa: BLE001
             st.update(ok=False, error=str(e))
         self.status["router"] = st

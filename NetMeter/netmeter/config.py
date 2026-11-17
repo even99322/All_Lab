@@ -26,7 +26,8 @@ DEFAULTS: Dict[str, Any] = {
     "control_port": 47630,   # 本機控制埠（只聽 127.0.0.1；視窗用來查狀態 / 叫背景程式結束）
     "keep_days": 62,
     "split": True,           # 1.0.4：分內網 / 外網 / VPN（Windows ETW、macOS nettop）
-    "lan_hosts": True,       # 1.0.4：Windows 在實驗室網段時把 Hub 的 https 網址指到 NAS（hosts 檔）
+    "lan_hosts": True,
+    "reg_port": 47680,       # 1.0.9：代讀電腦的設備登記頁（http://<這台>:47680/）       # 1.0.4：Windows 在實驗室網段時把 Hub 的 https 網址指到 NAS（hosts 檔）
 }
 
 

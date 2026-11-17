@@ -3,6 +3,10 @@
 1.0.36 起 Hub 跟 Lab Control 分開發佈（GitHub 發佈 `hub-v<版本>`）；1.0.35 以前的紀錄在 [CHANGELOG.md](CHANGELOG.md)。
 每一版的說明在 [docs/releases/hub/](docs/releases/hub/)。
 
+## 1.0.46 — 2026-11-17
+
+網路用量新增「流量分析」（每小時、各設備、華碩 Traffic Analyzer 的 App）與「設備登記」（沒備註的手機 / 電腦寬限後停網，掃 QR 碼登記）。詳見 [docs/releases/hub/v1.0.46.md](docs/releases/hub/v1.0.46.md)。
+
 ## 1.0.45 — 2026-11-17
 
 流量監看回報的回應帶最新版本，流量監看 1.0.8 起看到新版就馬上自己更新。詳見 [docs/releases/hub/v1.0.45.md](docs/releases/hub/v1.0.45.md)。

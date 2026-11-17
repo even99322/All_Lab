@@ -67,7 +67,81 @@ def parse_clients(d: Dict[str, Any]) -> List[Dict[str, str]]:
             continue
         wl = str(x.get("isWL", "0"))
         out.append({"mac": m.upper(), "ip": str(x.get("ip") or ""), "name": str(x.get("nickName") or x.get("name") or ""),
-                    "type": {"0": "wired", "1": "2.4GHz", "2": "5GHz", "3": "5GHz", "4": "6GHz"}.get(wl, wl)})
+                    "type": {"0": "wired", "1": "2.4GHz", "2": "5GHz", "3": "5GHz", "4": "6GHz"}.get(wl, wl),
+                    "dtype": str(x.get("type") or ""), "vendor": str(x.get("vendor") or "")[:60]})
+    return out
+
+
+def parse_js_array(text: str, var: str = "array_statistics") -> List[Any]:
+    """getWanTraffic.asp / getAppTraffic.asp 回的是 JavaScript：「array_statistics = [[…], …];」。"""
+    i = text.rfind(var + " =")
+    if i < 0:
+        i = text.rfind(var + "=")
+    if i < 0:
+        raise AsusError("Traffic Analyzer 回的資料看不懂（沒有 array_statistics）")
+    body = text[text.index("=", i) + 1:].strip()
+    end = body.rfind("]")
+    body = body[:end + 1] if end >= 0 else body
+    if not body or body.startswith("new Array"):
+        return []
+    body = body.replace("'", '"')
+    try:
+        v = json.loads(re.sub(r",\s*([}\]])", r"\1", body))
+    except ValueError as e:
+        raise AsusError(f"Traffic Analyzer 回的資料看不懂：{body[:80]!r}") from e
+    return v if isinstance(v, list) else []
+
+
+def _rows(v: List[Any]) -> List[List[Any]]:
+    out = []
+    for r in v:
+        if isinstance(r, list) and len(r) >= 3:
+            try:
+                out.append([str(r[0]), int(float(r[1])), int(float(r[2]))])
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+TAG = "QEL-unregistered"          # 我們加的家長電腦控制規則的名稱（只動這些）
+
+
+def plan_block(nv: Dict[str, str], want: List[str]) -> Optional[Dict[str, str]]:
+    """家長電腦控制（MULTIFILTER_*，用「>」分隔的平行清單）：讓名稱是 TAG 的規則剛好 = want（封鎖）。
+    別人設的規則不動。沒有要改 → None。"""
+    def split(k: str) -> List[str]:
+        v = str(nv.get(k) or "")
+        return v.split(">") if v else []
+    en, mac, name, day = (split("MULTIFILTER_ENABLE"), split("MULTIFILTER_MAC"), split("MULTIFILTER_DEVICENAME"),
+                          split("MULTIFILTER_MACFILTER_DAYTIME_V2"))
+    n = len(mac)
+    en += ["0"] * (n - len(en))
+    name += [""] * (n - len(name))
+    day += [""] * (n - len(day))
+    want_set = {m.upper() for m in want}
+    rows = []
+    have_ours = set()
+    for i in range(n):
+        m = mac[i].upper()
+        if name[i] == TAG:
+            if m not in want_set:
+                continue                                   # 拿掉：登記了
+            have_ours.add(m)
+            rows.append(["2", m, TAG, ""])
+        else:
+            rows.append([en[i], m, name[i], day[i]])
+    others = {r[1] for r in rows if r[2] != TAG}
+    add = [m for m in sorted(want_set) if m not in have_ours and m not in others]
+    for m in add:
+        rows.append(["2", m, TAG, ""])
+    removed = {mac[i].upper() for i in range(n) if name[i] == TAG} - want_set
+    if not add and not removed:
+        return None
+    out = {"MULTIFILTER_ENABLE": ">".join(r[0] for r in rows), "MULTIFILTER_MAC": ">".join(r[1] for r in rows),
+           "MULTIFILTER_DEVICENAME": ">".join(r[2] for r in rows),
+           "MULTIFILTER_MACFILTER_DAYTIME_V2": ">".join(r[3] for r in rows)}
+    if want_set and str(nv.get("MULTIFILTER_ALL") or "0") != "1":
+        out["MULTIFILTER_ALL"] = "1"
     return out
 
 
@@ -121,7 +195,7 @@ class Asus:
     def hook(self, name: str) -> Dict[str, Any]:
         if not self.token:
             self.login()
-        q = urllib.parse.quote(name, safe="()")
+        q = urllib.parse.quote(name, safe="();")
         for attempt in (0, 1):
             text = self._req(f"/appGet.cgi?hook={q}")
             if "error_status" in text and attempt == 0:          # token 過期 → 重新登入
@@ -129,6 +203,69 @@ class Asus:
                 continue
             return _loose_json(text)
         return {}
+
+    def page(self, path: str) -> str:
+        if not self.token:
+            self.login()
+        for attempt in (0, 1):
+            text = self._req(path)
+            if ("error_status" in text or "Main_Login" in text) and attempt == 0:
+                self.login()
+                continue
+            return text
+        return ""
+
+    def traffic_analyzer(self, now: float, top: int = 10) -> Dict[str, Any]:
+        """Traffic Analyzer（路由器要開；資料每小時更新）：最近 24 小時每小時、各設備、所有 App、前 top 名設備的 App。"""
+        d = int(now)
+        hourly = [[int(float(r[0])), int(float(r[1]))] for r in
+                  parse_js_array(self.page(f"/getWanTraffic.asp?client=all&mode=hour&dura=24&date={d}"))
+                  if isinstance(r, list) and len(r) >= 2]
+        clients = _rows(parse_js_array(self.page(f"/getAppTraffic.asp?client=all&mode=detail&dura=24&date={d}")))
+        clients.sort(key=lambda r: -(r[1] + r[2]))
+        apps_all = _rows(parse_js_array(self.page(f"/getWanTraffic.asp?client=all&mode=detail&dura=24&date={d}")))
+        apps_all.sort(key=lambda r: -(r[1] + r[2]))
+        apps: Dict[str, List[List[Any]]] = {}
+        for mac, _tx, _rx in clients[:top]:
+            try:
+                rows = _rows(parse_js_array(self.page(
+                    f"/getWanTraffic.asp?client={urllib.parse.quote(mac)}&mode=detail&dura=24&date={d}")))
+            except AsusError:
+                continue
+            rows.sort(key=lambda r: -(r[1] + r[2]))
+            apps[mac.upper()] = rows[:8]
+        return {"t": now, "hourly": hourly[:24], "clients": clients[:200], "apps_all": apps_all[:60], "apps": apps}
+
+    def nvram(self, *keys: str) -> Dict[str, str]:
+        d = self.hook(";".join(f"nvram_get({k})" for k in keys))
+        out = {}
+        for k in keys:                                    # 網頁的 nvram 值把 > < 寫成 &#62 &#60
+            v = str(d.get(k) or "")
+            for a, b in (("&#62;", ">"), ("&#62", ">"), ("&gt;", ">"), ("&#60;", "<"), ("&#60", "<"), ("&lt;", "<")):
+                v = v.replace(a, b)
+            out[k] = v
+        return out
+
+    def apply(self, data: Dict[str, str], service: str = "restart_firewall") -> Dict[str, Any]:
+        """跟華碩網頁的 httpApi.nvramSet 一樣：POST /applyapp.cgi（內容 = encodeURIComponent(JSON)）。"""
+        if not self.token:
+            self.login()
+        body = urllib.parse.quote(json.dumps(dict(data, action_mode="apply", rc_service=service))).encode("ascii")
+        text = self._req("/applyapp.cgi", body)
+        try:
+            return _loose_json(text)
+        except AsusError:
+            return {}
+
+    def set_blocked(self, macs: List[str]) -> Dict[str, Any]:
+        """家長電腦控制：名稱 QEL-unregistered 的封鎖規則剛好 = macs（只擋上網，內網照通）。"""
+        keys = ("MULTIFILTER_ALL", "MULTIFILTER_ENABLE", "MULTIFILTER_MAC", "MULTIFILTER_DEVICENAME",
+                "MULTIFILTER_MACFILTER_DAYTIME_V2")
+        nv = self.nvram(*keys)
+        plan = plan_block(nv, macs)
+        if plan is not None:
+            self.apply(plan)
+        return {"ok": True, "macs": sorted(m.upper() for m in macs), "changed": plan is not None}
 
     def read(self) -> Dict[str, Any]:
         nd = parse_netdev(self.hook("netdev(appobj)"))

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>設備登記 QR 碼</title>
+<script src="/vendor/qrcode.js"></script>
+<style>
+  body { margin:0; background:#fff; color:#111; font:16px/1.5 system-ui, -apple-system, "Segoe UI", "Noto Sans TC", "PingFang TC", sans-serif; }
+  main { max-width:900px; margin:0 auto; padding:20px 16px 40px; }
+  .bar { display:flex; gap:10px; align-items:center; margin-bottom:16px; }
+  .bar a, .bar button { font:inherit; padding:6px 14px; border:1px solid #ccc; border-radius:8px; background:#f6f6f6; color:#111; text-decoration:none; cursor:pointer; }
+  .posters { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:20px; }
+  .poster { border:2px solid #111; border-radius:16px; padding:22px; text-align:center; break-inside:avoid; page-break-inside:avoid; }
+  .poster h2 { margin:0 0 4px; font-size:26px; }
+  .poster .sub { font-size:15px; color:#444; }
+  .poster .qr svg { width:240px; height:240px; margin:14px auto 6px; display:block; }
+  .poster .url { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:15px; word-break:break-all; }
+  .poster ol { text-align:left; font-size:14px; color:#333; margin:12px 0 0; padding-left:20px; }
+  .warn { color:#b25e00; font-size:13px; margin-top:6px; }
+  @media print { .bar, .note { display:none; } main { padding:0; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="bar"><a href="/network">← 網路用量</a><button onclick="print()">🖨 列印</button></div>
+  <div class="posters" id="posters">讀取中…</div>
+  <p class="note" style="color:#666;font-size:13px;margin-top:18px">
+    其他實驗室的登記頁開在代讀電腦上（流量監看 1.0.9 以上），網址用它目前的 IP；
+    請在那邊的路由器把代讀電腦設成固定 IP（華碩：區域網路 → DHCP 伺服器 → 手動指定 IP），QR 碼才不會失效。</p>
+</main>
+<script>
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function qr(text) { const q = qrcode(0, "M"); q.addData(text); q.make(); return q.createSvgTag({cellSize: 6, margin: 2, scalable: true}); }
+function poster(name, url, extra) {
+  return `<div class="poster"><h2>${esc(name)} · 設備登記</h2>
+    <div class="sub">手機、平板、電腦連上實驗室網路後，請掃描登記</div>
+    <div class="qr">${url ? qr(url) : ""}</div><div class="url">${esc(url || "（還沒有網址）")}</div>
+    <ol><li>先連上這間實驗室的 Wi-Fi / 網路</li><li>掃 QR 碼，填設備名稱與身分</li><li>沒登記的設備會在寬限時間後被暫停上網</li></ol>${extra || ""}</div>`;
+}
+(async () => {
+  try {
+    const r = await fetch("/api/netreg", {credentials: "same-origin"});
+    if (r.status === 401) { location.href = "/login?next=/reg/poster"; return; }
+    const d = await r.json();
+    let h = poster(d.main_name, d.main_url);
+    for (const [sid, c] of Object.entries(d.collector_pages || {}))
+      h += poster(c.name, c.url, c.url ? "" : `<div class="warn">這間還沒有代讀電腦（或它還沒回報 IP）：到網路用量 → 設定 → 其他實驗室 指定。</div>`);
+    document.getElementById("posters").innerHTML = h;
+  } catch (e) { document.getElementById("posters").textContent = "讀取失敗：" + e.message; }
+})();
+</script>
+</body>
+</html>

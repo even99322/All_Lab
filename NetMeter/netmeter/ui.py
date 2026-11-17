@@ -106,8 +106,22 @@ class StatusWindow:
                 self.v_today.set(self.v_today.get() + f"\n（分不出內網 / 外網：{sp.get('error') or '沒有啟動'}）")
             co = st.get("collect")
             if co:
-                self.v_report.set(self.v_report.get() + f"\n代讀路由器 {co.get('host')}："
-                                  + ("✔ 正常" if co.get("ok") else f"✖ {co.get('error') or '還沒讀'}"))
+                ok = co.get("ok")
+                line = ("✔ 正常" if ok else "等下一次回報（1 分鐘內）" if ok is None else f"✖ {co.get('error')}")
+                if co.get("ta_error"):
+                    line += f"；Traffic Analyzer：✖ {co['ta_error']}"
+                elif co.get("ta_time"):
+                    line += "；Traffic Analyzer ✔"
+                b = co.get("block") or {}
+                if b.get("ok") is False:
+                    line += f"；停網：✖ {b.get('error')}"
+                elif b.get("macs"):
+                    line += f"；停網 {len(b['macs'])} 台（沒登記）"
+                if co.get("page"):
+                    line += f"\n設備登記頁：http://{'、'.join(st.get('ips') or ['<這台>'])}:{co.get('port')}/"
+                elif co.get("page_error"):
+                    line += f"\n{co['page_error']}"
+                self.v_report.set(self.v_report.get() + f"\n代讀路由器 {co.get('host')}：" + line)
             lh = st.get("lan_https") or {}
             if lh.get("hosts"):
                 self.v_report.set(self.v_report.get() + f"\n內網 https：{lh.get('domain')} → {lh.get('ip')}")

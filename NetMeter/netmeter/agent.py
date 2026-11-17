@@ -69,6 +69,10 @@ class Agent:
         self._apply_nets()
         self.collect: Dict[str, Any] = {}
         self.site_router: Optional[Dict[str, Any]] = None
+        from .collector import Collector
+
+        self._kicked = threading.Event()
+        self.col = Collector(kick=self._kicked.set, port=int(self.cfg.get("reg_port", 47680)))        # 1.0.9：代讀（Traffic Analyzer、設備登記頁、停網）
         self.gw: Dict[str, str] = {}
 
     # ---- 一輪 ----
@@ -105,24 +109,18 @@ class Agent:
                  "ifaces": m.on_ifaces, "on_net": bool(m.on_ifaces), "rate": dict(m.rate), "days": m.recent(8)}
         if self.gw:
             p["gw"] = dict(self.gw)
-        if self.site_router:
+        if self.col.active():
+            p.update(self.col.payload())
+        elif self.site_router:
             p["site_router"] = self.site_router
         return p
 
     def _read_site_router(self) -> None:
-        """1.0.6：Hub 指定這台代讀另一間實驗室的路由器。"""
-        c = self.collect
-        if not c:
+        """1.0.6：Hub 指定這台代讀另一間實驗室的路由器（1.0.9 起由 collector.Collector 做，含 Traffic Analyzer）。"""
+        if not self.collect:
             self.site_router = None
             return
-        from . import asus
-
-        try:
-            r = asus.Asus(c["host"], c.get("user") or "admin", c.get("password") or "", int(c.get("port") or 0),
-                          bool(c.get("ssl"))).read()
-            self.site_router = dict(r, site=c.get("site"), t=time.time())
-        except Exception as e:  # noqa: BLE001
-            self.site_router = {"site": c.get("site"), "ok": False, "error": str(e)[:300], "t": time.time()}
+        self.site_router = self.col.read()
 
     def _apply_hub(self, resp: Any) -> None:
         if not isinstance(resp, dict):
@@ -143,6 +141,12 @@ class Agent:
             config.write_extra("hub_cfg.json", {"subnets": self.hub_subnets, "gateways": sorted(self.meter.allowed_gw)})
         c = resp.get("collect")
         self.collect = dict(c) if isinstance(c, dict) and c.get("host") else {}
+        try:
+            self.col.configure(self.collect)
+            if self.collect:
+                self.col.on_hub(resp)
+        except Exception:  # noqa: BLE001
+            log.exception("代讀")
         lv = resp.get("latest")                              # 1.0.8：Hub 上有新版 → 馬上查、更新
         if isinstance(lv, str) and hub.vkey(lv) > hub.vkey(__version__) and self.update.get("version") != lv:
             self.update_now.set()
@@ -217,10 +221,7 @@ class Agent:
                     "days": m.recent(14), "hubs": self.cfg["hubs"],
                     "subnets": [str(n) for n in m.nets],
                     "gw_unknown": bool(m.allowed_gw and m.gw_mac and m.gw_mac not in m.allowed_gw),
-                    "gw": dict(self.gw), "collect": ({"site": self.collect.get("site"), "host": self.collect.get("host"),
-                                                     "ok": (self.site_router or {}).get("ok"),
-                                                     "error": (self.site_router or {}).get("error", "")}
-                                                    if self.collect else None),
+                    "gw": dict(self.gw), "collect": self.col.status() if self.collect else None,
                     "split": {"kind": getattr(m.flows, "kind", ""), "ok": bool(getattr(m.flows, "ok", False)),
                               "error": getattr(m.flows, "error", ""), "rate": m.rate_split},
                     "lan_https": dict(self.lan_https, hosts=self.hosts_state not in ("", "-")),
@@ -250,7 +251,9 @@ class Agent:
                     log.exception("讀網卡計數失敗")
                     r = {"on": False}
                 now = time.time()
-                if r.get("on") and (now >= next_report or not self._was_on):
+                kicked = self._kicked.is_set()
+                self._kicked.clear()
+                if r.get("on") and (now >= next_report or not self._was_on or kicked):
                     self.send()
                     next_report = now + float(self.cfg.get("report_s") or 60)
                 elif not r.get("on") and now >= next_hb:           # 1.0.6：不在實驗室網段 → 每 5 分鐘問一次 Hub（1.0.7 起；Hub 可能加了這間）
@@ -261,8 +264,11 @@ class Agent:
                     self.sync_hosts()
                 except Exception:  # noqa: BLE001
                     log.exception("hosts")
-                self.stop.wait(float(self.cfg.get("sample_s") or 30))
+                end = time.time() + float(self.cfg.get("sample_s") or 30)
+                while not self.stop.is_set() and not self._kicked.is_set() and time.time() < end:
+                    self.stop.wait(min(1.0, max(0.0, end - time.time())))
         finally:
+            self.col.stop_page()
             try:
                 self.sync_hosts(force_off=True)
             except Exception:  # noqa: BLE001

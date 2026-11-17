@@ -1350,6 +1350,8 @@ from . import notebook  # noqa: E402,F401  （1.0.31 電子實驗記錄：/noteb
 from . import versions  # noqa: E402,F401  （1.0.39 版本紀錄：/versions、/api/versions）
 from . import gptexport  # noqa: E402,F401  （1.0.42 論文庫匯出給 GPT：/gptexport、/api/gptexport）
 from . import netsites  # noqa: E402,F401  （1.0.43 網路用量：改名、封鎖、另一間實驗室、沒裝流量監看的提醒）
+from . import netreg  # noqa: E402,F401  （1.0.46 設備登記）
+from . import netanalysis  # noqa: E402,F401  （1.0.46 流量分析）
 
 
 # ---------------------------------------------------------------------------

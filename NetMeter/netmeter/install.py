@@ -176,6 +176,7 @@ def install_service(exe: Optional[Path] = None) -> str:
     if r is None or r.returncode != 0:
         raise RuntimeError(f"建立系統排程失敗（要用管理員身分）：{(r.stderr or r.stdout).strip() if r else ''}")
     _remove_run_key()
+    firewall_rule(True)
     try:                                                  # 1.0.8：一般使用者可能查不到排程 → 留個記號給狀態視窗看
         (data_dir() / MARKER).write_text(json.dumps({"task": TASK, "exe": str(exe), "time": time.time()}),
                                          encoding="utf-8")
@@ -186,9 +187,30 @@ def install_service(exe: Optional[Path] = None) -> str:
     return "開機時自動在背景執行（系統排程，不用登入）"
 
 
+FW_RULE = "QEL NetMeter registration page"
+
+
+def firewall_rule(on: bool, port: int = 47680) -> bool:
+    """1.0.9：代讀電腦的設備登記頁（TCP 47680）讓區網的手機連得進來（Windows 防火牆；要管理員）。"""
+    if sys.platform != "win32":
+        return False
+    try:
+        subprocess.run(["netsh", "advfirewall", "firewall", "delete", "rule", f"name={FW_RULE}"],
+                       capture_output=True, creationflags=0x08000000)
+        if not on:
+            return True
+        r = subprocess.run(["netsh", "advfirewall", "firewall", "add", "rule", f"name={FW_RULE}", "dir=in",
+                            "action=allow", "protocol=TCP", f"localport={port}", "profile=any"],
+                           capture_output=True, creationflags=0x08000000)
+        return r.returncode == 0
+    except (OSError, ValueError):
+        return False
+
+
 def uninstall_service() -> None:
     _schtasks("/End", "/TN", TASK)
     _schtasks("/Delete", "/TN", TASK, "/F")
+    firewall_rule(False)
     try:
         (data_dir() / MARKER).unlink()
     except OSError:

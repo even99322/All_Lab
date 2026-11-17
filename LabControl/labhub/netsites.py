@@ -187,6 +187,7 @@ def on_report(st: Any, did: str, b: Dict[str, Any], ip: str) -> Dict[str, Any]:
         sr = b.get("site_router") if isinstance(b.get("site_router"), dict) else None
         if sr and sr.get("site") in sites(st) and sites(st)[sr["site"]].get("collector") == did:
             _site_router(st, sr["site"], sr)
+        coll = next((sid for sid, c in sites(st).items() if c.get("collector") == did and sid == site), "")
         subnets: List[str] = []
         for n in _main_nets(st) + [n for c in sites(st).values() for n in c.get("subnets") or []]:
             if n not in subnets:
@@ -194,6 +195,10 @@ def on_report(st: Any, did: str, b: Dict[str, Any], ip: str) -> Dict[str, Any]:
         out["subnets"] = subnets
         out["gateways"] = sorted(st.extra["gateways"])
         st._dirty = True
+    if coll:                                                      # 1.0.46：設備登記（登記頁、封鎖）
+        from . import netreg
+
+        out.update(netreg.on_collector(st, coll, b))
     return out
 
 
@@ -210,6 +215,10 @@ def _site_router(st: Any, sid: str, sr: Dict[str, Any]) -> None:
     last = c.get("last")
     c["last"] = {"t": t, "rx": rx, "tx": tx}
     c["status"] = {"ok": True, "time": now, "model": _s(sr.get("model"), 60), "n": len(sr.get("clients") or [])}
+    if isinstance(sr.get("ta"), dict):                    # 1.0.46：華碩 Traffic Analyzer（代讀電腦每 10 分鐘讀一次）
+        from .netanalysis import clean_ta
+
+        c["ta"] = clean_ta(sr["ta"], now)
     if last and 0 < t - float(last.get("t") or 0) < 3600:
         drx, dtx = rx - int(last["rx"]), tx - int(last["tx"])
         if drx < 0:
@@ -234,6 +243,8 @@ def _site_router(st: Any, sid: str, sr: Dict[str, Any]) -> None:
             continue
         d = devs.setdefault(mac, {"first": now})
         d.update(mac=mac, ip=_s(x.get("ip"), 60), name=_s(x.get("name"), 80), type=_s(x.get("type"), 20), last=now)
+        if x.get("dtype") or x.get("vendor"):                 # 1.0.46：華碩的裝置類型、廠牌（設備登記）
+            d.update(dtype=_s(x.get("dtype"), 10), vendor=_s(x.get("vendor"), 60))
         online.append(mac)
     c["online"] = online
     for m in [m for m, d in devs.items() if now - float(d.get("last") or 0) > SITE_DEV_KEEP_S]:
@@ -266,7 +277,9 @@ def _merge_devices(st: Any, rdevs: List[Dict[str, Any]], pcs: List[Dict[str, Any
         d = {"key": r.get("alias_key") or f"mac:{r.get('mac')}", "alias_key": r.get("alias_key") or "",
              "name": r.get("name") or r.get("router_name") or r.get("ip") or r.get("mac"), "ip": r.get("ip", ""),
              "mac": r.get("mac", ""), "conn": _conn(r), "online": bool(r.get("online")), "allow": r.get("allow", ""),
-             "kind": "device", "watched": bool(r.get("watched")), "last": r.get("last")}
+             "kind": "device", "watched": bool(r.get("watched")), "last": r.get("last"), "first": r.get("first"),
+             "dtype": r.get("dtype", ""), "model": r.get("model", ""), "vendor": r.get("vendor", ""),
+             "router_name": r.get("router_name", "")}
         if p is not None:
             used.add(p["key"])
             d.update(kind="pc", source=p["key"], alias_key=f"pc:{p.get('id')}", name=p["name"], up=p["up"],
@@ -302,7 +315,11 @@ def lan_devices(st: Any, sources: List[Dict[str, Any]], window: int, now: float)
             nas["split"] = {"lan": src["nasdir:lan"], "wan": src.get("nasdir:wan"), "vpn": src.get("nasdir:vpn"),
                             "vpnw": None}
             nas["split"] = {k: ({"up": v["up"], "down": v["down"]} if v else None) for k, v in nas["split"].items()}
-    return _merge_devices(st, rd, pcs, nas, str(st.cfg["nas"].get("host") or ""))
+    out = _merge_devices(st, rd, pcs, nas, str(st.cfg["nas"].get("host") or ""))
+    from . import netreg
+
+    netreg.annotate(st, "main", out)
+    return out
 
 
 def site_recent(st: Any, sid: str, window: int, chart: str = "") -> Dict[str, Any]:
@@ -345,7 +362,8 @@ def site_recent(st: Any, sid: str, window: int, chart: str = "") -> Dict[str, An
         online = set(c.get("online") or [])
         rd = [{"mac": m, "ip": d.get("ip", ""), "router_name": d.get("name", ""), "type": d.get("type", ""),
                "alias_key": f"mac:{m}", "name": st.alias(f"mac:{m}", d.get("name", "")), "online": m in online,
-               "last": d.get("last"), "watched": False}
+               "last": d.get("last"), "first": d.get("first"), "watched": False, "dtype": d.get("dtype", ""),
+               "vendor": d.get("vendor", "")}
               for m, d in (c.get("devices") or {}).items() if m in online or now - float(d.get("last") or 0) < 86400]
     pcs = [o for o in out if o["kind"] == "pc"]
     for r in rd:
@@ -355,8 +373,12 @@ def site_recent(st: Any, sid: str, window: int, chart: str = "") -> Dict[str, An
         chart = f"site:{sid}"
     ch = rc.window(chart, window, series=True, now=now)
     st_ = c.get("status") or {}
+    devices = _merge_devices(st, rd, pcs, None, "")
+    from . import netreg
+
+    netreg.annotate(st, sid, devices)
     return {"now": now, "window": window, "windows": list(WINDOWS), "sources": out, "site": sid,
-            "sites": site_list(st), "site_status": st_, "devices": _merge_devices(st, rd, pcs, None, ""),
+            "sites": site_list(st), "site_status": st_, "devices": devices,
             "chart": {"key": chart, "series": ch.get("series", []), "step": ch.get("step", 60)},
             "every": {"router": 60, "nas": 20, "tailscale": 20}}
 
