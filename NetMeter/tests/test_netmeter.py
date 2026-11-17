@@ -508,3 +508,41 @@ def test_agent_hub_cfg_collector_and_hosts_only_via_lan(tmp_path, monkeypatch):
     ag.tick()
     n = len(sent)
     assert not ag.send() and ag.send(heartbeat=True) and len(sent) == n + 1 and sent[-1]["on_net"] is False
+
+
+# ---- 1.0.7：在別間實驗室（不同網段）經 VPN 回報 ----
+def test_default_vpn_hub_and_last_good_first(tmp_path, monkeypatch):
+    monkeypatch.setenv("QELNETMETER_HOME", str(tmp_path / "home"))
+    config.save(dict(config.DEFAULTS, hubs=["http://192.168.50.2:8765"]))        # 1.0.6 以前存的設定
+    cfg = config.load()
+    assert cfg["hubs"] == ["http://192.168.50.2:8765", "http://100.114.33.20:8765"]
+    tried = []
+
+    def rep(hubs, p):
+        tried.append(list(hubs))
+        return "http://100.114.33.20:8765", {"ok": True}
+    monkeypatch.setattr(agent.gateway, "detect", lambda prefer=None: {})
+    ag = agent.Agent(cfg=cfg, sampler=Seq(), reporter=rep)
+    ag.tick()
+    assert ag.send(heartbeat=True) and ag.send(heartbeat=True)
+    assert tried[0][0] == "http://192.168.50.2:8765" and tried[1][0] == "http://100.114.33.20:8765"
+
+
+def test_gw_unknown_status(tmp_path, monkeypatch):
+    monkeypatch.setenv("QELNETMETER_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(agent.gateway, "detect", lambda prefer=None: {"ip": "192.168.10.1", "mac": "CC:CC:CC:CC:CC:CC"})
+    s = Seq()
+    s.ifs["Ethernet"]["ips"] = ["192.168.10.23"]
+    ag = agent.Agent(cfg=dict(config.DEFAULTS), sampler=s, reporter=lambda h, p: (h[0], {
+        "subnets": ["192.168.50.0/24", "192.168.10.0/24"], "gateways": ["AA:AA:AA:AA:AA:AA"]}))
+    ag.tick()
+    assert ag.send(heartbeat=True)
+    ag.tick()
+    st = ag.status()
+    assert st["on_net"] is False and st["gw_unknown"] is True and "192.168.10.0/24" in st["subnets"]
+    ag.reporter = lambda h, p: (h[0], {"subnets": ["192.168.50.0/24", "192.168.10.0/24"],
+                                       "gateways": ["AA:AA:AA:AA:AA:AA", "CC:CC:CC:CC:CC:CC"]})
+    ag.send(heartbeat=True)
+    ag.tick()
+    s.add("Ethernet", 1000, 1000)
+    assert ag.tick()["on"] is True and ag.status()["gw_unknown"] is False

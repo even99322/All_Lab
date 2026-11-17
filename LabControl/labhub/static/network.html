@@ -697,13 +697,13 @@ function renderSites() {
       <fieldset><legend>實驗室</legend>
         <label><span>代號</span><input type="text" data-f="id" value="${esc(x.id || "")}" placeholder="例：lab2（英文小寫）"></label>
         <label><span>名稱</span><input type="text" data-f="name" value="${esc(x.name || "")}" placeholder="例：二館實驗室"></label>
-        <label><span>內網網段</span><input type="text" data-f="subnets" value="${esc((x.subnets || []).join(", "))}" placeholder="192.168.50.0/24"></label>
+        <label><span>內網網段</span><input type="text" data-f="subnets" value="${esc((x.subnets || []).join(", "))}" placeholder="例：192.168.10.0/24"></label>
         <label><span>代讀電腦</span><select data-f="collector">${pcOpt(x.collector, x.id)}</select></label>
         <div class="help">代讀電腦：那間實驗室裡一台裝了流量監看 1.0.6 以上、開著 VPN（Tailscale）的電腦；它每分鐘讀那邊的路由器、經 VPN 帶回來。
           ${x.gateway ? "已認得那邊的路由器（" + esc(x.gateway) + "）。" : ""}</div>
       </fieldset>
       <fieldset><legend>華碩路由器 ${st.time ? (st.ok ? `<span class="pill ok">正常</span>` : `<span class="pill bad" title="${esc(st.error || "")}">失敗</span>`) : ""}</legend>
-        <label><span>位址</span><input type="text" data-f="host" value="${esc(r.host || "")}" placeholder="例：192.168.50.1（從代讀電腦看）"></label>
+        <label><span>位址</span><input type="text" data-f="host" value="${esc(r.host || "")}" placeholder="例：192.168.10.1（從代讀電腦看）"></label>
         <label><span>管理帳號</span><input type="text" data-f="user" value="${esc(r.user || "admin")}" autocomplete="off"></label>
         <label><span>管理密碼</span><input type="password" data-f="password" placeholder="${r.has_password ? "已設定（留空 = 不改）" : "路由器管理密碼"}" autocomplete="new-password"></label>
         <label><span>連接埠</span><input type="number" data-f="port" value="${r.port || ""}" placeholder="自動（80 / 8443）"></label>
@@ -716,13 +716,14 @@ function renderSites() {
     <div class="cfg" style="margin-bottom:10px"><label><span>本實驗室名稱</span><input type="text" id="s-main" value="${esc(S.main_name || "本實驗室")}"></label></div>
     <div id="slist">${(S.sites || []).map(one).join("") || `<div class="empty" style="margin-bottom:10px">還沒有其他實驗室</div>`}</div>
     <div class="row cfg" style="display:flex"><button class="btn" id="s-add">＋ 新增實驗室</button><button class="btn pri" id="s-save">儲存</button><span class="res" id="s-res"></span></div>
-    <div class="help">兩間實驗室的內網都可能是 192.168.50.x，Hub 用路由器的 MAC 分辨電腦在哪一間（流量監看 1.0.6 起會回報）。存好後，網頁最上面可以切換看哪一間。</div></div></details>`;
+    <div class="help">網段跟本實驗室不同（例如 192.168.10.x）→ 那邊的電腦經 VPN 回報時，Hub 依它的路由器位址自動認得是哪一間；
+      網段相同（都是 192.168.50.x）→ 要先指定代讀電腦，Hub 才認得那邊的路由器（用 MAC 分辨）。存好後，網頁最上面可以切換看哪一間。</div></div></details>`;
   const collect = () => [...document.querySelectorAll("#slist .sitecard")].map(c => { const v = f => c.querySelector(`[data-f="${f}"]`);
     const r = {kind: "asus", host: v("host").value.trim(), user: v("user").value.trim(), port: +v("port").value || 0, ssl: v("ssl").checked};
     if (v("password").value) r.password = v("password").value;
     return {id: v("id").value.trim().toLowerCase(), name: v("name").value.trim(), subnets: v("subnets").value.split(/[,，\s]+/).filter(Boolean),
             collector: v("collector").value, router: r}; });
-  $("#s-add").onclick = () => { S.sites = collect(); S.sites.push({id: "lab" + (S.sites.length + 2), name: "", subnets: ["192.168.50.0/24"], router: {user: "admin"}}); renderSites(); };
+  $("#s-add").onclick = () => { S.sites = collect(); S.sites.push({id: "lab" + (S.sites.length + 2), name: "", subnets: [], router: {user: "admin"}}); renderSites(); };
   document.querySelectorAll("#slist [data-rm]").forEach(b => b.onclick = () => { const xs = collect(); xs.splice(+b.dataset.rm, 1); S.sites = xs; renderSites(); });
   $("#s-save").onclick = async () => {
     const el = $("#s-res"); el.className = "res"; el.textContent = "儲存中…";

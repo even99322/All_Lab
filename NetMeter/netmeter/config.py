@@ -18,8 +18,8 @@ from . import APP_ID
 DEFAULTS: Dict[str, Any] = {
     # 實驗室網段：裝置有網卡拿到這個網段的位址時才計算那張網卡的流量
     "subnets": ["192.168.50.0/24"],
-    # Hub（NAS）位址：依序試，第一個連得到的
-    "hubs": ["http://192.168.50.2:8765"],
+    # Hub（NAS）位址：依序試，第一個連得到的（1.0.7：加 VPN 位址——在別間實驗室 / 外面經 Tailscale 回報）
+    "hubs": ["http://192.168.50.2:8765", "http://100.114.33.20:8765"],
     "sample_s": 30,          # 多久讀一次網卡計數
     "report_s": 60,          # 多久送一次到 Hub
     "update_check_h": 6,     # 多久檢查一次新版（Windows 自動更新）
@@ -119,6 +119,9 @@ def load() -> Dict[str, Any]:
     cfg.update({k: v for k, v in _read(data_dir() / "config.json").items() if k in DEFAULTS})
     cfg["subnets"] = [s for s in (cfg.get("subnets") or []) if valid_subnet(s)] or list(DEFAULTS["subnets"])
     cfg["hubs"] = [normalize_hub(h) for h in (cfg.get("hubs") or []) if str(h).strip()] or list(DEFAULTS["hubs"])
+    for h in DEFAULTS["hubs"]:                     # 1.0.7：舊設定檔只有內網位址 → 補上預設的 VPN 位址
+        if h not in cfg["hubs"]:
+            cfg["hubs"].append(h)
     return cfg
 
 

@@ -162,6 +162,14 @@ def on_report(st: Any, did: str, b: Dict[str, Any], ip: str) -> Dict[str, Any]:
                     st.extra["gateways"][gmac] = "main"
         elif gmac and gmac in st.extra["gateways"]:
             site = st.extra["gateways"][gmac]
+        if not site and gip:                                     # 1.0.44：閘道在某間實驗室自己的網段（跟本實驗室不重疊）
+            for sid, c in sites(st).items():
+                sn = _nets(c.get("subnets") or [])
+                if _in(gip, sn) and not any(a.version == m.version and a.overlaps(m) for a in sn for m in main_nets):
+                    site = sid
+                    if gmac and gmac not in st.extra["gateways"]:
+                        st.extra["gateways"][gmac] = sid
+                    break
         for sid, c in sites(st).items():
             if c.get("collector") and c.get("collector") == did:
                 if not site or site == sid:

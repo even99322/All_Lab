@@ -10,6 +10,7 @@ API（JSON；需要 token：``Authorization: Bearer <token>``，網頁用 cookie
     POST /api/nodes/<n>/offline             ← 節點離線
     GET/PUT /api/nodes/<n>/instruments      ↔ 節點的 instruments.yaml（控制端建立模擬鏡像用）
     GET  /api/nodes/<n>                     → 單一節點狀態
+    DELETE /api/nodes/<n>                   ← 站長從清單移除（離線的）
     POST /api/nodes/<n>/commands[?wait=s]   ← 控制端送指令；有 wait → 等節點回覆一起回傳
     GET  /api/nodes/<n>/commands?wait=s     → 節點取指令（long-poll）
     POST /api/replies/<id>                  ← 節點回覆
@@ -298,6 +299,17 @@ class HubState:
         with self.cond:
             self.devices.pop(did, None)
             self._touch()
+
+    def forget_node(self, name: str) -> Dict[str, Any]:
+        """1.0.44：從清單移除量測電腦（站長）。在線的不能移除；它之後再上線會自己回來。"""
+        with self.cond:
+            n = self.node(name)
+            if self.node_online(n):
+                raise HubHTTPError(409, f"{n.name} 還在線上：先在那台關掉 Lab Control 的「🛰 量測節點」再移除")
+            self.nodes.pop(n.name, None)
+            self._touch()
+        self.save(force=True)
+        return {"ok": True, "name": n.name}
 
     # ---- 節點 ------------------------------------------------------------
     def claim(self, name: str, info: Dict[str, Any], ip: str) -> Dict[str, Any]:
@@ -1133,6 +1145,18 @@ def _node(h: Handler, name: str) -> None:
     with hub.cond:
         v = hub.node_view(hub.node(name), time.time())
     h._json(v)
+
+
+@route("DELETE", N, auth="owner")
+def _forget_node(h: Handler, name: str) -> None:
+    res = h.hub.forget_node(name)
+    plat = getattr(h.hub, "platform", None)
+    if plat is not None:
+        try:
+            plat.audit((h.user() or {}).get("username", ""), "node-forget", res["name"])
+        except Exception:  # noqa: BLE001
+            pass
+    h._json(res)
 
 
 @route("PUT", N + r"/instruments")

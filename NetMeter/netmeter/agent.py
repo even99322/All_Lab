@@ -142,12 +142,18 @@ class Agent:
 
     def send(self, heartbeat: bool = False) -> bool:
         if not self.meter.on_ifaces and not heartbeat:
-            return False                                   # 不在實驗室網段：只有每 10 分鐘的 heartbeat
+            return False                                   # 不在實驗室網段：只有每 5 分鐘的 heartbeat
         try:
             if self.collect:
                 self._read_site_router()
-            used, resp = self.reporter(self.cfg["hubs"], self.payload())
+            hubs = list(self.cfg["hubs"])
+            last = getattr(self, "good_hub", None)
+            if last in hubs:                               # 1.0.7：上次連得到的先試（在別間實驗室不用先等內網位址逾時）
+                hubs.remove(last)
+                hubs.insert(0, last)
+            used, resp = self.reporter(hubs, self.payload())
             self.last_report = {"time": time.time(), "hub": used, "ok": True}
+            self.good_hub = used
             self.last_error = ""
             self._apply_hub(resp)
             self._learn_https(used, resp)
@@ -205,7 +211,9 @@ class Agent:
             return {"version": __version__, "id": m.id, "pid": os.getpid(), "on_net": bool(m.on_ifaces),
                     "ifaces": m.on_ifaces, "ips": m.ips, "rate": dict(m.rate),
                     "today": dict(m.days.get(today_str(m.now()), {"up": 0, "down": 0})), "month": m.month(),
-                    "days": m.recent(14), "hubs": self.cfg["hubs"], "subnets": self.cfg["subnets"],
+                    "days": m.recent(14), "hubs": self.cfg["hubs"],
+                    "subnets": [str(n) for n in m.nets],
+                    "gw_unknown": bool(m.allowed_gw and m.gw_mac and m.gw_mac not in m.allowed_gw),
                     "gw": dict(self.gw), "collect": ({"site": self.collect.get("site"), "host": self.collect.get("host"),
                                                      "ok": (self.site_router or {}).get("ok"),
                                                      "error": (self.site_router or {}).get("error", "")}
@@ -241,9 +249,9 @@ class Agent:
                 if r.get("on") and (now >= next_report or not self._was_on):
                     self.send()
                     next_report = now + float(self.cfg.get("report_s") or 60)
-                elif not r.get("on") and now >= next_hb:           # 1.0.6：不在實驗室網段 → 每 10 分鐘問一次 Hub
+                elif not r.get("on") and now >= next_hb:           # 1.0.6：不在實驗室網段 → 每 5 分鐘問一次 Hub（1.0.7 起；Hub 可能加了這間）
                     self.send(heartbeat=True)
-                    next_hb = now + 600
+                    next_hb = now + 300
                 self._was_on = bool(r.get("on"))
                 try:
                     self.sync_hosts()

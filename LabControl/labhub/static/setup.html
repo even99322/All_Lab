@@ -23,6 +23,8 @@
   .node { border:1px solid var(--border); border-radius:10px; padding:9px 11px; margin-bottom:8px; cursor:pointer; background:var(--card); }
   .node.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
   .node .nm { font-weight:700; display:flex; gap:6px; align-items:center; }
+  .node .rm { margin-left:auto; border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:13px; padding:0 4px; border-radius:6px; }
+  .node .rm:hover { color:#e5484d; background:color-mix(in srgb, #e5484d 12%, transparent); }
   .node .mt { color:var(--muted); font-size:12px; }
   .dot { width:9px; height:9px; border-radius:50%; background:var(--muted); display:inline-block; flex:none; }
   .dot.on { background:var(--ok); } .dot.run { background:var(--accent); animation:p 1.4s infinite; } .dot.pause { background:var(--warn); }
@@ -127,14 +129,26 @@ function renderNodes() {
     const pct = r.total ? Math.min(100, 100 * (r.index || 0) / r.total) : 0;
     const inst = n.instruments || [];
     return `<div class="node${n.name === cur ? " sel" : ""}" data-n="${esc(n.name)}">
-      <div class="nm"><span class="dot ${cls}"></span>${esc(n.name)}<span class="small muted" style="font-weight:400">${esc(STATE[st] || st)}</span></div>
+      <div class="nm"><span class="dot ${cls}"></span>${esc(n.name)}<span class="small muted" style="font-weight:400">${esc(STATE[st] || st)}</span>
+        ${!n.online && window.QEL_OWNER ? `<button class="rm" data-rm="${esc(n.name)}" title="從清單移除（那台之後再開「量測節點」會自己回來）">✕</button>` : ""}</div>
       <div class="mt">${esc(n.user || "")}@${esc(n.host || "")} · v${esc(n.version || "?")}${n.simulate ? " · 模擬" : ""}</div>
       <div class="mt">儀器 ${inst.filter(i => i.connected).length} / ${inst.length} 已連線</div>
       ${r.name && ["running", "paused", "preparing"].includes(st) ? `<div class="mt">「${esc(r.name)}」${r.index ?? 0} / ${r.total ?? "?"}（${esc(r.by || "")}）</div><div class="bar"><i style="width:${pct}%"></i></div>` : ""}
     </div>`;
   }).join("");
 }
-$("nodes").onclick = e => { const el = e.target.closest(".node"); if (el) select(el.dataset.n, true); };
+$("nodes").onclick = async e => {
+  const rm = e.target.closest("[data-rm]");
+  if (rm) {
+    e.stopPropagation();
+    const name = rm.dataset.rm;
+    if (!confirm(`從量測電腦清單移除「${name}」？\n（只移除清單與紀錄；那台之後再開 Lab Control 的「🛰 量測節點」會自己回來）`)) return;
+    try { await api(`/api/nodes/${encodeURIComponent(name)}`, { method:"DELETE" }); if (cur === name) cur = ""; await loadState(); }
+    catch (err) { if (err.message !== "login") alert(err.message); }
+    return;
+  }
+  const el = e.target.closest(".node"); if (el) select(el.dataset.n, true);
+};
 function select(name, render) {
   if (name !== cur) { cur = name; scheme = null; checkRes = null; }
   try { localStorage.setItem("qel-setup-node", name); } catch (e) {}

@@ -3,6 +3,10 @@
 1.0.36 起 Hub 跟 Lab Control 分開發佈（GitHub 發佈 `hub-v<版本>`）；1.0.35 以前的紀錄在 [CHANGELOG.md](CHANGELOG.md)。
 每一版的說明在 [docs/releases/hub/](docs/releases/hub/)。
 
+## 1.0.44 — 2026-11-17
+
+別間實驗室網段不同（如 192.168.10.x）時依路由器位址自動認得；站長可以從「量測設置」移除離線的量測電腦。詳見 [docs/releases/hub/v1.0.44.md](docs/releases/hub/v1.0.44.md)。
+
 ## 1.0.43 — 2026-11-16
 
 網路用量改版：上方切換內網連線／VPN 連接、各設備一張表（使用類型、改名、站長可封鎖上網）、其他頁收進分頁；可監看另一間實驗室（華碩路由器，經 VPN 代讀）；提醒沒裝流量監看的電腦。詳見 [docs/releases/hub/v1.0.43.md](docs/releases/hub/v1.0.43.md)。

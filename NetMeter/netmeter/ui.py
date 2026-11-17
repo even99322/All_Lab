@@ -83,8 +83,13 @@ class StatusWindow:
             if st.get("on_net"):
                 self.v_state.set(f"● 已連到實驗室網段（{'、'.join(st.get('ifaces') or [])}　{'、'.join(st.get('ips') or [])}），"
                                  "正在記錄")
+            elif st.get("gw_unknown"):
+                gw = st.get("gw") or {}
+                self.v_state.set(f"○ Hub 還不認得這裡的路由器（{gw.get('ip', '')}）：請站長在 Hub「網路用量 → 設定 → 其他實驗室」"
+                                 "加這間的網段，5 分鐘內自動開始記錄")
             else:
-                self.v_state.set(f"○ 目前不在實驗室網段（{'、'.join(st.get('subnets') or [])}），這段時間不計算")
+                self.v_state.set(f"○ 目前不在實驗室網段（{'、'.join(st.get('subnets') or [])}），這段時間不計算；"
+                                 "別間實驗室請站長在 Hub 加這間的網段")
             t, m, r = st.get("today") or {}, st.get("month") or {}, st.get("rate") or {}
             self.v_today.set(f"↓ {fmt(t.get('down'))}　↑ {fmt(t.get('up'))}" + _split_text(t))
             self.v_month.set(f"↓ {fmt(m.get('down'))}　↑ {fmt(m.get('up'))}" + _split_text(m))
