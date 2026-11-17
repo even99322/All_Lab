@@ -1539,6 +1539,16 @@ def _report(h: Handler) -> None:
         tls = getattr(h.hub, "tls", None)          # 1.0.38：流量監看在內網把 https 網址指到 NAS（hosts）
         if tls is not None and getattr(tls, "domain", "") and tls.url("hub"):
             out["lan_https"] = {"domain": tls.domain, "url": tls.url("hub")}
+        plat = getattr(h.hub, "platform", None)    # 1.0.45：告訴流量監看 Hub 上最新的版本 → 有新版馬上自己更新
+        if plat is not None:
+            try:
+                from .appupdates import app_info
+
+                v = app_info(plat, "netmeter").get("installer_version")
+                if v:
+                    out["latest"] = v
+            except Exception:  # noqa: BLE001
+                pass
         h._json(out)
     except ValueError as e:
         raise HubHTTPError(400, str(e)) from None

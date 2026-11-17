@@ -22,7 +22,7 @@ DEFAULTS: Dict[str, Any] = {
     "hubs": ["http://192.168.50.2:8765", "http://100.114.33.20:8765"],
     "sample_s": 30,          # 多久讀一次網卡計數
     "report_s": 60,          # 多久送一次到 Hub
-    "update_check_h": 6,     # 多久檢查一次新版（Windows 自動更新）
+    "update_check_h": 1,     # 多久檢查一次新版（Windows 自動更新；1.0.8 起 Hub 有新版時回報的回應就會通知）
     "control_port": 47630,   # 本機控制埠（只聽 127.0.0.1；視窗用來查狀態 / 叫背景程式結束）
     "keep_days": 62,
     "split": True,           # 1.0.4：分內網 / 外網 / VPN（Windows ETW、macOS nettop）

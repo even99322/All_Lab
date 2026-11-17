@@ -3,6 +3,10 @@
 1.0.36 起 Hub 跟 Lab Control 分開發佈（GitHub 發佈 `hub-v<版本>`）；1.0.35 以前的紀錄在 [CHANGELOG.md](CHANGELOG.md)。
 每一版的說明在 [docs/releases/hub/](docs/releases/hub/)。
 
+## 1.0.45 — 2026-11-17
+
+流量監看回報的回應帶最新版本，流量監看 1.0.8 起看到新版就馬上自己更新。詳見 [docs/releases/hub/v1.0.45.md](docs/releases/hub/v1.0.45.md)。
+
 ## 1.0.44 — 2026-11-17
 
 別間實驗室網段不同（如 192.168.10.x）時依路由器位址自動認得；站長可以從「量測設置」移除離線的量測電腦。詳見 [docs/releases/hub/v1.0.44.md](docs/releases/hub/v1.0.44.md)。

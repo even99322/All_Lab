@@ -21,9 +21,10 @@ import tempfile
 import threading
 import time
 import urllib.request
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from . import __version__, config, gateway, hosts, hub
+from . import install as install_mod
 from .meter import Meter
 
 log = logging.getLogger("netmeter")
@@ -54,6 +55,9 @@ class Agent:
         self.last_report: Dict[str, Any] = {}
         self.last_error = ""
         self.update: Dict[str, Any] = {}
+        self.update_now = threading.Event()
+        self.update_error = ""
+        self._tried: Dict[str, float] = {}
         self._last_save = 0.0
         self._was_on = False
         self.lan_https: Dict[str, str] = dict(config.read_extra("lan_https.json"))     # Hub 給的 https 網域（上次的）
@@ -139,6 +143,9 @@ class Agent:
             config.write_extra("hub_cfg.json", {"subnets": self.hub_subnets, "gateways": sorted(self.meter.allowed_gw)})
         c = resp.get("collect")
         self.collect = dict(c) if isinstance(c, dict) and c.get("host") else {}
+        lv = resp.get("latest")                              # 1.0.8：Hub 上有新版 → 馬上查、更新
+        if isinstance(lv, str) and hub.vkey(lv) > hub.vkey(__version__) and self.update.get("version") != lv:
+            self.update_now.set()
 
     def send(self, heartbeat: bool = False) -> bool:
         if not self.meter.on_ifaces and not heartbeat:
@@ -146,11 +153,7 @@ class Agent:
         try:
             if self.collect:
                 self._read_site_router()
-            hubs = list(self.cfg["hubs"])
-            last = getattr(self, "good_hub", None)
-            if last in hubs:                               # 1.0.7：上次連得到的先試（在別間實驗室不用先等內網位址逾時）
-                hubs.remove(last)
-                hubs.insert(0, last)
+            hubs = self._hubs_ordered()                      # 1.0.7：上次連得到的先試（在別間實驗室不用先等內網位址逾時）
             used, resp = self.reporter(hubs, self.payload())
             self.last_report = {"time": time.time(), "hub": used, "ok": True}
             self.good_hub = used
@@ -221,7 +224,8 @@ class Agent:
                     "split": {"kind": getattr(m.flows, "kind", ""), "ok": bool(getattr(m.flows, "ok", False)),
                               "error": getattr(m.flows, "error", ""), "rate": m.rate_split},
                     "lan_https": dict(self.lan_https, hosts=self.hosts_state not in ("", "-")),
-                    "last_report": dict(self.last_report), "error": self.last_error, "update": dict(self.update)}
+                    "last_report": dict(self.last_report), "error": self.last_error, "update": dict(self.update),
+                    "as_system": install_mod.running_as_system() if sys.platform == "win32" else None}
 
     # ---- 主迴圈 ----
     def run(self) -> None:
@@ -279,21 +283,31 @@ class Agent:
 
     # ---- 自動更新（Windows 打包版）----
     def _update_loop(self) -> None:
+        """1.0.8：開始 1 分鐘後查一次；之後每小時查一次，另外 Hub 每次回報的回應帶最新版本（latest），
+        比這版新就馬上查（_apply_hub 叫 self.update_now）——Hub 發佈新版後幾分鐘內就自己更新。"""
         self.stop.wait(60)
         while not self.stop.is_set():
             try:
                 self.check_update()
             except Exception as e:  # noqa: BLE001
                 log.info("檢查更新失敗：%s", e)
-            self.stop.wait(float(self.cfg.get("update_check_h") or 6) * 3600)
+                self.update_error = str(e)[:300]
+            self.update_now.wait(float(self.cfg.get("update_check_h") or 1) * 3600)
+            self.update_now.clear()
+
+    def _hubs_ordered(self) -> List[str]:
+        hubs = list(self.cfg["hubs"])
+        last = getattr(self, "good_hub", None)
+        if last in hubs:
+            hubs.remove(last)
+            hubs.insert(0, last)
+        return hubs
 
     def check_update(self) -> Optional[Dict[str, Any]]:
-        if not self.meter.on_ifaces:
-            return None
         plat = "windows" if sys.platform == "win32" else "macos" if sys.platform == "darwin" else ""
         if not plat:
             return None
-        for h in self.cfg["hubs"]:
+        for h in self._hubs_ordered():
             try:
                 info = hub.latest(h, plat)
             except Exception:  # noqa: BLE001
@@ -303,6 +317,12 @@ class Agent:
                 return None
             self.update = {"version": info["version"], "url": info["url"]}
             if plat == "windows" and getattr(sys, "frozen", False):
+                if not install_mod.running_as_system() and install_mod.service_installed():
+                    log.info("有新版 %s：交給系統排程的背景程式更新（這個是使用者身分的）", info["version"])
+                    return info
+                if self._tried.get(info["version"], 0) > time.time() - 1800:
+                    return info                              # 同一版 30 分鐘內不重複下載
+                self._tried[info["version"]] = time.time()
                 self._apply_windows(info)
             return info
         return None

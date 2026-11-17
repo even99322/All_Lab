@@ -7,6 +7,7 @@ macOS：~/Library/LaunchAgents/tw.qel.netmeter.plist（登入時啟動；當掉�
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -112,13 +113,19 @@ def _schtasks(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["schtasks", *args], capture_output=True, text=True, creationflags=0x08000000)   # 不開主控台
 
 
-def task_xml(exe: Path) -> str:
+# 1.0.8：系統管理員、SYSTEM 完全控制；登入的使用者可以讀、執行（狀態視窗查得到排程、叫得動背景程式，但改不了）
+TASK_SDDL = "D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;GRGX;;;AU)"
+MARKER = "service.json"
+
+
+def task_xml(exe: Path, sddl: str = TASK_SDDL) -> str:
     """工作排程器的 XML：開機（延遲 30 秒）＋任何人登入＋每 10 分鐘看一次；SYSTEM；不限執行時間；當掉自己重來。"""
     from xml.sax.saxutils import escape
 
+    sd = f"<SecurityDescriptor>{escape(sddl)}</SecurityDescriptor>" if sddl else ""
     return f"""<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo><Description>QEL 流量監看：在背景記錄這台電腦在實驗室網段的流量並回報 Hub</Description></RegistrationInfo>
+  <RegistrationInfo><Description>QEL 流量監看：在背景記錄這台電腦在實驗室網段的流量並回報 Hub</Description>{sd}</RegistrationInfo>
   <Triggers>
     <BootTrigger><Enabled>true</Enabled><Delay>PT30S</Delay></BootTrigger>
     <LogonTrigger><Enabled>true</Enabled></LogonTrigger>
@@ -158,13 +165,22 @@ def install_service(exe: Optional[Path] = None) -> str:
     import tempfile
 
     exe = Path(exe or sys.executable).resolve()
-    with tempfile.TemporaryDirectory() as td:
-        x = Path(td) / "netmeter-task.xml"
-        x.write_text(task_xml(exe), encoding="utf-16")
-        r = _schtasks("/Create", "/TN", TASK, "/XML", str(x), "/F")
-    if r.returncode != 0:
-        raise RuntimeError(f"建立系統排程失敗（要用管理員身分）：{(r.stderr or r.stdout).strip()}")
+    r = None
+    for sddl in (TASK_SDDL, ""):                         # 萬一這版 Windows 不收 SecurityDescriptor → 不帶再試一次
+        with tempfile.TemporaryDirectory() as td:
+            x = Path(td) / "netmeter-task.xml"
+            x.write_text(task_xml(exe, sddl), encoding="utf-16")
+            r = _schtasks("/Create", "/TN", TASK, "/XML", str(x), "/F")
+        if r.returncode == 0:
+            break
+    if r is None or r.returncode != 0:
+        raise RuntimeError(f"建立系統排程失敗（要用管理員身分）：{(r.stderr or r.stdout).strip() if r else ''}")
     _remove_run_key()
+    try:                                                  # 1.0.8：一般使用者可能查不到排程 → 留個記號給狀態視窗看
+        (data_dir() / MARKER).write_text(json.dumps({"task": TASK, "exe": str(exe), "time": time.time()}),
+                                         encoding="utf-8")
+    except OSError:
+        pass
     _SVC_CACHE.clear()
     _schtasks("/Run", "/TN", TASK)
     return "開機時自動在背景執行（系統排程，不用登入）"
@@ -173,6 +189,10 @@ def install_service(exe: Optional[Path] = None) -> str:
 def uninstall_service() -> None:
     _schtasks("/End", "/TN", TASK)
     _schtasks("/Delete", "/TN", TASK, "/F")
+    try:
+        (data_dir() / MARKER).unlink()
+    except OSError:
+        pass
     _SVC_CACHE.clear()
 
 
@@ -184,10 +204,12 @@ def service_installed(max_age: float = 30.0) -> bool:
         return False
     if _SVC_CACHE and time.time() - _SVC_CACHE[0] < max_age:
         return bool(_SVC_CACHE[1])
-    try:
-        ok = _schtasks("/Query", "/TN", TASK).returncode == 0
-    except OSError:
-        ok = False
+    ok = (data_dir() / MARKER).exists()                 # 1.0.8：安裝程式留的記號（一般使用者也看得到）
+    if not ok:
+        try:
+            ok = _schtasks("/Query", "/TN", TASK).returncode == 0
+        except OSError:
+            ok = False
     _SVC_CACHE[:] = [time.time(), float(ok)]
     return ok
 
@@ -200,10 +222,25 @@ def run_service() -> bool:
         return False
 
 
+def remove_run_key() -> None:
+    """拿掉這個使用者的「登入時啟動」（有系統排程時不要再另外開一個使用者身分的背景程式）。"""
+    _remove_run_key()
+
+
+def running_as_system() -> bool:
+    if sys.platform != "win32":
+        return False
+    u = os.environ.get("USERNAME", "")
+    return u.upper() == "SYSTEM" or u.endswith("$")
+
+
 def _remove_run_key() -> None:
     if sys.platform != "win32":
         return
-    import winreg
+    try:
+        import winreg
+    except ImportError:
+        return
 
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as k:

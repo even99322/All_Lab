@@ -287,15 +287,26 @@ class ChannelManager:
                     is_relation_based=ch.is_relation_based,
                 ))
 
+        seen_axes: list[tuple[str, str]] = []      # (axis label, channel it was taken from)
         for name, vt in e.vector_traces.items():
             ch = e.channels.get(name)
-            candidates.append(AxisCandidate(
-                name=vt.x_name or f"{name} (index)",
-                domain="points",
-                unit=vt.x_unit,
-                source="trace_axis",
-                base_channel=name,
-            ))
+            label = vt.x_name or f"{name} (index)"
+            # Several vector channels measured together (S11 + S31 …) share
+            # one trace axis: list "Frequency" once and let every channel
+            # on that axis pair with it. A same-named axis with different
+            # values gets the channel name appended so both stay pickable.
+            same = [src for lab, src in seen_axes if lab == label]
+            if any(self.shares_axis(src, name) for src in same):
+                pass
+            else:
+                candidates.append(AxisCandidate(
+                    name=label if not same else f"{label} ({name})",
+                    domain="points",
+                    unit=vt.x_unit,
+                    source="trace_axis",
+                    base_channel=name,
+                ))
+                seen_axes.append((label, name))
             candidates.append(AxisCandidate(
                 name=name,
                 domain="points",
@@ -346,11 +357,30 @@ class ChannelManager:
             return False
         if x.domain == "points":
             return (
-                x.base_channel == y.base_channel
-                and self._points_length(x) == self._points_length(y)
+                self._points_length(x) == self._points_length(y)
                 and self._points_length(x) > 0
+                and (x.base_channel == y.base_channel or self.shares_axis(x.base_channel, y.base_channel))
             )
         return True
+
+    def shares_axis(self, a: str, b: str) -> bool:
+        """Two vector channels recorded on the same trace axis (same
+        point count and the same axis values) — e.g. S11 and S31 from
+        one VNA sweep. Their points can be plotted against each other."""
+        if a == b:
+            return True
+        va = self.experiment.vector_traces.get(a)
+        vb = self.experiment.vector_traces.get(b)
+        if va is None or vb is None or va.n_points != vb.n_points or va.n_points <= 0:
+            return False
+        try:
+            xa = np.asarray(va.x_values, dtype=float).reshape(-1)
+            xb = np.asarray(vb.x_values, dtype=float).reshape(-1)
+        except (TypeError, ValueError):
+            return False
+        if xa.shape != xb.shape:
+            return False
+        return bool(np.allclose(xa, xb, rtol=1e-9, atol=0.0, equal_nan=True))
 
     def _points_length(self, candidate: AxisCandidate) -> int:
         vt = self.experiment.vector_traces.get(candidate.base_channel)

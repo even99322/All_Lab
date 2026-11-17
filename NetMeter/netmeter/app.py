@@ -39,7 +39,9 @@ def ensure_running() -> str:
     """確定背景程式在跑（舊版在跑就換成這一版）；回傳給使用者看的一句話。"""
     st = agent.control("status")
     if sys.platform == "win32" and install.service_installed():          # 1.0.3：系統排程負責
-        if st is not None and hub.vkey(st.get("version", "0")) >= hub.vkey(__version__):
+        install.remove_run_key()                                        # 1.0.8：不要再有「登入時啟動」的使用者版
+        sys_ok = st is not None and (st.get("as_system") is not False)
+        if sys_ok and hub.vkey(st.get("version", "0")) >= hub.vkey(__version__):
             return ""
         if st is not None:
             agent.control("quit")

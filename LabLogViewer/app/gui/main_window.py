@@ -6663,7 +6663,7 @@ class MainWindow(QMainWindow):
         if default_y is not None:
             default_x = next(
                 (c for c in self._axis_candidates
-                 if c.source == "trace_axis" and c.base_channel == default_y.base_channel),
+                 if c.source == "trace_axis" and self.mgr.shares_axis(c.base_channel, default_y.base_channel)),
                 None,
             )
         if default_x is None and self._axis_candidates:
@@ -7192,7 +7192,7 @@ class MainWindow(QMainWindow):
             x_candidate = next(
                 (candidate for candidate in self._axis_candidates
                  if y_candidate and candidate.source == "trace_axis"
-                 and candidate.base_channel == y_candidate.base_channel), None
+                 and self.mgr.shares_axis(candidate.base_channel, y_candidate.base_channel)), None
             )
             x_index = self.x_combo.findText(x_candidate.name) if x_candidate else -1
             y_index = self.y_combo.findText(y_candidate.name) if y_candidate else -1

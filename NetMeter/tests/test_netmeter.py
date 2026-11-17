@@ -258,6 +258,13 @@ def test_ensure_running_uses_boot_task(monkeypatch):
     monkeypatch.setattr(app.agent, "control", lambda *a, **k: {"version": __version__, "pid": 1})
     calls.clear()
     assert app.ensure_running() == "" and calls == []
+    # 1.0.8：在跑的是使用者身分的（以前「登入時啟動」開的）→ 叫它結束，換系統排程的
+    monkeypatch.setattr(app.agent, "control", lambda cmd, **k: calls.append(cmd) or {"version": __version__, "pid": 1,
+                                                                                       "as_system": False})
+    monkeypatch.setattr(app.agent, "wait_gone", lambda *a, **k: True)
+    calls.clear()
+    app.ensure_running()
+    assert calls == ["status", "quit", "run"]
 
 
 # ---- 1.0.4：內網 / 外網 / VPN；內網 https（hosts）----
@@ -546,3 +553,55 @@ def test_gw_unknown_status(tmp_path, monkeypatch):
     ag.tick()
     s.add("Ethernet", 1000, 1000)
     assert ag.tick()["on"] is True and ag.status()["gw_unknown"] is False
+
+
+# ---- 1.0.8：系統排程看得到、Hub 有新版馬上更新 ----
+def test_service_marker_and_task_sddl(tmp_path, monkeypatch):
+    from netmeter import install
+
+    monkeypatch.setenv("QELNETMETER_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(install.sys, "platform", "win32")
+    assert "<SecurityDescriptor>D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;GRGX;;;AU)</SecurityDescriptor>" in install.task_xml(tmp_path / "x.exe")
+    assert "SecurityDescriptor" not in install.task_xml(tmp_path / "x.exe", "")
+    calls = []
+
+    class R:
+        def __init__(self, code):
+            self.returncode, self.stdout, self.stderr = code, "", "bad"
+
+    def fake(*args):
+        calls.append(args)
+        if args[0] == "/Create":
+            xml = open(args[4], encoding="utf-16").read()
+            return R(1 if "SecurityDescriptor" in xml else 0)          # 這版 Windows 不收 → 不帶再試
+        return R(1)                                                      # 一般使用者查不到排程
+    monkeypatch.setattr(install, "_schtasks", fake)
+    monkeypatch.setattr(install, "_remove_run_key", lambda: None)
+    install._SVC_CACHE.clear()
+    assert not install.service_installed()
+    install.install_service(tmp_path / "x.exe")
+    assert [a[0] for a in calls].count("/Create") == 2
+    install._SVC_CACHE.clear()
+    assert install.service_installed()                                   # 靠安裝時留的記號
+    install.uninstall_service()
+    install._SVC_CACHE.clear()
+    assert not install.service_installed()
+
+
+def test_hub_latest_triggers_update_offnet(tmp_path, monkeypatch):
+    monkeypatch.setenv("QELNETMETER_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(agent.gateway, "detect", lambda prefer=None: {})
+    s = Seq()
+    s.ifs["Ethernet"]["ips"] = ["172.16.0.9"]                            # 不在實驗室網段（例如別間實驗室）
+    ag = agent.Agent(cfg=dict(config.DEFAULTS), sampler=s, reporter=lambda h, p: (h[0], {"latest": "99.0.0"}))
+    ag.tick()
+    assert not ag.update_now.is_set()
+    ag.send(heartbeat=True)
+    assert ag.update_now.is_set()
+    monkeypatch.setattr(agent.sys, "platform", "darwin")
+    monkeypatch.setattr(agent.hub, "latest", lambda h, plat: {"version": "99.0.0", "url": h + "/x.dmg", "name": "x.dmg"})
+    info = ag.check_update()                                             # 1.0.7 以前不在實驗室網段就不查
+    assert info and ag.status()["update"]["version"] == "99.0.0"
+    ag.update_now.clear()
+    ag.send(heartbeat=True)
+    assert not ag.update_now.is_set()                                    # 已經知道這一版 → 不重複叫
