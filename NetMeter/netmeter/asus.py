@@ -145,6 +145,55 @@ def plan_block(nv: Dict[str, str], want: List[str]) -> Optional[Dict[str, str]]:
     return out
 
 
+def parse_staticlist(v: str) -> List[List[str]]:
+    """dhcp_staticlist：「<MAC>IP>DNS>主機名稱<MAC>IP…」（舊韌體只有 <MAC>IP）→ [[MAC, IP, DNS, 名稱], …]。"""
+    out = []
+    for row in str(v or "").split("<"):
+        if not row.strip():
+            continue
+        f = row.split(">")
+        f += [""] * (4 - len(f))
+        out.append([f[0].strip().upper(), f[1].strip(), f[2], f[3]] + f[4:])
+    return out
+
+
+def plan_dhcp(nv: Dict[str, str], want: Dict[str, Dict[str, str]], remove: List[str]) -> Optional[Dict[str, str]]:
+    """手動指定 IP（DHCP 保留）：want 的 MAC 設成它的 IP（同一個 IP 被別的 MAC 佔著 → 拿掉那條），remove 的拿掉；
+    其他的不動。沒有要改 → None。"""
+    rows = parse_staticlist(nv.get("dhcp_staticlist", ""))
+    want = {m.upper(): v for m, v in want.items()}
+    drop = {m.upper() for m in remove} - set(want)
+    ips = {v.get("ip") for v in want.values()}
+    new: List[List[str]] = []
+    seen = set()
+    for r in rows:
+        m = r[0]
+        if m in drop:
+            continue
+        if m in want:
+            if m in seen:
+                continue
+            seen.add(m)
+            r = [m, want[m]["ip"], r[2], r[3] or _host(want[m].get("name", ""))] + r[4:]
+        elif r[1] in ips:
+            continue                                          # 這個 IP 要給別台
+        new.append(r)
+    for m, v in want.items():
+        if m not in seen:
+            new.append([m, v["ip"], "", _host(v.get("name", ""))])
+    text = "".join("<" + ">".join(r) for r in new)
+    if text == "".join("<" + ">".join(r) for r in rows) and (not want or nv.get("dhcp_static_x") == "1"):
+        return None
+    out = {"dhcp_staticlist": text}
+    if want:
+        out["dhcp_static_x"] = "1"
+    return out
+
+
+def _host(name: str) -> str:
+    return re.sub(r"[^A-Za-z0-9-]", "", str(name or ""))[:32]
+
+
 class Asus:
     def __init__(self, host: str, user: str, password: str, port: int = 0, use_ssl: bool = False,
                  timeout: float = 10.0, opener: Any = None) -> None:
@@ -266,6 +315,17 @@ class Asus:
         if plan is not None:
             self.apply(plan)
         return {"ok": True, "macs": sorted(m.upper() for m in macs), "changed": plan is not None}
+
+    def set_reservations(self, want: Dict[str, Dict[str, str]], remove: List[str]) -> Dict[str, Any]:
+        """手動指定 IP（區域網路 → DHCP 伺服器）。回傳路由器上全部的保留 [[MAC, IP], …]。"""
+        nv = self.nvram("dhcp_static_x", "dhcp_staticlist")
+        plan = plan_dhcp(nv, want, remove)
+        if plan is not None:
+            self.apply(plan, "restart_dnsmasq")
+            nv = dict(nv, **plan)
+        return {"ok": True, "changed": plan is not None,
+                "list": [[r[0], r[1]] for r in parse_staticlist(nv.get("dhcp_staticlist", ""))][:200],
+                "enabled": nv.get("dhcp_static_x") == "1"}
 
     def read(self) -> Dict[str, Any]:
         nd = parse_netdev(self.hook("netdev(appobj)"))

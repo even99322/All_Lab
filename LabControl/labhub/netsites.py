@@ -377,8 +377,15 @@ def site_recent(st: Any, sid: str, window: int, chart: str = "") -> Dict[str, An
     from . import netreg
 
     netreg.annotate(st, sid, devices)
+    fixed = netreg.dhcp_view(st, sid)                   # 1.0.47：手動指定 IP
+    for d in devices:
+        f = fixed.get(d.get("mac") or "")
+        if f:
+            d["fixed"] = f
+    dst = c.get("dhcp_state") or {}
     return {"now": now, "window": window, "windows": list(WINDOWS), "sources": out, "site": sid,
             "sites": site_list(st), "site_status": st_, "devices": devices,
+            "dhcp_status": {k: dst.get(k) for k in ("ok", "error", "t")} if dst else None,
             "chart": {"key": chart, "series": ch.get("series", []), "step": ch.get("step", 60)},
             "every": {"router": 60, "nas": 20, "tailscale": 20}}
 

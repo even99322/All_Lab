@@ -216,3 +216,47 @@ def test_self_view(tmp_path):
     nr.register(st, v["mac"], {"name": "Galaxy", "role": "student"}, "self")
     v = nr.self_view(st, "192.168.50.88")
     assert v["reg"]["state"] == "ok" and v["reg"]["role_text"] == "學生" and v["name"] == "Galaxy"
+
+
+def test_dhcp_reservation_via_collector(tmp_path):
+    from labhub.server import HubHTTPError
+
+    clk = Clock()
+    st = nu.NetUsage(tmp_path, now=clk)
+    ns.set_sites(st, {"sites": [{"id": "lab328", "name": "328", "subnets": ["192.168.10.0/24"],
+                                 "router": {"host": "192.168.10.1", "user": "admin", "password": "pw"},
+                                 "collector": "nm-col000001"}]})
+    base = {"id": "nm-col000001", "host": "C", "ip": "192.168.10.11", "on_net": True, "days": {},
+            "gw": {"ip": "192.168.10.1", "mac": "7c:10:c9:00:00:01"}}
+    sr = {"site": "lab328", "ok": True, "rx": 1, "tx": 1, "t": clk.t,
+          "clients": [{"mac": "00:11:22:33:44:55", "ip": "192.168.10.11", "name": "C", "type": "wired"},
+                      {"mac": "a6:00:00:00:00:01", "ip": "192.168.10.50", "name": "iPhone", "type": "5GHz"}]}
+    st.report_device(dict(base, site_router=sr), "100.64.0.10")
+    with pytest.raises(HubHTTPError):
+        nr.dhcp_set(st, "main", "00:11:22:33:44:55", "192.168.50.9", "", "o")             # Netgear 不支援
+    with pytest.raises(HubHTTPError):
+        nr.dhcp_set(st, "lab328", "00:11:22:33:44:55", "192.168.50.9", "", "o")           # 不在網段
+    with pytest.raises(HubHTTPError) as e:
+        nr.dhcp_set(st, "lab328", "00:11:22:33:44:55", "192.168.10.50", "", "o")          # 別台正在用
+    assert e.value.code == 409
+    with pytest.raises(HubHTTPError):
+        nr.dhcp_set(st, "lab328", "00:11:22:33:44:55", "192.168.10.1", "", "o")           # 路由器自己
+    nr.dhcp_set(st, "lab328", "00-11-22-33-44-55", "192.168.10.11", "DESKTOP-EVEN", "o")
+    r = st.report_device(dict(base), "100.64.0.10")
+    assert r["site_dhcp"] == {"set": {"00:11:22:33:44:55": {"ip": "192.168.10.11", "name": "DESKTOP-EVEN"}}, "remove": []}
+    v = st.recent_view(600, site="lab328")
+    d = next(x for x in v["devices"] if x.get("mac") == "00:11:22:33:44:55")
+    assert d["fixed"] == {"ip": "192.168.10.11", "managed": True, "pending": True}
+    st.report_device(dict(base, dhcp_state={"ok": True, "list": [["00:11:22:33:44:55", "192.168.10.11"],
+                                                                 ["aa:aa:aa:aa:aa:aa", "192.168.10.20"]]}), "100.64.0.10")
+    v = st.recent_view(600, site="lab328")
+    assert next(x for x in v["devices"] if x.get("mac") == "00:11:22:33:44:55")["fixed"]["pending"] is False
+    with pytest.raises(HubHTTPError):
+        nr.dhcp_set(st, "lab328", "a6:00:00:00:00:01", "192.168.10.20", "", "o")          # 路由器上已經給別台
+    # 取消（連路由器上原本就有、不是 Hub 設的也能取消）
+    nr.dhcp_set(st, "lab328", "AA:AA:AA:AA:AA:AA", "", "", "o")
+    nr.dhcp_set(st, "lab328", "00:11:22:33:44:55", "", "", "o")
+    r = st.report_device(dict(base), "100.64.0.10")
+    assert r["site_dhcp"] == {"set": {}, "remove": ["AA:AA:AA:AA:AA:AA", "00:11:22:33:44:55"]}
+    st.report_device(dict(base, dhcp_state={"ok": True, "list": []}), "100.64.0.10")
+    assert st.report_device(dict(base), "100.64.0.10")["site_dhcp"]["remove"] == []

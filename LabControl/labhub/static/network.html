@@ -597,6 +597,8 @@ function renderRt() {
     ? `<div class="warnbox">還沒收到這間實驗室路由器的數字：到下面「設定」指定代讀電腦（那邊一台裝了流量監看 1.0.6 以上、開著 VPN 的電腦）並填好路由器帳密。</div>`
     : ss.ok ? `<div class="small muted" style="margin-bottom:8px"><span class="pill ok">代讀正常</span> ${ago(ss.time)}讀取${ss.model ? "　" + esc(ss.model) : ""}　${ss.n} 台連線中</div>`
     : `<div class="warnbox">代讀失敗（${ago(ss.time)}）：${esc(ss.error)}</div>`;
+  if (other && MODE === "lan" && r.dhcp_status && r.dhcp_status.ok === false)
+    $("#sitest").innerHTML += `<div class="warnbox">手動指定 IP 套用失敗：${esc(r.dhcp_status.error || "")}</div>`;
   let cards = "";
   if (MODE === "vpn") {
     const v = S.filter(x => x.kind === "vpn"), ext = v.filter(x => x.path && x.path !== "lan"), rel = v.filter(x => x.path === "relay");
@@ -640,7 +642,8 @@ function nameCell(x) {
   const sub = [x.ip, x.mac].filter(Boolean).join("　");
   const inp = x.alias_key ? `<input data-alias="${esc(x.alias_key)}" value="${esc(x.name || "")}" placeholder="${esc(x.ip || x.mac || "")}" maxlength="40" title="改名（Enter 存檔，清空 = 用原本的名稱）">`
                           : `<b style="padding:2px 6px">${esc(x.name || "")}</b>`;
-  return `<td class="who"><span class="dot${x.online ? " on" : ""}"></span>${inp}<div class="small muted" style="padding-left:21px">${esc(sub)}</div></td>`;
+  const fx = x.fixed ? ` <span class="rg ${x.fixed.pending ? "wait" : "ok"}" title="${x.fixed.pending ? "Hub 已設定，等代讀電腦套用到路由器（1 分鐘內）；設備重新連線後拿到這個 IP" : "路由器的手動指定 IP（DHCP 保留）"}">📌 ${esc(x.fixed.ip)}${x.fixed.pending ? " 套用中" : ""}</span>` : "";
+  return `<td class="who"><span class="dot${x.online ? " on" : ""}"></span>${inp}<div class="small muted" style="padding-left:21px">${esc(sub)}${fx}</div></td>`;
 }
 function renderDevs(wn) {
   const r = RT, box = $("#devs");
@@ -665,10 +668,10 @@ function renderDevs(wn) {
     const list = all.filter(x => devF === "all" || (devF === "on" ? x.online : !x.watched));
     const unw = all.filter(x => x.online && !x.watched);
     $("#devnote").textContent = `${all.filter(x => x.online).length} 台在線` + (unw.length ? `，其中 ${unw.length} 台沒監看` : "");
-    const canBlock = owner() && r.site === "main";
+    const canBlock = owner() && r.site === "main", canFix = owner() && r.site !== "main";
     const kindPill = x => x.kind === "nas" ? `<span class="ty vpn">NAS</span>` : x.kind === "pc" ? `<span class="ty lan">監看中</span>` : `<span class="ty wan">⚠ 沒監看</span>`;
     box.innerHTML = !list.length ? `<div class="empty">${all.length ? "沒有符合的設備" : "還沒有設備：要先在「設定」填好路由器（讀「附加裝置」），或在電腦裝流量監看"}</div>` :
-      `<div class="wrap" data-k="devs"><table><thead><tr><th>設備</th><th class="hide-sm">連線</th><th>監看</th><th class="n">${esc(wn)}合計</th><th class="n hide-sm">↓</th><th class="n hide-sm">↑</th><th class="n">目前</th><th title="流量監看 1.0.4 起：內網（實驗室網段內）／外網（經路由器出去）／VPN（Tailscale 加密封包；其中經外網）">使用類型</th><th>登記</th>${canBlock ? "<th></th>" : ""}</tr></thead><tbody>` +
+      `<div class="wrap" data-k="devs"><table><thead><tr><th>設備</th><th class="hide-sm">連線</th><th>監看</th><th class="n">${esc(wn)}合計</th><th class="n hide-sm">↓</th><th class="n hide-sm">↑</th><th class="n">目前</th><th title="流量監看 1.0.4 起：內網（實驗室網段內）／外網（經路由器出去）／VPN（Tailscale 加密封包；其中經外網）">使用類型</th><th>登記</th>${canBlock || canFix ? "<th></th>" : ""}</tr></thead><tbody>` +
       list.map(x => { const has = x.up != null;
         return `<tr class="${x.source ? "pick" : ""}${x.online && !x.watched ? " unw" : ""}${x.allow === "Block" ? " blocked" : ""}${x.source && x.source === r.chart.key ? " sel" : ""}" data-key="${esc(x.source || "")}">${nameCell(x)}
         <td class="small hide-sm">${esc(x.conn || "")}</td><td>${kindPill(x)}${x.allow === "Block" ? ` <span class="ty off" style="color:var(--err)">⛔ 已封鎖</span>` : ""}</td>
@@ -676,7 +679,8 @@ function renderDevs(wn) {
         <td class="n small">${x.rate ? `↓ ${bps(x.rate.down)}<br>↑ ${bps(x.rate.up)}` : "—"}</td>
         <td class="small">${typeCell(x.split, x.kind)}</td>
         <td class="small">${regCell(x)}</td>
-        ${canBlock ? `<td>${x.mac && x.kind !== "nas" ? `<button class="btn sm ${x.allow === "Block" ? "" : "blk"}" data-block="${esc(x.mac)}" data-on="${x.allow === "Block" ? 0 : 1}" data-name="${esc(x.name || x.ip || x.mac)}">${x.allow === "Block" ? "解除封鎖" : "封鎖"}</button>` : ""}</td>` : ""}</tr>`; }).join("") +
+        ${canBlock ? `<td>${x.mac && x.kind !== "nas" ? `<button class="btn sm ${x.allow === "Block" ? "" : "blk"}" data-block="${esc(x.mac)}" data-on="${x.allow === "Block" ? 0 : 1}" data-name="${esc(x.name || x.ip || x.mac)}">${x.allow === "Block" ? "解除封鎖" : "封鎖"}</button>` : ""}</td>` : ""}
+        ${canFix ? `<td>${x.mac ? `<button class="btn sm" data-fix="${esc(x.mac)}" data-ip="${esc(x.fixed ? x.fixed.ip : (x.ip || "").split(/[,\s]+/)[0])}" data-has="${x.fixed ? 1 : 0}" data-name="${esc(x.name || x.mac)}" title="在路由器設定手動指定 IP（DHCP 保留），這台每次都拿到同一個 IP">📌 ${x.fixed ? "改 IP" : "固定 IP"}</button>` : ""}</td>` : ""}</tr>`; }).join("") +
       `</tbody></table></div><div class="help">「監看中」= 那台裝了流量監看，數字是它自己回報的（含內網傳檔）；「沒監看」的流量只算在「全網」與「監看不到」。點名稱可以改名（大家都看得到）。
       ${canBlock ? "封鎖用路由器的「存取控制」：被封鎖的設備連不上網路（含內網）。" : ""}點一列看那台的每分鐘圖。</div>`;
   }
@@ -693,6 +697,14 @@ function renderDevs(wn) {
   });
   box.querySelectorAll("[data-block]").forEach(b => b.onclick = () => doBlock(b.dataset.block, b.dataset.on === "1", b.dataset.name));
   box.querySelectorAll("[data-reg]").forEach(b => b.onclick = () => regDialog(b.dataset.reg, b.dataset.name, RT.site || "main"));
+  box.querySelectorAll("[data-fix]").forEach(b => b.onclick = () => fixIp(b.dataset.fix, b.dataset.ip, b.dataset.has === "1", b.dataset.name));
+}
+async function fixIp(mac, ip, has, name) {
+  const v = prompt(`「${name}」（${mac}）固定用哪個 IP？\n路由器的手動指定 IP（DHCP 保留）。填目前的 IP 立刻生效；換別的 IP，這台重新連線後才會拿到。` + (has ? "\n清空 = 取消固定。" : ""), ip || "");
+  if (v === null) return;
+  if (!v.trim() && !has) return;
+  try { await api("/api/netusage/dhcp", {method: "PUT", json: {site: RT.site, mac, ip: v.trim(), name}}); loadRt(false); }
+  catch (e) { alert(e.message); }
 }
 async function post(path, json) {
   const r = await fetch(path, {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"}, body: JSON.stringify(json)});

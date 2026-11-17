@@ -46,6 +46,10 @@ class Collector:
         self._applied: Optional[List[str]] = None
         self._block_due = 0.0
         self.block_state: Optional[Dict[str, Any]] = None
+        self.want_dhcp: Optional[Dict[str, Any]] = None   # 1.0.10：Hub 要的手動指定 IP {"set": {MAC: {ip, name}}, "remove": [...]}
+        self._dhcp_applied: Any = None
+        self._dhcp_due = 0.0
+        self.dhcp_state: Optional[Dict[str, Any]] = None
         self.regs: List[Dict[str, Any]] = []              # 登記頁送來、還沒被 Hub 收的
         self.reg_results: Dict[str, Dict[str, Any]] = {}
         self.reg_status: Dict[str, Dict[str, Any]] = {}   # Hub 給的：各 MAC 的登記狀態（登記頁顯示）
@@ -110,6 +114,11 @@ class Collector:
             self.reg_status = {str(k).upper(): v for k, v in resp["reg_status"].items() if isinstance(v, dict)}
         if "enforce" in resp:
             self.enforce = bool(resp.get("enforce"))
+        sd = resp.get("site_dhcp")
+        if isinstance(sd, dict):
+            st = {str(m).upper(): {"ip": str(v.get("ip") or ""), "name": str(v.get("name") or "")}
+                  for m, v in (sd.get("set") or {}).items() if isinstance(v, dict) and v.get("ip")}
+            self.want_dhcp = {"set": st, "remove": sorted({str(m).upper() for m in sd.get("remove") or []})}
         acks = resp.get("regs_ack")
         if isinstance(acks, list):
             done = {}
@@ -121,6 +130,24 @@ class Collector:
                 for k, a in done.items():
                     self.reg_results[k] = {"ok": bool(a.get("ok")), "error": str(a.get("error") or ""), "t": time.time()}
         self.apply_block()
+        self.apply_dhcp()
+
+    def apply_dhcp(self, force: bool = False, now: Optional[float] = None) -> None:
+        now = time.time() if now is None else now
+        if self.want_dhcp is None or not self.active():
+            return
+        if not force and self.want_dhcp == self._dhcp_applied and now < self._dhcp_due:
+            return
+        try:
+            r = self._client().set_reservations(self.want_dhcp["set"], self.want_dhcp["remove"])
+            self._dhcp_applied = json.loads(json.dumps(self.want_dhcp))
+            self.dhcp_state = {"ok": True, "list": r.get("list") or [], "t": now}
+            if r.get("changed"):
+                log.info("手動指定 IP：%s", ", ".join(f"{m}={v['ip']}" for m, v in self.want_dhcp["set"].items()))
+        except Exception as e:  # noqa: BLE001
+            self._router = None
+            self.dhcp_state = {"ok": False, "error": str(e)[:300], "t": now}
+        self._dhcp_due = now + BLOCK_CHECK_S
 
     def apply_block(self, force: bool = False, now: Optional[float] = None) -> None:
         now = time.time() if now is None else now
@@ -145,6 +172,8 @@ class Collector:
             out["site_router"] = self.last
         if self.block_state is not None:
             out["block_state"] = self.block_state
+        if self.dhcp_state is not None:
+            out["dhcp_state"] = self.dhcp_state
         with self.lock:
             if self.regs:
                 out["regs"] = [dict(r) for r in self.regs[:50]]
@@ -154,7 +183,7 @@ class Collector:
         sr = self.last or {}
         return {"site": self.cfg.get("site"), "host": self.cfg.get("host"), "ok": sr.get("ok"),
                 "error": sr.get("error", ""), "ta_error": self.ta_error, "ta_time": (self.ta or {}).get("t"),
-                "block": self.block_state, "enforce": self.enforce, "page": self.srv is not None,
+                "block": self.block_state, "dhcp": self.dhcp_state, "enforce": self.enforce, "page": self.srv is not None,
                 "page_error": self.srv_error, "port": self.port, "pending_regs": len(self.regs)}
 
     # ---- 登記頁 ----

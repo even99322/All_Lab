@@ -3,6 +3,10 @@
 1.0.36 起 Hub 跟 Lab Control 分開發佈（GitHub 發佈 `hub-v<版本>`）；1.0.35 以前的紀錄在 [CHANGELOG.md](CHANGELOG.md)。
 每一版的說明在 [docs/releases/hub/](docs/releases/hub/)。
 
+## 1.0.47 — 2026-11-17
+
+站長可以在網路用量的設備表固定其他實驗室（華碩）設備的 IP（由代讀電腦寫進路由器的 DHCP 保留）。詳見 [docs/releases/hub/v1.0.47.md](docs/releases/hub/v1.0.47.md)。
+
 ## 1.0.46 — 2026-11-17
 
 網路用量新增「流量分析」（每小時、各設備、華碩 Traffic Analyzer 的 App）與「設備登記」（沒備註的手機 / 電腦寬限後停網，掃 QR 碼登記）。詳見 [docs/releases/hub/v1.0.46.md](docs/releases/hub/v1.0.46.md)。

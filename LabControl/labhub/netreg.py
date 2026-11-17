@@ -371,6 +371,19 @@ def on_collector(st: Any, sid: str, b: Dict[str, Any]) -> Dict[str, Any]:
             st._dirty = True
         st.status[f"netreg_{sid}"] = {"time": st.now(), "ok": bool(bs.get("ok", True)),
                                       "error": _s(bs.get("error"), 300), "blocked": sorted(applied)}
+    ds = b.get("dhcp_state")
+    if isinstance(ds, dict):                                  # 1.0.47：手動指定 IP 的結果與路由器上全部的保留
+        with st.lock:
+            c = _site(st, sid)
+            lst = [[norm_mac(r[0]), _s(r[1], 45)] for r in (ds.get("list") or [])[:200]
+                   if isinstance(r, (list, tuple)) and len(r) >= 2 and norm_mac(r[0])]
+            c["dhcp_state"] = {"ok": bool(ds.get("ok", True)), "error": _s(ds.get("error"), 300), "t": st.now(),
+                               **({"list": lst} if ds.get("ok", True) else {"list": (c.get("dhcp_state") or {}).get("list", [])})}
+            if ds.get("ok", True):
+                have = {m for m, _ip in lst}
+                rm = x.setdefault("dhcp_rm", {}).get(sid) or []
+                x["dhcp_rm"][sid] = [m for m in rm if m in have]
+            st._dirty = True
     want = want_blocked(st, sid, devs.values())
     page = {}
     now = st.now()
@@ -378,8 +391,93 @@ def on_collector(st: Any, sid: str, b: Dict[str, Any]) -> Dict[str, Any]:
         s = state_of(st, sid, d, now)
         page[m] = {"state": s["state"], "left": s.get("left", 0), "kind": s["kind"],
                    "name": (registered(st, m) or {}).get("name", "")}
+    dh = (x.get("dhcp") or {}).get(sid) or {}
     return {"site_block": sorted(want), "regs_ack": acks, "reg_status": page,
-            "enforce": enforce_cfg(st, sid)["on"]}
+            "enforce": enforce_cfg(st, sid)["on"],
+            "site_dhcp": {"set": {m: {"ip": v["ip"], "name": v.get("name", "")} for m, v in dh.items()},
+                          "remove": list((x.get("dhcp_rm") or {}).get(sid) or [])}}
+
+
+# ---------------------------------------------------------------- 1.0.47：手動指定 IP（華碩 DHCP 保留）
+def _site(st: Any, sid: str) -> Dict[str, Any]:
+    from .netsites import sites
+
+    return sites(st)[sid]
+
+
+def dhcp_view(st: Any, sid: str) -> Dict[str, Any]:
+    """{MAC: {ip, managed}}：路由器上的保留（代讀電腦回報）＋ Hub 要設的（還沒套用的也算）。"""
+    from .netsites import sites
+
+    if sid not in sites(st):
+        return {}
+    out = {m: {"ip": ip, "managed": False} for m, ip in ((_site(st, sid).get("dhcp_state") or {}).get("list") or [])}
+    for m in (_x(st).get("dhcp_rm") or {}).get(sid) or []:
+        out.pop(m, None)
+    for m, v in ((_x(st).get("dhcp") or {}).get(sid) or {}).items():
+        out[m] = {"ip": v["ip"], "managed": True, "pending": out.get(m, {}).get("ip") != v["ip"]}
+    return out
+
+
+def dhcp_set(st: Any, sid: str, mac: str, ip: str, name: str, by: str) -> Dict[str, Any]:
+    import ipaddress
+
+    from .netsites import _nets, sites
+
+    if sid == "main" or not sid:
+        raise HubHTTPError(400, "本實驗室的 Netgear 沒有可以從外面設定的介面：請到路由器管理頁「進階 → 設定 → LAN 設定 → 位址保留」")
+    if sid not in sites(st):
+        raise HubHTTPError(404, "沒有這間實驗室")
+    c = sites(st)[sid]
+    if not c.get("collector"):
+        raise HubHTTPError(409, "這間還沒有代讀電腦：要由代讀電腦設定路由器")
+    mac = norm_mac(mac)
+    if not mac:
+        raise HubHTTPError(400, "MAC 格式不對")
+    x = _x(st)
+    with st.lock:
+        man = x.setdefault("dhcp", {}).setdefault(sid, {})
+        rm = x.setdefault("dhcp_rm", {}).setdefault(sid, [])
+        ip = str(ip or "").strip()
+        if not ip:
+            if man.pop(mac, None) is not None or mac in dict((c.get("dhcp_state") or {}).get("list") or []):
+                if mac not in rm:
+                    rm.append(mac)
+            st._dirty = True
+            return {"ok": True, "mac": mac, "ip": ""}
+        try:
+            a = ipaddress.ip_address(ip)
+        except ValueError:
+            raise HubHTTPError(400, "IP 格式不對") from None
+        nets = [n for n in _nets(c.get("subnets") or []) if n.version == a.version]
+        if not any(a in n for n in nets):
+            raise HubHTTPError(400, f"{ip} 不在這間實驗室的網段（{'、'.join(c.get('subnets') or []) or '還沒設定網段'}）")
+        if any(a == n.network_address or a == n.broadcast_address for n in nets):
+            raise HubHTTPError(400, "不能用網段的第一個 / 最後一個位址")
+        gw = ((st.pcs.get(c.get("collector") or "") or {}).get("gw") or {}).get("ip")
+        for m, v in dhcp_view(st, sid).items():
+            if m != mac and v["ip"] == ip:
+                raise HubHTTPError(409, f"{ip} 已經指定給 {st.alias('mac:' + m, m)}")
+        for m, d in (c.get("devices") or {}).items():
+            if m != mac and d.get("ip") == ip and m in set(c.get("online") or []):
+                raise HubHTTPError(409, f"{ip} 現在被 {st.alias('mac:' + m, d.get('name') or m)} 使用中：換一個，或等它離線")
+        if gw and ip == gw:
+            raise HubHTTPError(400, "這是路由器自己的位址")
+        man[mac] = {"ip": ip, "name": _s(name, 40), "by": _s(by, 60), "t": st.now()}
+        if mac in rm:
+            rm.remove(mac)
+        st._dirty = True
+    st.save()
+    return {"ok": True, "mac": mac, "ip": ip}
+
+
+@route("PUT", r"/api/netusage/dhcp", auth="owner")
+def _dhcp_put(h: Handler) -> None:
+    b = h._json_body() or {}
+    st = _st(h)
+    res = dhcp_set(st, str(b.get("site") or ""), str(b.get("mac") or ""), str(b.get("ip") or ""),
+                   str(b.get("name") or ""), (h.user() or {}).get("username", ""))
+    h._json(res)
 
 
 # ---------------------------------------------------------------- 網頁

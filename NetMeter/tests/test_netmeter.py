@@ -706,3 +706,47 @@ def test_collector_block_and_registration_page():
     finally:
         c.configure({})
     assert c.srv is None
+
+
+# ---- 1.0.10：手動指定 IP（華碩 DHCP 保留）----
+def test_plan_dhcp():
+    from netmeter import asus
+
+    nv = {"dhcp_static_x": "0", "dhcp_staticlist": "<11:11:11:11:11:11>192.168.10.5>>printer<22:22:22:22:22:22>192.168.10.11"}
+    rows = asus.parse_staticlist(nv["dhcp_staticlist"])
+    assert rows == [["11:11:11:11:11:11", "192.168.10.5", "", "printer"], ["22:22:22:22:22:22", "192.168.10.11", "", ""]]
+    p = asus.plan_dhcp(nv, {"aa:aa:aa:aa:aa:aa": {"ip": "192.168.10.11", "name": "DESKTOP-EVEN"}}, [])
+    assert p == {"dhcp_staticlist": "<11:11:11:11:11:11>192.168.10.5>>printer<AA:AA:AA:AA:AA:AA>192.168.10.11>>DESKTOP-EVEN",
+                 "dhcp_static_x": "1"}                                                  # 同一個 IP 的舊保留讓出來
+    nv2 = {"dhcp_static_x": "1", "dhcp_staticlist": p["dhcp_staticlist"]}
+    assert asus.plan_dhcp(nv2, {"AA:AA:AA:AA:AA:AA": {"ip": "192.168.10.11", "name": "x"}}, []) is None
+    q = asus.plan_dhcp(nv2, {"AA:AA:AA:AA:AA:AA": {"ip": "192.168.10.12", "name": "x"}}, ["11:11:11:11:11:11"])
+    assert q == {"dhcp_staticlist": "<AA:AA:AA:AA:AA:AA>192.168.10.12>>DESKTOP-EVEN", "dhcp_static_x": "1"}
+    assert asus.plan_dhcp(nv2, {}, ["AA:AA:AA:AA:AA:AA"]) == {"dhcp_staticlist": "<11:11:11:11:11:11>192.168.10.5>>printer"}
+
+
+def test_collector_dhcp():
+    from netmeter.collector import Collector
+
+    calls = []
+
+    class R:
+        def __init__(self, *a):
+            pass
+
+        def read(self):
+            return {"ok": True, "rx": 1, "tx": 2, "clients": []}
+
+        def set_blocked(self, macs):
+            return {"ok": True}
+
+        def set_reservations(self, want, remove):
+            calls.append((want, remove))
+            return {"ok": True, "changed": True, "list": [[m, v["ip"]] for m, v in want.items()]}
+    c = Collector(port=0, asus_factory=R)
+    c.cfg = {"site": "lab328", "host": "192.168.10.1"}
+    c.on_hub({"site_dhcp": {"set": {"aa:aa:aa:aa:aa:aa": {"ip": "192.168.10.11", "name": "PC"}}, "remove": []}})
+    assert calls == [({"AA:AA:AA:AA:AA:AA": {"ip": "192.168.10.11", "name": "PC"}}, [])]
+    assert c.payload()["dhcp_state"]["list"] == [["AA:AA:AA:AA:AA:AA", "192.168.10.11"]]
+    c.on_hub({"site_dhcp": {"set": {"AA:AA:AA:AA:AA:AA": {"ip": "192.168.10.11", "name": "PC"}}, "remove": []}})
+    assert len(calls) == 1                                                              # 沒變 → 不重設
