@@ -750,3 +750,28 @@ def test_collector_dhcp():
     assert c.payload()["dhcp_state"]["list"] == [["AA:AA:AA:AA:AA:AA", "192.168.10.11"]]
     c.on_hub({"site_dhcp": {"set": {"AA:AA:AA:AA:AA:AA": {"ip": "192.168.10.11", "name": "PC"}}, "remove": []}})
     assert len(calls) == 1                                                              # 沒變 → 不重設
+
+
+# ---- 1.0.11：固定 IP 後重新取得 IP ----
+def test_renew_ip(tmp_path, monkeypatch):
+    monkeypatch.setenv("QELNETMETER_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(agent.gateway, "detect", lambda prefer=None: {})
+    s = Seq()
+    s.ifs["Ethernet"]["ips"] = ["192.168.10.88"]
+    ag = agent.Agent(cfg=dict(config.DEFAULTS, reg_port=0), sampler=s, reporter=lambda h, p: (h[0], {}))
+    cmds = []
+
+    def run(a):
+        cmds.append(a[1])
+        if a[1] == "/renew" and cmds.count("/renew") == 2:              # 第一次 renew 沒換，release + renew 才換
+            s.ifs["Ethernet"]["ips"] = ["192.168.10.11"]
+    r = ag.renew_ip({"mac": "E8:9C:25:37:8C:D5", "from": "192.168.10.88", "to": "192.168.10.11"}, run=run, wait=0)
+    assert r == {"mac": "E8:9C:25:37:8C:D5", "ok": True, "ip": "192.168.10.11"} and cmds == ["/renew", "/release", "/renew"]
+    sent = []
+    ag.reporter = lambda h, p: sent.append(p) or (h[0], {})
+    ag.tick()
+    ag.send(heartbeat=True)
+    ag.send(heartbeat=True)
+    assert sent[0]["renew_result"]["ok"] and "renew_result" not in sent[1]                # 只送一次
+    r = ag.renew_ip({"mac": "x", "from": "10.9.9.9", "to": "10.9.9.10"}, run=lambda a: None, wait=0)
+    assert r["ok"] is False and "找不到" in r["error"]

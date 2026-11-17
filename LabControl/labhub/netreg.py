@@ -471,13 +471,117 @@ def dhcp_set(st: Any, sid: str, mac: str, ip: str, name: str, by: str) -> Dict[s
     return {"ok": True, "mac": mac, "ip": ip}
 
 
+# ---------------------------------------------------------------- 1.0.48：固定 IP 後立刻換（流量監看的 Windows 電腦）
+RENEW_EVERY_S = 600.0
+RENEW_KEEP_S = 86400.0
+
+
+def request_renew(st: Any, sid: str, mac: str, by: str) -> Dict[str, Any]:
+    mac = norm_mac(mac)
+    if not mac:
+        raise HubHTTPError(400, "MAC 格式不對")
+    x = _x(st)
+    with st.lock:
+        x.setdefault("dhcp_renew", {})[mac] = {"site": sid, "t": st.now(), "by": _s(by, 60), "last": 0}
+        st._dirty = True
+    return {"ok": True}
+
+
+def _pc_mac(st: Any, sid: str, pc: Dict[str, Any]) -> str:
+    from .netsites import sites
+
+    ips = [i for i in re.split(r"[,\s]+", str(pc.get("ip") or "")) if i]
+    for m, d in ((sites(st).get(sid) or {}).get("devices") or {}).items():
+        if d.get("ip") in ips:
+            return m
+    return ""
+
+
+def renew_for(st: Any, did: str, busy_hosts: Iterable[str], b: Dict[str, Any]) -> Dict[str, Any]:
+    """流量監看回報時：這台有「固定 IP、但目前的 IP 不一樣、站長要它立刻換」→ 回 renew，叫它重新取得 IP。
+    量測中（Lab Control 節點忙）的電腦等量完再換。"""
+    from .netsites import sites
+
+    x = _x(st)
+    pc = st.pcs.get(did) or {}
+    sid = pc.get("site") or ""
+    rr = b.get("renew_result")
+    if isinstance(rr, dict) and rr.get("mac"):
+        m = norm_mac(rr["mac"])
+        with st.lock:
+            r = (x.get("dhcp_renew") or {}).get(m)
+            if r is not None:
+                r["result"] = {"ok": bool(rr.get("ok")), "error": _s(rr.get("error"), 200), "t": st.now(),
+                               "ip": _s(rr.get("ip"), 45)}
+                st._dirty = True
+    if sid not in sites(st):
+        return {}
+    mac = _pc_mac(st, sid, pc)
+    if not mac:
+        return {}
+    req = (x.get("dhcp_renew") or {}).get(mac)
+    fixed = dhcp_view(st, sid).get(mac)
+    ips = [i for i in re.split(r"[,\s]+", str(pc.get("ip") or "")) if i]
+    now = st.now()
+    with st.lock:
+        if req and (not fixed or fixed["ip"] in ips or now - float(req.get("t") or 0) > RENEW_KEEP_S):
+            x["dhcp_renew"].pop(mac, None)                 # 換好了 / 取消固定 / 太久
+            st._dirty = True
+            return {}
+    if not req or not fixed or fixed.get("pending"):
+        return {}
+    host = str(pc.get("host") or "").lower().rstrip("$")
+    if host and host in {h.lower() for h in busy_hosts}:
+        with st.lock:
+            req["waiting"] = "量測中，等量完再換"
+            st._dirty = True
+        return {}
+    if now - float(req.get("last") or 0) < RENEW_EVERY_S:
+        return {}
+    with st.lock:
+        req["last"] = now
+        req.pop("waiting", None)
+        st._dirty = True
+    return {"renew": {"mac": mac, "from": ips[0] if ips else "", "to": fixed["ip"]}}
+
+
+def renew_state(st: Any, mac: str) -> Optional[Dict[str, Any]]:
+    r = (_x(st).get("dhcp_renew") or {}).get(norm_mac(mac))
+    if not r:
+        return None
+    return {k: r.get(k) for k in ("t", "last", "waiting", "result") if r.get(k) is not None}
+
+
+def busy_hosts(hub: Any) -> List[str]:
+    """Lab Control 量測中的電腦（節點狀態 running / paused / preparing / stopping）。"""
+    out = []
+    try:
+        snap = hub.snapshot()
+        for n in snap.get("nodes") or []:
+            if n.get("online") and n.get("state") in ("running", "paused", "preparing", "stopping"):
+                out += [str(n.get("host") or ""), str(n.get("name") or "")]
+    except Exception:  # noqa: BLE001
+        pass
+    return [h for h in out if h]
+
+
 @route("PUT", r"/api/netusage/dhcp", auth="owner")
 def _dhcp_put(h: Handler) -> None:
     b = h._json_body() or {}
     st = _st(h)
+    user = (h.user() or {}).get("username", "")
     res = dhcp_set(st, str(b.get("site") or ""), str(b.get("mac") or ""), str(b.get("ip") or ""),
-                   str(b.get("name") or ""), (h.user() or {}).get("username", ""))
+                   str(b.get("name") or ""), user)
+    if b.get("renew") and res.get("ip"):
+        request_renew(st, str(b.get("site") or ""), res["mac"], user)
     h._json(res)
+
+
+@route("POST", r"/api/netusage/dhcp/renew", auth="owner")
+def _dhcp_renew(h: Handler) -> None:
+    b = h._json_body() or {}
+    h._json(request_renew(_st(h), str(b.get("site") or ""), str(b.get("mac") or ""),
+                          (h.user() or {}).get("username", "")))
 
 
 # ---------------------------------------------------------------- 網頁

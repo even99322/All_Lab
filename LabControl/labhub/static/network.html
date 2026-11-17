@@ -642,7 +642,17 @@ function nameCell(x) {
   const sub = [x.ip, x.mac].filter(Boolean).join("　");
   const inp = x.alias_key ? `<input data-alias="${esc(x.alias_key)}" value="${esc(x.name || "")}" placeholder="${esc(x.ip || x.mac || "")}" maxlength="40" title="改名（Enter 存檔，清空 = 用原本的名稱）">`
                           : `<b style="padding:2px 6px">${esc(x.name || "")}</b>`;
-  const fx = x.fixed ? ` <span class="rg ${x.fixed.pending ? "wait" : "ok"}" title="${x.fixed.pending ? "Hub 已設定，等代讀電腦套用到路由器（1 分鐘內）；設備重新連線後拿到這個 IP" : "路由器的手動指定 IP（DHCP 保留）"}">📌 ${esc(x.fixed.ip)}${x.fixed.pending ? " 套用中" : ""}</span>` : "";
+  let fx = "";
+  if (x.fixed) {
+    const f = x.fixed, rn = f.renew || {}, res = rn.result || {};
+    const st = f.pending ? ["wait", "套用中", "Hub 已設定，等代讀電腦寫進路由器（1 分鐘內）"]
+      : f.moved === false ? ["wait", rn.waiting ? "量測中，等量完再換" : rn.t ? (res.t && !res.ok ? "換 IP 失敗" : "換 IP 中") : "還沒換過去",
+          rn.waiting ? "這台正在量測，量完才重新取得 IP" : res.t && !res.ok ? (res.error || "") :
+          x.kind === "pc" ? "路由器已設定；按「立刻換」讓這台重新取得 IP（網路斷 1–2 秒），或等租約更新（最晚約 12 小時）"
+                          : "路由器已設定；這台重新連線（Wi-Fi 關再開 / 重開機）或租約更新（最晚約 12 小時）後換過去"]
+      : ["ok", "", "路由器的手動指定 IP（DHCP 保留），已在用"];
+    fx = ` <span class="rg ${st[0]}" title="${esc(st[2])}">📌 ${esc(f.ip)}${st[1] ? " " + esc(st[1]) : ""}</span>`;
+  }
   return `<td class="who"><span class="dot${x.online ? " on" : ""}"></span>${inp}<div class="small muted" style="padding-left:21px">${esc(sub)}${fx}</div></td>`;
 }
 function renderDevs(wn) {
@@ -669,7 +679,11 @@ function renderDevs(wn) {
     const unw = all.filter(x => x.online && !x.watched);
     $("#devnote").textContent = `${all.filter(x => x.online).length} 台在線` + (unw.length ? `，其中 ${unw.length} 台沒監看` : "");
     const canBlock = owner() && r.site === "main", canFix = owner() && r.site !== "main";
-    const kindPill = x => x.kind === "nas" ? `<span class="ty vpn">NAS</span>` : x.kind === "pc" ? `<span class="ty lan">監看中</span>` : `<span class="ty wan">⚠ 沒監看</span>`;
+    const vk = v => String(v || "0").split(".").map(n => parseInt(n, 10) || 0);
+    const older = (a, b) => { const x = vk(a), y = vk(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); } return false; };
+    const kindPill = x => x.kind === "nas" ? `<span class="ty vpn">NAS</span>` : x.kind === "pc"
+      ? `<span class="ty lan">監看中</span>${x.version ? `<div class="small ${r.nm_latest && older(x.version, r.nm_latest) ? "" : "muted"}" style="margin-top:2px${r.nm_latest && older(x.version, r.nm_latest) ? ";color:var(--warn)" : ""}" title="${r.nm_latest && older(x.version, r.nm_latest) ? "不是最新版（" + esc(r.nm_latest) + "）：會自己更新；1.0.7 以前的要手動裝一次" : "流量監看版本"}">v${esc(x.version)}${r.nm_latest && older(x.version, r.nm_latest) ? " ⬆" : ""}</div>` : ""}`
+      : `<span class="ty wan">⚠ 沒監看</span>`;
     box.innerHTML = !list.length ? `<div class="empty">${all.length ? "沒有符合的設備" : "還沒有設備：要先在「設定」填好路由器（讀「附加裝置」），或在電腦裝流量監看"}</div>` :
       `<div class="wrap" data-k="devs"><table><thead><tr><th>設備</th><th class="hide-sm">連線</th><th>監看</th><th class="n">${esc(wn)}合計</th><th class="n hide-sm">↓</th><th class="n hide-sm">↑</th><th class="n">目前</th><th title="流量監看 1.0.4 起：內網（實驗室網段內）／外網（經路由器出去）／VPN（Tailscale 加密封包；其中經外網）">使用類型</th><th>登記</th>${canBlock || canFix ? "<th></th>" : ""}</tr></thead><tbody>` +
       list.map(x => { const has = x.up != null;
@@ -680,7 +694,7 @@ function renderDevs(wn) {
         <td class="small">${typeCell(x.split, x.kind)}</td>
         <td class="small">${regCell(x)}</td>
         ${canBlock ? `<td>${x.mac && x.kind !== "nas" ? `<button class="btn sm ${x.allow === "Block" ? "" : "blk"}" data-block="${esc(x.mac)}" data-on="${x.allow === "Block" ? 0 : 1}" data-name="${esc(x.name || x.ip || x.mac)}">${x.allow === "Block" ? "解除封鎖" : "封鎖"}</button>` : ""}</td>` : ""}
-        ${canFix ? `<td>${x.mac ? `<button class="btn sm" data-fix="${esc(x.mac)}" data-ip="${esc(x.fixed ? x.fixed.ip : (x.ip || "").split(/[,\s]+/)[0])}" data-has="${x.fixed ? 1 : 0}" data-name="${esc(x.name || x.mac)}" title="在路由器設定手動指定 IP（DHCP 保留），這台每次都拿到同一個 IP">📌 ${x.fixed ? "改 IP" : "固定 IP"}</button>` : ""}</td>` : ""}</tr>`; }).join("") +
+        ${canFix ? `<td>${x.mac && x.kind === "pc" && x.fixed && x.fixed.moved === false && !x.fixed.pending ? `<button class="btn sm" data-renew="${esc(x.mac)}" data-name="${esc(x.name || x.mac)}" title="叫這台的流量監看重新取得 IP（Windows；網路斷 1–2 秒，量測中的等量完）">⟳ 立刻換</button> ` : ""}${x.mac ? `<button class="btn sm" data-fix="${esc(x.mac)}" data-ip="${esc(x.fixed ? x.fixed.ip : (x.ip || "").split(/[,\s]+/)[0])}" data-has="${x.fixed ? 1 : 0}" data-name="${esc(x.name || x.mac)}" title="在路由器設定手動指定 IP（DHCP 保留），這台每次都拿到同一個 IP">📌 ${x.fixed ? "改 IP" : "固定 IP"}</button>` : ""}</td>` : ""}</tr>`; }).join("") +
       `</tbody></table></div><div class="help">「監看中」= 那台裝了流量監看，數字是它自己回報的（含內網傳檔）；「沒監看」的流量只算在「全網」與「監看不到」。點名稱可以改名（大家都看得到）。
       ${canBlock ? "封鎖用路由器的「存取控制」：被封鎖的設備連不上網路（含內網）。" : ""}點一列看那台的每分鐘圖。</div>`;
   }
@@ -698,12 +712,21 @@ function renderDevs(wn) {
   box.querySelectorAll("[data-block]").forEach(b => b.onclick = () => doBlock(b.dataset.block, b.dataset.on === "1", b.dataset.name));
   box.querySelectorAll("[data-reg]").forEach(b => b.onclick = () => regDialog(b.dataset.reg, b.dataset.name, RT.site || "main"));
   box.querySelectorAll("[data-fix]").forEach(b => b.onclick = () => fixIp(b.dataset.fix, b.dataset.ip, b.dataset.has === "1", b.dataset.name));
+  box.querySelectorAll("[data-renew]").forEach(b => b.onclick = async () => {
+    if (!confirm(`讓「${b.dataset.name}」立刻換到固定的 IP？\n它的流量監看會重新取得 IP，網路斷 1–2 秒（量測中的會等量完）。`)) return;
+    try { await api("/api/netusage/dhcp/renew", {method: "POST", json: {site: RT.site, mac: b.dataset.renew}}); loadRt(false); }
+    catch (e) { alert(e.message); }
+  });
 }
 async function fixIp(mac, ip, has, name) {
   const v = prompt(`「${name}」（${mac}）固定用哪個 IP？\n路由器的手動指定 IP（DHCP 保留）。填目前的 IP 立刻生效；換別的 IP，這台重新連線後才會拿到。` + (has ? "\n清空 = 取消固定。" : ""), ip || "");
   if (v === null) return;
   if (!v.trim() && !has) return;
-  try { await api("/api/netusage/dhcp", {method: "PUT", json: {site: RT.site, mac, ip: v.trim(), name}}); loadRt(false); }
+  const dev = (RT.devices || []).find(d => d.mac === mac) || {};
+  const cur = String(dev.ip || "").split(/[,\s]+/);
+  const renew = !!v.trim() && dev.kind === "pc" && !cur.includes(v.trim()) &&
+    confirm("要讓這台立刻換到這個 IP 嗎？\n它的流量監看會重新取得 IP，網路斷 1–2 秒（量測中的會等量完）。\n按「取消」= 等它下次重新連線或租約更新。");
+  try { await api("/api/netusage/dhcp", {method: "PUT", json: {site: RT.site, mac, ip: v.trim(), name, renew}}); loadRt(false); }
   catch (e) { alert(e.message); }
 }
 async function post(path, json) {

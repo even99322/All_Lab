@@ -72,6 +72,8 @@ class Agent:
         from .collector import Collector
 
         self._kicked = threading.Event()
+        self._renewing = False
+        self.renew_result: Optional[Dict[str, Any]] = None
         self.col = Collector(kick=self._kicked.set, port=int(self.cfg.get("reg_port", 47680)))        # 1.0.9：代讀（Traffic Analyzer、設備登記頁、停網）
         self.gw: Dict[str, str] = {}
 
@@ -109,6 +111,8 @@ class Agent:
                  "ifaces": m.on_ifaces, "on_net": bool(m.on_ifaces), "rate": dict(m.rate), "days": m.recent(8)}
         if self.gw:
             p["gw"] = dict(self.gw)
+        if self.renew_result is not None:
+            p["renew_result"] = self.renew_result
         if self.col.active():
             p.update(self.col.payload())
         elif self.site_router:
@@ -147,9 +151,60 @@ class Agent:
                 self.col.on_hub(resp)
         except Exception:  # noqa: BLE001
             log.exception("代讀")
+        rn = resp.get("renew")                               # 1.0.11：Hub 固定了這台的 IP → 重新取得 IP
+        if isinstance(rn, dict) and rn.get("to") and not self._renewing:
+            self._renewing = True
+            threading.Thread(target=self.renew_ip, args=(dict(rn),), daemon=True).start()
         lv = resp.get("latest")                              # 1.0.8：Hub 上有新版 → 馬上查、更新
         if isinstance(lv, str) and hub.vkey(lv) > hub.vkey(__version__) and self.update.get("version") != lv:
             self.update_now.set()
+
+    def _ips_now(self) -> Dict[str, List[str]]:
+        try:
+            s = self.meter.sampler()
+        except Exception:  # noqa: BLE001
+            return {}
+        return {n: [str(i).split("%", 1)[0] for i in (v.get("ips") or [])] for n, v in (s.get("ifaces") or {}).items()}
+
+    def renew_ip(self, rn: Dict[str, Any], run: Optional[Callable[[List[str]], Any]] = None,
+                 wait: float = 4.0) -> Dict[str, Any]:
+        """1.0.11：ipconfig /renew 那張網卡（路由器的 DHCP 保留改了 IP，dnsmasq 會 NAK 舊的 → 拿到新的）；
+        沒換過去再 /release + /renew。只有 Windows（系統排程的背景程式有權限）。"""
+        import subprocess
+
+        frm, to = str(rn.get("from") or ""), str(rn.get("to") or "")
+        res: Dict[str, Any] = {"mac": rn.get("mac"), "ok": False, "ip": frm}
+        try:
+            if sys.platform != "win32" and run is None:
+                raise RuntimeError("只有 Windows 會自動換 IP")
+            if run is None:
+                def run(args: List[str]) -> Any:
+                    return subprocess.run(args, capture_output=True, timeout=90, creationflags=0x08000000)
+            ifs = self._ips_now()
+            name = next((n for n, ips in ifs.items() if frm and frm in ips), "")
+            if not name:
+                if any(to in ips for ips in ifs.values()):
+                    res.update(ok=True, ip=to)
+                    return res
+                raise RuntimeError(f"找不到有 {frm} 的網卡")
+            log.info("固定 IP：%s 從 %s 換到 %s", name, frm, to)
+            for steps in ((["ipconfig", "/renew", name],), (["ipconfig", "/release", name], ["ipconfig", "/renew", name])):
+                for a in steps:
+                    run(a)
+                time.sleep(wait)
+                now_ips = self._ips_now().get(name) or []
+                if to in now_ips:
+                    res.update(ok=True, ip=to)
+                    break
+            else:
+                res["error"] = f"重新取得後還是 {', '.join(self._ips_now().get(name) or []) or '沒有 IP'}"
+        except Exception as e:  # noqa: BLE001
+            res["error"] = str(e)[:200]
+        finally:
+            self._renewing = False
+            self.renew_result = res
+            self._kicked.set()                          # 馬上回報（Hub 才知道換好了）
+        return res
 
     def send(self, heartbeat: bool = False) -> bool:
         if not self.meter.on_ifaces and not heartbeat:
@@ -158,9 +213,13 @@ class Agent:
             if self.collect:
                 self._read_site_router()
             hubs = self._hubs_ordered()                      # 1.0.7：上次連得到的先試（在別間實驗室不用先等內網位址逾時）
-            used, resp = self.reporter(hubs, self.payload())
+            pl = self.payload()
+            self._last_payload_keys = tuple(pl)
+            used, resp = self.reporter(hubs, pl)
             self.last_report = {"time": time.time(), "hub": used, "ok": True}
             self.good_hub = used
+            if "renew_result" in (getattr(self, "_last_payload_keys", ()) or ()):
+                self.renew_result = None
             self.last_error = ""
             self._apply_hub(resp)
             self._learn_https(used, resp)

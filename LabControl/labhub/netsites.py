@@ -283,6 +283,7 @@ def _merge_devices(st: Any, rdevs: List[Dict[str, Any]], pcs: List[Dict[str, Any
         if p is not None:
             used.add(p["key"])
             d.update(kind="pc", source=p["key"], alias_key=f"pc:{p.get('id')}", name=p["name"], up=p["up"],
+                     version=p.get("version", ""),
                      down=p["down"], rate=p.get("rate"), split=_pc_split(p), watched=True,
                      online=bool(r.get("online")) or bool(p.get("online")))
         elif nas_ip and r.get("ip") == nas_ip:
@@ -293,7 +294,8 @@ def _merge_devices(st: Any, rdevs: List[Dict[str, Any]], pcs: List[Dict[str, Any
             continue
         out.append({"key": p["key"], "alias_key": f"pc:{p.get('id')}", "name": p["name"], "ip": p.get("ip", ""),
                     "mac": "", "conn": "", "online": bool(p.get("online")), "kind": "pc", "watched": True,
-                    "source": p["key"], "up": p["up"], "down": p["down"], "rate": p.get("rate"), "split": _pc_split(p)})
+                    "source": p["key"], "up": p["up"], "down": p["down"], "rate": p.get("rate"), "split": _pc_split(p),
+                    "version": p.get("version", "")})
     if nas is not None and not any(d.get("kind") == "nas" for d in out):
         out.append(dict({"key": "nas", "alias_key": "", "ip": nas_ip, "mac": "", "conn": "", "online": True,
                          "watched": True}, **nas))
@@ -343,6 +345,7 @@ def site_recent(st: Any, sid: str, window: int, chart: str = "") -> Dict[str, An
             o = {"key": f"pc:{did}", "id": did, "name": pc.get("label") or pc.get("host") or did, "kind": "pc",
                  "up": pw["up"], "down": pw["down"], "rate": pw.get("rate"), "ip": pc.get("ip", ""),
                  "online": now - float(pc.get("seen") or 0) < 180, "host": pc.get("host", ""),
+                 "version": pc.get("version", ""),
                  "sub": " ".join(x for x in (pc.get("ip", ""), pc.get("user", "")) if x)}
             if any(f"pcx:{did}:{k}" in rc.data for k in ("lan", "wan", "tun", "tunw")):
                 o["split"] = {k: {kk: v for kk, v in rc.window(f"pcx:{did}:{k}", window, now=now).items()
@@ -381,7 +384,12 @@ def site_recent(st: Any, sid: str, window: int, chart: str = "") -> Dict[str, An
     for d in devices:
         f = fixed.get(d.get("mac") or "")
         if f:
-            d["fixed"] = f
+            d["fixed"] = dict(f)
+            if f["ip"] not in re.split(r"[,\s]+", str(d.get("ip") or "")):
+                d["fixed"]["moved"] = False                # 還沒換過去（等重新取得 IP）
+                rs = netreg.renew_state(st, d.get("mac") or "")
+                if rs:
+                    d["fixed"]["renew"] = rs
     dst = c.get("dhcp_state") or {}
     return {"now": now, "window": window, "windows": list(WINDOWS), "sources": out, "site": sid,
             "sites": site_list(st), "site_status": st_, "devices": devices,

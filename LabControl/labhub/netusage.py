@@ -1407,7 +1407,8 @@ class NetUsage:
                     continue
                 online = now - float(pc.get("seen") or 0) < PC_OFFLINE_S
                 src(f"pc:{did}", pc.get("label") or pc.get("host") or did, "pc", online=online,
-                    sub=" ".join(x for x in (pc.get("ip", ""), pc.get("user", "")) if x), id=did, ip=pc.get("ip", ""))
+                    sub=" ".join(x for x in (pc.get("ip", ""), pc.get("user", "")) if x), id=did, ip=pc.get("ip", ""),
+                    version=pc.get("version", ""))
                 if any(f"pcx:{did}:{c}" in rc.data for c in SPLIT_CATS):     # 1.0.38：內網 / 外網 / VPN 通道
                     out[-1]["split"] = {c: {k: v for k, v in rc.window(f"pcx:{did}:{c}", window, now=now).items()
                                             if k in ("up", "down")} for c in SPLIT_CATS}
@@ -1549,7 +1550,14 @@ def _report(h: Handler) -> None:
     try:
         from . import netsites
 
-        out = store(h.hub).report_device(b, netsites.real_ip(h))
+        st = store(h.hub)
+        out = st.report_device(b, netsites.real_ip(h))
+        try:                                       # 1.0.48：固定 IP 後立刻換（量測中的等量完）
+            from . import netreg
+
+            out.update(netreg.renew_for(st, str(b.get("id") or ""), netreg.busy_hosts(h.hub), b))
+        except Exception:  # noqa: BLE001
+            pass
         tls = getattr(h.hub, "tls", None)          # 1.0.38：流量監看在內網把 https 網址指到 NAS（hosts）
         if tls is not None and getattr(tls, "domain", "") and tls.url("hub"):
             out["lan_https"] = {"domain": tls.domain, "url": tls.url("hub")}
@@ -1577,7 +1585,16 @@ def _recent(h: Handler) -> None:
         window = int(q.get("window") or 600)
     except (TypeError, ValueError):
         window = 600
-    h._json({"ok": True, **store(h.hub).recent_view(window, str(q.get("chart") or ""), str(q.get("site") or ""))})
+    out = {"ok": True, **store(h.hub).recent_view(window, str(q.get("chart") or ""), str(q.get("site") or ""))}
+    plat = getattr(h.hub, "platform", None)        # 1.0.48：設備表標出流量監看不是最新版的
+    if plat is not None:
+        try:
+            from .appupdates import app_info
+
+            out["nm_latest"] = app_info(plat, "netmeter").get("installer_version") or ""
+        except Exception:  # noqa: BLE001
+            pass
+    h._json(out)
 
 
 @route("GET", r"/api/netusage", auth="any")

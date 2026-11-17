@@ -20,6 +20,11 @@
 
 ## 版本
 
+### v1.0.11
+
+- **固定 IP 後立刻換**：Hub 回應帶 renew（這台的 MAC 在路由器上被指定了別的 IP）→ `ipconfig /renew <網卡>`，
+  沒換過去再 `/release` + `/renew`；結果下一次回報給 Hub（馬上回報）。只有 Windows。
+
 ### v1.0.10
 
 - **固定 IP**：Hub 要固定的設備（MAC → IP）由代讀電腦寫進華碩的「手動指定 IP」（dhcp_staticlist，套用 restart_dnsmasq）；

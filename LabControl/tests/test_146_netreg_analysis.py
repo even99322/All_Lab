@@ -260,3 +260,37 @@ def test_dhcp_reservation_via_collector(tmp_path):
     assert r["site_dhcp"] == {"set": {}, "remove": ["AA:AA:AA:AA:AA:AA", "00:11:22:33:44:55"]}
     st.report_device(dict(base, dhcp_state={"ok": True, "list": []}), "100.64.0.10")
     assert st.report_device(dict(base), "100.64.0.10")["site_dhcp"]["remove"] == []
+
+
+def test_renew_for(tmp_path):
+    clk = Clock()
+    st = nu.NetUsage(tmp_path, now=clk)
+    ns.set_sites(st, {"sites": [{"id": "lab328", "name": "328", "subnets": ["192.168.10.0/24"],
+                                 "router": {"host": "192.168.10.1", "user": "admin", "password": "pw"},
+                                 "collector": "nm-col000001"}]})
+    col = {"id": "nm-col000001", "host": "C", "ip": "192.168.10.11", "on_net": True, "days": {},
+           "gw": {"ip": "192.168.10.1", "mac": "7c:10:c9:00:00:01"}}
+    pc = {"id": "nm-pc0000001", "host": "DESKTOP-WAYNE", "ip": "192.168.10.165", "on_net": True, "days": {},
+          "gw": {"ip": "192.168.10.1", "mac": "7c:10:c9:00:00:01"}}
+    sr = {"site": "lab328", "ok": True, "rx": 1, "tx": 1, "t": clk.t,
+          "clients": [{"mac": "10:7c:61:b7:60:08", "ip": "192.168.10.165", "name": "W", "type": "wired"}]}
+    st.report_device(dict(col, site_router=sr), "100.64.0.10")
+    st.report_device(dict(pc), "100.64.0.20")
+    nr.dhcp_set(st, "lab328", "10:7c:61:b7:60:08", "192.168.10.14", "W", "o")
+    st.report_device(dict(col, dhcp_state={"ok": True, "list": [["10:7c:61:b7:60:08", "192.168.10.14"]]}), "100.64.0.10")
+    assert nr.renew_for(st, "nm-pc0000001", [], pc) == {}                                # 沒要求立刻換
+    d = next(x for x in st.recent_view(600, site="lab328")["devices"] if x.get("mac") == "10:7C:61:B7:60:08")
+    assert d["fixed"]["moved"] is False and d["version"] == "" and d["kind"] == "pc"
+    nr.request_renew(st, "lab328", "10:7C:61:B7:60:08", "o")
+    assert nr.renew_for(st, "nm-pc0000001", ["desktop-wayne"], pc) == {}                 # 量測中
+    assert "量測中" in nr.renew_state(st, "10:7C:61:B7:60:08")["waiting"]
+    r = nr.renew_for(st, "nm-pc0000001", [], pc)
+    assert r == {"renew": {"mac": "10:7C:61:B7:60:08", "from": "192.168.10.165", "to": "192.168.10.14"}}
+    assert nr.renew_for(st, "nm-pc0000001", [], pc) == {}                                # 10 分鐘內不重複
+    nr.renew_for(st, "nm-pc0000001", [], dict(pc, renew_result={"mac": "10:7C:61:B7:60:08", "ok": False, "error": "x"}))
+    assert nr.renew_state(st, "10:7C:61:B7:60:08")["result"]["ok"] is False
+    # 換好了（IP 對了）→ 清掉
+    st.report_device(dict(pc, ip="192.168.10.14"), "100.64.0.20")
+    st.report_device(dict(col, site_router=dict(sr, clients=[dict(sr["clients"][0], ip="192.168.10.14")])), "100.64.0.10")
+    assert nr.renew_for(st, "nm-pc0000001", [], dict(pc, ip="192.168.10.14")) == {}
+    assert nr.renew_state(st, "10:7C:61:B7:60:08") is None
