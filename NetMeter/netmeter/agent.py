@@ -25,7 +25,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from . import __version__, config, gateway, hosts, hub
 from . import install as install_mod
-from .meter import Meter
+from .meter import Meter, on_net
 
 log = logging.getLogger("netmeter")
 
@@ -93,8 +93,11 @@ class Agent:
 
     def tick(self) -> Dict[str, Any]:
         try:
-            self.gw = gateway.detect(self.meter.ips)
-            self.meter.gw_mac = self.gw.get("mac", "")
+            # 1.0.12：找「實驗室網段那張網卡」的閘道（不是整台電腦的預設路由——另一張網卡 192.168.1.x 優先時會找錯）；
+            # 閘道不在實驗室網段 → 不是實驗室的路由器，不拿來判斷（以前會因此整台不計算）
+            self.gw = gateway.detect(self.meter.lab_ips or self.meter.ips)
+            gip = self.gw.get("ip", "")
+            self.meter.gw_mac = self.gw.get("mac", "") if gip and on_net([gip], self.meter.nets) else ""
         except Exception:  # noqa: BLE001
             pass
         with self.lock:

@@ -143,7 +143,7 @@ def state_of(st: Any, site: str, d: Dict[str, Any], now: Optional[float] = None)
     mac = norm_mac(d.get("mac"))
     kind = d.get("dkind") or classify(d)
     out: Dict[str, Any] = {"kind": kind, "kind_text": KIND_TEXT.get(kind, "")}
-    if d.get("kind") in ("pc", "nas") or d.get("watched"):
+    if d.get("kind") in ("pc", "nas") or d.get("watched") is True or d.get("pc_known"):
         out["state"] = "ok"
         out["how"] = "watched"
         return out

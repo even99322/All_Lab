@@ -48,6 +48,8 @@ def parse_route_print(text: str, prefer: List[str]) -> str:
             key = (0 if f[3] in prefer else 1, metric, f[2])
             if best is None or key < best:
                 best = key
+    if best and prefer and best[0] == 1:
+        return ""                                         # 1.0.12：實驗室那張網卡沒有預設閘道 → 不猜別張的
     return best[2] if best else ""
 
 
@@ -86,9 +88,9 @@ def detect(prefer: Optional[List[str]] = None) -> Dict[str, str]:
     """{"ip": 閘道 IP, "mac": "AA:BB:…"}；讀不到 → {}。"""
     global _CACHE
     now = time.time()
-    if now - _CACHE[0] < EVERY_S and _CACHE[1]:
-        return dict(_CACHE[1])
-    prefer = prefer or []
+    prefer = sorted(prefer or [])
+    if now - _CACHE[0] < EVERY_S and _CACHE[1] and _CACHE[1].get("_prefer") == ",".join(prefer):
+        return {k: v for k, v in _CACHE[1].items() if not k.startswith("_")}
     out: Dict[str, str] = {}
     if sys.platform == "win32":
         gw = parse_route_print(_run(["route", "print", "-4", "0.0.0.0"]), prefer)
@@ -101,5 +103,5 @@ def detect(prefer: Optional[List[str]] = None) -> Dict[str, str]:
             out = {"ip": gw, "mac": parse_arp(_run(["/usr/sbin/arp", "-n", gw]), gw)}
     else:
         out = _linux()
-    _CACHE = (now, out)
+    _CACHE = (now, dict(out, _prefer=",".join(prefer)))
     return dict(out)

@@ -3,6 +3,10 @@
 1.0.36 起 Hub 跟 Lab Control 分開發佈（GitHub 發佈 `hub-v<版本>`）；1.0.35 以前的紀錄在 [CHANGELOG.md](CHANGELOG.md)。
 每一版的說明在 [docs/releases/hub/](docs/releases/hub/)。
 
+## 1.0.49 — 2026-11-18
+
+設備表的監看狀態跟登記一致（監看沒回報、在別間回報）；閘道不在實驗室網段時不記成實驗室的路由器。詳見 [docs/releases/hub/v1.0.49.md](docs/releases/hub/v1.0.49.md)。
+
 ## 1.0.48 — 2026-11-17
 
 固定 IP 後可以叫裝了流量監看的 Windows 電腦立刻重新取得 IP（量測中的等量完）；設備表顯示流量監看版本。詳見 [docs/releases/hub/v1.0.48.md](docs/releases/hub/v1.0.48.md)。

@@ -675,19 +675,21 @@ function renderDevs(wn) {
     $("#devf").innerHTML = F.map(([k, n]) => `<button data-f="${k}" class="${k === devF ? "on" : ""}">${n}</button>`).join("");
     $("#devf").querySelectorAll("button").forEach(b => b.onclick = () => { devF = b.dataset.f; save("qel-net-devf", devF); renderDevs(wn); });
     const all = r.devices || [];
-    const list = all.filter(x => devF === "all" || (devF === "on" ? x.online : !x.watched));
-    const unw = all.filter(x => x.online && !x.watched);
+    const list = all.filter(x => devF === "all" || (devF === "on" ? x.online : !x.watched && !x.pc_known));
+    const unw = all.filter(x => x.online && !x.watched && !x.pc_known);
     $("#devnote").textContent = `${all.filter(x => x.online).length} 台在線` + (unw.length ? `，其中 ${unw.length} 台沒監看` : "");
     const canBlock = owner() && r.site === "main", canFix = owner() && r.site !== "main";
     const vk = v => String(v || "0").split(".").map(n => parseInt(n, 10) || 0);
     const older = (a, b) => { const x = vk(a), y = vk(b); for (let i = 0; i < Math.max(x.length, y.length); i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) < (y[i] || 0); } return false; };
-    const kindPill = x => x.kind === "nas" ? `<span class="ty vpn">NAS</span>` : x.kind === "pc"
-      ? `<span class="ty lan">監看中</span>${x.version ? `<div class="small ${r.nm_latest && older(x.version, r.nm_latest) ? "" : "muted"}" style="margin-top:2px${r.nm_latest && older(x.version, r.nm_latest) ? ";color:var(--warn)" : ""}" title="${r.nm_latest && older(x.version, r.nm_latest) ? "不是最新版（" + esc(r.nm_latest) + "）：會自己更新；1.0.7 以前的要手動裝一次" : "流量監看版本"}">v${esc(x.version)}${r.nm_latest && older(x.version, r.nm_latest) ? " ⬆" : ""}</div>` : ""}`
+    const kindPill = x => x.kind === "nas" ? `<span class="ty vpn">NAS</span>` : x.kind === "device" && x.pc_known
+      ? `<span class="ty off" title="${esc(x.pc_known)}：這台有裝流量監看，但不在這間回報（在別間實驗室，或關機）">監看中（不在這裡回報）</span>`
+      : x.kind === "pc"
+      ? `<span class="ty ${x.pc_online === false && x.online ? "wan" : "lan"}" title="${x.pc_online === false && x.online ? "路由器看得到這台，但流量監看沒在回報：沒開機登入、背景程式停了、或還沒更新到新版" : ""}">${x.pc_online === false && x.online ? "⚠ 監看沒回報" : "監看中"}</span>${x.version ? `<div class="small ${r.nm_latest && older(x.version, r.nm_latest) ? "" : "muted"}" style="margin-top:2px${r.nm_latest && older(x.version, r.nm_latest) ? ";color:var(--warn)" : ""}" title="${r.nm_latest && older(x.version, r.nm_latest) ? "不是最新版（" + esc(r.nm_latest) + "）：會自己更新；1.0.7 以前的要手動裝一次" : "流量監看版本"}">v${esc(x.version)}${r.nm_latest && older(x.version, r.nm_latest) ? " ⬆" : ""}</div>` : ""}`
       : `<span class="ty wan">⚠ 沒監看</span>`;
     box.innerHTML = !list.length ? `<div class="empty">${all.length ? "沒有符合的設備" : "還沒有設備：要先在「設定」填好路由器（讀「附加裝置」），或在電腦裝流量監看"}</div>` :
       `<div class="wrap" data-k="devs"><table><thead><tr><th>設備</th><th class="hide-sm">連線</th><th>監看</th><th class="n">${esc(wn)}合計</th><th class="n hide-sm">↓</th><th class="n hide-sm">↑</th><th class="n">目前</th><th title="流量監看 1.0.4 起：內網（實驗室網段內）／外網（經路由器出去）／VPN（Tailscale 加密封包；其中經外網）">使用類型</th><th>登記</th>${canBlock || canFix ? "<th></th>" : ""}</tr></thead><tbody>` +
       list.map(x => { const has = x.up != null;
-        return `<tr class="${x.source ? "pick" : ""}${x.online && !x.watched ? " unw" : ""}${x.allow === "Block" ? " blocked" : ""}${x.source && x.source === r.chart.key ? " sel" : ""}" data-key="${esc(x.source || "")}">${nameCell(x)}
+        return `<tr class="${x.source ? "pick" : ""}${x.online && !x.watched && !x.pc_known ? " unw" : ""}${x.allow === "Block" ? " blocked" : ""}${x.source && x.source === r.chart.key ? " sel" : ""}" data-key="${esc(x.source || "")}">${nameCell(x)}
         <td class="small hide-sm">${esc(x.conn || "")}</td><td>${kindPill(x)}${x.allow === "Block" ? ` <span class="ty off" style="color:var(--err)">⛔ 已封鎖</span>` : ""}</td>
         <td class="n">${has ? `<b>${fmt(x.up + x.down)}</b>` : "—"}</td><td class="n hide-sm">${has ? fmt(x.down) : ""}</td><td class="n hide-sm">${has ? fmt(x.up) : ""}</td>
         <td class="n small">${x.rate ? `↓ ${bps(x.rate.down)}<br>↑ ${bps(x.rate.up)}` : "—"}</td>
@@ -755,7 +757,7 @@ function regCell(x) {
   const r = x.reg;
   if (!r) return "";
   const btn = x.mac ? ` <button class="btn sm" data-reg="${esc(x.mac)}" data-name="${esc(x.name || "")}">${r.state === "ok" ? "改" : "登記"}</button>` : "";
-  if (r.state === "ok") return r.how === "watched" ? `<span class="rg ok">✔ 監看中</span>` :
+  if (r.state === "ok") return r.how === "watched" ? `<span class="rg ok" title="裝了流量監看的電腦不用另外登記">✔ 流量監看</span>` :
     `<span class="rg ok" title="${esc(r.until ? "到 " + r.until : "")}">✔ ${esc(r.role_text || "已備註")}</span>${r.how === "reg" ? btn : ""}`;
   if (r.state === "pending") return `<span class="rg wait" title="${esc(r.kind_text || "")}">⏳ 未登記 · 剩 ${Math.ceil((r.left || 0) / 60)} 分</span>${btn}`;
   if (r.state === "due" || r.state === "blocked") return `<span class="rg bad" title="${esc(r.why === "expired" ? "訪客到期" : "寬限時間過了還沒登記")}">⛔ ${r.why === "expired" ? "到期" : "未登記"} · 已停網</span>${btn}`;

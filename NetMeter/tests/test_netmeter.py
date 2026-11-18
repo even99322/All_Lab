@@ -775,3 +775,33 @@ def test_renew_ip(tmp_path, monkeypatch):
     assert sent[0]["renew_result"]["ok"] and "renew_result" not in sent[1]                # 只送一次
     r = ag.renew_ip({"mac": "x", "from": "10.9.9.9", "to": "10.9.9.10"}, run=lambda a: None, wait=0)
     assert r["ok"] is False and "找不到" in r["error"]
+
+
+# ---- 1.0.12：另一張網卡（192.168.1.x）的預設路由優先時，還是用實驗室那張網卡的閘道 ----
+def test_gateway_of_lab_interface(tmp_path, monkeypatch):
+    from netmeter import gateway
+
+    rp = """Active Routes:
+Network Destination        Netmask          Gateway       Interface  Metric
+          0.0.0.0          0.0.0.0      192.168.1.1     192.168.1.20     5
+          0.0.0.0          0.0.0.0     192.168.50.1    192.168.50.12     45
+"""
+    assert gateway.parse_route_print(rp, []) == "192.168.1.1"
+    assert gateway.parse_route_print(rp, ["192.168.50.12"]) == "192.168.50.1"
+    assert gateway.parse_route_print(rp, ["10.0.0.5"]) == ""                         # 那張網卡沒有預設閘道 → 不猜
+    monkeypatch.setenv("QELNETMETER_HOME", str(tmp_path / "home"))
+    seen = []
+
+    def det(prefer=None):
+        seen.append(list(prefer or []))
+        return {"ip": "192.168.1.1", "mac": "11:11:11:11:11:11"}                   # 找到的是別張網卡的
+    monkeypatch.setattr(agent.gateway, "detect", det)
+    s = Seq()
+    s.ifs["Ethernet"]["ips"] = ["192.168.50.12"]
+    ag = agent.Agent(cfg=dict(config.DEFAULTS, reg_port=0), sampler=s, reporter=lambda h, p: (h[0], {}))
+    ag.meter.allowed_gw = {"AA:AA:AA:AA:AA:AA"}
+    ag.tick()
+    ag.tick()
+    s.add("Ethernet", 1000, 1000)
+    assert ag.tick()["on"] is True and ag.meter.gw_mac == ""                          # 不在實驗室網段的閘道不拿來判斷
+    assert seen[-1] == ["192.168.50.12"]                                              # 找的是實驗室那張網卡

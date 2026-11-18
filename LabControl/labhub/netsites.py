@@ -155,11 +155,17 @@ def on_report(st: Any, did: str, b: Dict[str, Any], ip: str) -> Dict[str, Any]:
         if gmac or gip:
             pc["gw"] = {"ip": gip, "mac": gmac}
         site = ""
+        # 1.0.49：閘道不在那間的網段（例如電腦的預設路由走另一張網卡 192.168.1.x）→ 不是那間的路由器；以前記錯的拿掉
+        known = st.extra["gateways"].get(gmac) if gmac else None
+        if known and gip:
+            kn = main_nets if known == "main" else _nets((sites(st).get(known) or {}).get("subnets") or [])
+            if kn and not _in(gip, kn):
+                st.extra["gateways"].pop(gmac, None)
+                st._dirty = True
         if _in(ip, main_nets):                                   # 從本實驗室內網直接回報
             site = "main"
-            if gmac and st.extra["gateways"].get(gmac) not in ("main",):
-                if gmac not in st.extra["gateways"]:
-                    st.extra["gateways"][gmac] = "main"
+            if gmac and gmac not in st.extra["gateways"] and _in(gip, main_nets):
+                st.extra["gateways"][gmac] = "main"
         elif gmac and gmac in st.extra["gateways"]:
             site = st.extra["gateways"][gmac]
         if not site and gip:                                     # 1.0.44：閘道在某間實驗室自己的網段（跟本實驗室不重疊）
@@ -174,7 +180,8 @@ def on_report(st: Any, did: str, b: Dict[str, Any], ip: str) -> Dict[str, Any]:
             if c.get("collector") and c.get("collector") == did:
                 if not site or site == sid:
                     site = sid
-                    if gmac and gmac not in st.extra["gateways"]:
+                    sn = _nets(c.get("subnets") or [])
+                    if gmac and gmac not in st.extra["gateways"] and (not sn or _in(gip, sn)):
                         st.extra["gateways"][gmac] = sid
                 pw = st.secret_get(f"site:{sid}:password")
                 r = c.get("router") or {}
@@ -277,7 +284,8 @@ def _merge_devices(st: Any, rdevs: List[Dict[str, Any]], pcs: List[Dict[str, Any
         d = {"key": r.get("alias_key") or f"mac:{r.get('mac')}", "alias_key": r.get("alias_key") or "",
              "name": r.get("name") or r.get("router_name") or r.get("ip") or r.get("mac"), "ip": r.get("ip", ""),
              "mac": r.get("mac", ""), "conn": _conn(r), "online": bool(r.get("online")), "allow": r.get("allow", ""),
-             "kind": "device", "watched": bool(r.get("watched")), "last": r.get("last"), "first": r.get("first"),
+             "kind": "device", "watched": False, "pc_known": str(r.get("watched") or ""),
+             "last": r.get("last"), "first": r.get("first"),
              "dtype": r.get("dtype", ""), "model": r.get("model", ""), "vendor": r.get("vendor", ""),
              "router_name": r.get("router_name", "")}
         if p is not None:
@@ -285,7 +293,7 @@ def _merge_devices(st: Any, rdevs: List[Dict[str, Any]], pcs: List[Dict[str, Any
             d.update(kind="pc", source=p["key"], alias_key=f"pc:{p.get('id')}", name=p["name"], up=p["up"],
                      version=p.get("version", ""),
                      down=p["down"], rate=p.get("rate"), split=_pc_split(p), watched=True,
-                     online=bool(r.get("online")) or bool(p.get("online")))
+                     pc_online=bool(p.get("online")), online=bool(r.get("online")) or bool(p.get("online")))
         elif nas_ip and r.get("ip") == nas_ip:
             d.update(nas or {"kind": "nas", "watched": True})
         out.append(d)

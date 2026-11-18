@@ -1408,7 +1408,7 @@ class NetUsage:
                 online = now - float(pc.get("seen") or 0) < PC_OFFLINE_S
                 src(f"pc:{did}", pc.get("label") or pc.get("host") or did, "pc", online=online,
                     sub=" ".join(x for x in (pc.get("ip", ""), pc.get("user", "")) if x), id=did, ip=pc.get("ip", ""),
-                    version=pc.get("version", ""))
+                    version=pc.get("version", ""), host=pc.get("host", ""))
                 if any(f"pcx:{did}:{c}" in rc.data for c in SPLIT_CATS):     # 1.0.38：內網 / 外網 / VPN 通道
                     out[-1]["split"] = {c: {k: v for k, v in rc.window(f"pcx:{did}:{c}", window, now=now).items()
                                             if k in ("up", "down")} for c in SPLIT_CATS}

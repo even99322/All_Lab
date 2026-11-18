@@ -104,6 +104,7 @@ class Meter:
         self.rate_split: Dict[str, Dict[str, float]] = {}
         self.on_ifaces: List[str] = []
         self.ips: List[str] = []
+        self.lab_ips: List[str] = []                       # 1.0.12：在實驗室網段的位址（還沒看閘道之前）
         self.dirty = not self.file.exists()
 
     # ---- 讀一次 ----
@@ -113,6 +114,8 @@ class Meter:
         cur = {n: {"rx": int(v["rx"]), "tx": int(v["tx"]), "on": on_net(v.get("ips") or [], self.nets),
                    "vpn": on_net(v.get("ips") or [], VPN_NETS)}
                for n, v in (s.get("ifaces") or {}).items()}
+        self.lab_ips = [ip for n, v in cur.items() if v["on"] for ip in (s["ifaces"][n].get("ips") or [])
+                        if on_net([ip], self.nets)]
         # 1.0.6：Hub 認得各實驗室路由器的 MAC → 閘道不是其中之一（例如家裡也是 192.168.50.x）就不算在實驗室
         if self.allowed_gw and self.gw_mac and self.gw_mac not in self.allowed_gw:
             for v in cur.values():

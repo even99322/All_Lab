@@ -294,3 +294,29 @@ def test_renew_for(tmp_path):
     st.report_device(dict(col, site_router=dict(sr, clients=[dict(sr["clients"][0], ip="192.168.10.14")])), "100.64.0.10")
     assert nr.renew_for(st, "nm-pc0000001", [], dict(pc, ip="192.168.10.14")) == {}
     assert nr.renew_state(st, "10:7C:61:B7:60:08") is None
+
+
+def test_gateway_outside_lab_not_learned_and_pc_known(tmp_path):
+    clk = Clock()
+    st = nu.NetUsage(tmp_path, now=clk)
+    st.cfg["router"].update(host="192.0.2.1", enabled=True)
+    st.cfg["nas"]["host"] = "192.168.50.2"
+    st.extra["gateways"] = {"11:11:11:11:11:11": "main"}                           # 以前記錯的（192.168.1.1）
+    st.report_device({"id": "nm-lab200001", "host": "LAB-2", "ip": "192.168.50.12", "on_net": True, "days": {},
+                      "gw": {"ip": "192.168.1.1", "mac": "11:11:11:11:11:11"}}, "192.168.50.12")
+    assert "11:11:11:11:11:11" not in st.extra["gateways"] and st.pcs["nm-lab200001"]["site"] == "main"
+    st.report_device({"id": "nm-lab200001", "host": "LAB-2", "ip": "192.168.50.12", "on_net": True, "days": {},
+                      "gw": {"ip": "192.168.50.1", "mac": "a0:00:00:00:00:01"}}, "192.168.50.12")
+    assert st.extra["gateways"]["A0:00:00:00:00:01"] == "main"
+    # 在別間回報的電腦：路由器上同名 → 「不在這裡回報」，不用登記
+    st.report_device({"id": "nm-eke000001", "host": "DESKTOP-EKE36RS", "ip": "192.168.10.97", "on_net": True, "days": {},
+                      "gw": {"ip": "192.168.10.1", "mac": "7c:00:00:00:00:01"}}, "100.64.0.9")
+    st.pcs["nm-eke000001"]["site"] = "lab328"
+    xml = XML2.replace("</NewAttachDevice>", """<Device><IP>192.168.50.150</IP><Name>DESKTOP-EKE36RS</Name><MAC>f4:a4:75:e7:14:ef</MAC>
+<ConnectionType>5GHz</ConnectionType><AllowOrBlock>Allow</AllowOrBlock></Device>
+<Device><IP>192.168.50.12</IP><Name>LAB-2</Name><MAC>2c:7b:a0:40:33:28</MAC><ConnectionType>2.4GHz</ConnectionType><AllowOrBlock>Allow</AllowOrBlock></Device></NewAttachDevice>""")
+    st.poll_router(NG(xml))
+    devs = {d.get("mac"): d for d in st.recent_view(600)["devices"]}
+    e = devs["F4:A4:75:E7:14:EF"]
+    assert e["kind"] == "device" and e["pc_known"] and e["reg"]["state"] == "ok"
+    assert devs["2C:7B:A0:40:33:28"]["kind"] == "pc" and devs["2C:7B:A0:40:33:28"]["pc_online"] is True
